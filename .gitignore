@@ -8,7 +8,6 @@ media/
 *.txt
 temp/
 scripts/
-.env
 models/
 .cache
 .venv/
