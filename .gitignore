@@ -1,0 +1,17 @@
+*.pyc
+*.pyo
+*.pyd
+*.wav
+*.log
+__pycache__/
+media/
+*.txt
+temp/
+scripts/
+.env
+models/
+.cache
+.venv/
+.pytest_cache/
+.idea/
+.vscode/
