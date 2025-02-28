@@ -25,37 +25,6 @@ with open("logging.yaml", "r") as logger_config:
     logging.config.dictConfig(config)
 logger = logging.getLogger("main_logger")
 
-# Move these to a config file or constants section at the top
-TEST_INSTRUCTIONS = [
-    "list the current directory.",
-    "remove the temp folder if any exist in the current directory.",
-    "create a temp folder in the current directory if it does not exist.",
-    "you must always save files in the temp folder", # Added to system prompt for anthropic
-    "open an explorer in the temp folder",
-    "get some information about the network and put it into a .txt file",
-    "give me some information about the hardware and put it into a .txt file in the temp folder",
-    "open the last .txt file",
-    "open the bbc homepage",
-    "display an owl in ascii art",
-    "display an owl in ascii art and put it into a .txt file",
-    "switch off the screen for 1 second and then back on",
-    "it did not work can you try again?",
-    "set the brightness of the screen to 50/100",
-    "create an excel file with detailed demographic data for the 50 biggest countries by population",
-    "open this file with Excel",
-    "save this file as an excel file",
-    "list the values in the PATH environement variable",
-    "list the values of the PATH environement variable in a txt file one per line",
-    "open the last txt file",
-    "Report all of the USB devices installed into a file",
-    "print the file you saved with USB devices in the terminal",
-    "set the brightness of the screen back to 100",
-    "kill the notepad process",
-    "display information about my network connection",
-    "minimizes all windows",
-    "run the keyboard combination Ctlr + Win + -> ",
-]
-
 def hoot(text : str):
     #logger.warning(f"NOT IMPLEMENTED HOOT!!!: {text}")
     hoot_local(text)
@@ -78,17 +47,8 @@ reload   - Reloads owlai package source code
 test     - Runs test instructions (current mode)
 metadata - Print the conversation metadata"""
 
-            # Loop over test instructions before prompting user
-            test_instructions_length = len(TEST_INSTRUCTIONS)
-            test_instructions_index = 40 # switched off for now
 
-            if test_instructions_index < test_instructions_length:
-                user_message = TEST_INSTRUCTIONS[test_instructions_index]
-                test_instructions_index += 1
-
-            # Prompt user for input in CLI
-            else:
-                user_message = prompt("Enter your message ('exit' or 'help'): ", history=history)
+            user_message = prompt("Enter your message ('exit' or 'help'): ", history=history)
 
             if len(user_message) == 0: continue
 

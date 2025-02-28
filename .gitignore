@@ -7,10 +7,11 @@ __pycache__/
 media/
 *.txt
 temp/
-scripts/
 models/
 .cache
 .venv/
 .pytest_cache/
 .idea/
 .vscode/
+.env
+
