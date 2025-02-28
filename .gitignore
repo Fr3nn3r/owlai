@@ -1,11 +1,5 @@
-*.pyc
-*.pyo
-*.pyd
-*.wav
-*.log
 __pycache__/
 media/
-*.txt
 temp/
 models/
 .cache
@@ -14,4 +8,10 @@ models/
 .idea/
 .vscode/
 .env
-
+*.txt
+*.log
+*.wav
+*.pyc
+*.pyo
+*.pyd
+*.pyw
