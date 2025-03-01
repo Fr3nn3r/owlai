@@ -9,7 +9,6 @@ models/
 .vscode/
 scripts/
 .env
-*.txt
 *.log
 *.wav
 *.pyc

@@ -21,8 +21,6 @@ from ttsengine import hoot #takes 2.7 seconds to start
 import importlib
 import owlai
 
-
-
 # Load environment variables from .env file
 from dotenv import load_dotenv
 load_dotenv()
@@ -31,6 +29,7 @@ load_dotenv()
 with open("logging.yaml", "r") as logger_config:
     config = yaml.safe_load(logger_config)
     logging.config.dictConfig(config)
+    
 logger = logging.getLogger("main_logger")
 
 def main():
@@ -112,8 +111,5 @@ metadata - Print the conversation metadata"""
         logger.info("Excution interrupted. Shutting down...")
 
 if __name__ == "__main__":
-    with cProfile.Profile() as pr:
-        main()
-    stats = pstats.Stats(pr)
-    stats.sort_stats(pstats.SortKey.TIME)
-    stats.dump_stats(filename="logs/profile.prof")
+    main()
+

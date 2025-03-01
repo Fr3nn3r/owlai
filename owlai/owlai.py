@@ -27,9 +27,6 @@ from pydantic import ValidationError
 # Load environment variables from .env file
 load_dotenv()
 
-with open("logging.yaml", "r") as logger_config:
-    config = yaml.safe_load(logger_config)
-    logging.config.dictConfig(config)
 logger = logging.getLogger("main_logger")
 
 current_mode = "welcome"
@@ -143,7 +140,7 @@ class BaseAgent:
             return openai_model
         elif model_provider == "anthropic":
             anthropic_model = ChatAnthropic(
-                model="claude-3-sonnet-20240229", max_tokens=max_output_tokens
+                model="claude-3-7-sonnet-20250219", max_tokens=max_output_tokens
             )
             return anthropic_model
         else:
@@ -328,9 +325,10 @@ class SystemAgent(BaseAgent):
 
 
 class LocalPythonInterpreter(BaseAgent):
-    def __init__(self, model_provider: str = "openai"):
+    def __init__(self, model_provider: str = "anthropic"):
         super().__init__(
             system_prompt=MODE_RESOURCES["python"]["system_prompt"],
+            model_provider=model_provider,
         )
         self.__own_message_history = [
             SystemMessage(f"{self._system_prompt}\n{user_context}")
@@ -446,6 +444,12 @@ class LocalPythonInterpreter(BaseAgent):
 
         return result
 
+def get_focus_agent():
+    return mode_agent_mapping[current_mode]
+
+
+def get_current_mode():
+    return current_mode
 
 # static instances of the agents
 mode_agent_mapping = {
@@ -456,9 +460,4 @@ mode_agent_mapping = {
 }
 
 
-def get_focus_agent():
-    return mode_agent_mapping[current_mode]
 
-
-def get_current_mode():
-    return current_mode
