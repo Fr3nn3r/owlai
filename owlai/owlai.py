@@ -323,6 +323,7 @@ class SystemAgent(BaseAgent):
             system_prompt=MODE_RESOURCES["system"]["system_prompt"],
             model_provider=model_provider,
             tools=[activate, run_task, play_song],
+            max_output_tokens=200,
         )
 
 

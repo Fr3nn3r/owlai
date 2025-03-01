@@ -1,14 +1,22 @@
+import time
+
+start_time = time.time()
+
 import logging
 import logging.config
+
 import logging
 import yaml
+
+import cProfile
+import pstats
 
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import InMemoryHistory
 
 from owlai import get_focus_agent, get_current_mode
-from localtts import hoot_local
+from ttsengine import hoot #takes 2.7 seconds to start
 
 import importlib
 import owlai
@@ -25,12 +33,9 @@ with open("logging.yaml", "r") as logger_config:
     logging.config.dictConfig(config)
 logger = logging.getLogger("main_logger")
 
-def hoot(text : str):
-    #logger.warning(f"NOT IMPLEMENTED HOOT!!!: {text}")
-    hoot_local(text)
-
 def main():
     try:
+        logger.info(f"Application started in {time.time() - start_time} seconds")
         speak = False
         while True:
             # get static instance from owlai
@@ -107,4 +112,8 @@ metadata - Print the conversation metadata"""
         logger.info("Excution interrupted. Shutting down...")
 
 if __name__ == "__main__":
-    main()
+    with cProfile.Profile() as pr:
+        main()
+    stats = pstats.Stats(pr)
+    stats.sort_stats(pstats.SortKey.TIME)
+    stats.dump_stats(filename="logs/profile.prof")
