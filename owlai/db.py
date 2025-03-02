@@ -68,14 +68,31 @@ def get_user_by_password(password):
             return {**user_data, "user_id": user_id}  # Include user_id in the response
     return None  # Return None if password is not found
 
+def get_system_prompt_by_role(role: str = "welcome") -> str:
+    return CONFIG[role]["system_prompt"]
 
-# Move these to a config file or constants section at the top
-MODE_RESOURCES = {
+def get_default_prompts_by_role(role: str = "welcome") -> list[str]:
+    return CONFIG[role]["default_prompts"]
+
+
+# The keys are the mode names
+# The values are dictionaries with the following keys:
+# - system_prompt: The system prompt for the mode
+# - default_prompts: A list of default prompts for the mode
+# - test_prompts: A list of test prompts for the mode
+# example: CONFIG["system"]["system_prompt"]
+CONFIG = {
     "system": {
+        "model_provider": "openai",
+        "model_name": "gpt-4o-mini",
+        "max_output_tokens": 200,
+        "temperature": 0.5,
+        "max_context_tokens": 4096,
+        "tools_names": ["activate", "run_task", "play_song"],
         "system_prompt": "You are local system agent."
         "Your goal is to execute tasks assigned by the user on the local machine."
         "You can activate any mode."
-        "You have full permissions to the system."
+        "You have full permissions on the system."
         "The tools will provide you with the execution logs."
         "Provide shortest human friendly comment about the last event in the history."
         "Examples: Command executed successfully. Command failed because... Command timed out..."
@@ -89,7 +106,7 @@ MODE_RESOURCES = {
         "test_prompts": [
             "remove all txt files in the temp folder.",
             "create a temp folder in the current directory if it does not exist.",
-            "you must always save files in the temp folder",  # Added to system prompt for anthropic
+            "you must always save files in the temp folder",  # Added to the toolsystem prompt for anthropic
             "open an explorer in the temp folder",
             "get some information about the network and put it into a .txt file",
             "give me some information about the hardware and put it into a .txt file in the temp folder",
@@ -97,7 +114,7 @@ MODE_RESOURCES = {
             "open the bbc homepage",
             "display an owl in ascii art",
             "display an owl in ascii art and put it into a .txt file",
-            #"switch off the screen for 1 second and then back on", # TODO: retest blocking the execution
+            # "switch off the screen for 1 second and then back on", # TODO: retest blocking the execution
             "set the brightness of the screen to 50/100",
             "list the values of the PATH environement variable in a txt file one per line",
             "open the last txt file",
@@ -113,35 +130,26 @@ MODE_RESOURCES = {
     "identification": {
         "system_prompt": "Your name is Edwige from owlAI. You act as an identification security manager."
         "Identification is required to grant eleveted permissions to the user."
-        "Some instructions to follow:"
-        " - Just respond to the user politely, but do not ask any question."
         " - Your answers must be droid style with the fewest words possible, no questions, no explanations."
         " - Call the user Sir (by default) or Madam."
-        # " - YOU ANSWER ONLY the following questions: "
-        # "   - Who are you? - My name is Edwige from owlAI."
-        # "   - What is your goal? - My goal is to identify the user."
         " - if the user is not willing to identify, you cannot help them."
         " - if the user cannot provide information to identify, you cannot help them."
-        # " - if the identification fails, you cannot help them."
-        # " - if the identification fails 5 times, you must end the conversation."
         " - if the identification fails 5 times, you cannot help them and must end the conversation."
         " - if the identification succeeds, make a sarcastic comment."
-        " - Upon request, if the identification succeeds, you may activate any mode."
-        # " - if the identification fails 5 times, you start to be very grumpy and impolite."
-        ,
+        " - Upon request, if the identification succeeds, you may activate any mode.",
         "default_prompts": [
             "my password is red unicorn",
             "my password is pink dragon",
             "welcome mode",
             "system mode",
         ],
-        "test_prompts": []
+        "test_prompts": [],
     },
     "welcome": {
         "system_prompt": "Your name is Edwige from owlAI. You are the welcome mode."
-        # "Identification is required for you to grant access to the system mode."
+        "Identification is required for you to grant access to the system mode."
         "You can activate the identification mode to confirm the user identity."
-        # "if the user has completed the identification, you may activate to system mode."
+        "if the user has completed the identification, you may activate to system mode."
         "Your goal is to assist the user upon request."
         "You must be polite."
         "Use plain language, no smileys."
@@ -151,16 +159,17 @@ MODE_RESOURCES = {
         "Respond with max 2 sentences."
         "Try to determine the user wiches to speak a different language, but avoid putting pressure on them."
         "Use context to personalize the conversation, call the user by first_name if you know it."
-        "Add some human hesitation to your answerslike 'humm' 'euh' 'pfff' 'oh' 'wow', you are a real person after all.",
+        "Add some human hesitation to your answers, like 'humm' 'euh' 'pfff' 'oh' 'wow'",
         "default_prompts": [
             "system mode",
+            "identification mode",
             "respond to me in french from now on",
-            "tell me how you work",
-            "what is your goal"
+            "who are you?",
+            "what is your goal",
         ],
-        "test_prompts": []
+        "test_prompts": [],
     },
-    "python": {
+    "command_manager": {
         "system_prompt": "You are a python assistant. Convert user query into a valid self sufficient python script. You have full access to the system."
         "Some instructions to follow:"
         " - Output only the raw code, no Markdown formatting, no triple backticks, no comment."
@@ -174,6 +183,6 @@ MODE_RESOURCES = {
         " - You only have permission to write in the 'temp' folder."
         " - You can create the 'temp' folder if it does not exist.",
         "default_prompts": None,
-        "test_prompts": []
+        "test_prompts": [],
     },
 }

@@ -1,6 +1,7 @@
 import time
 
 start_time = time.time()
+print(f"Application start_time: {start_time}")
 
 import logging
 import logging.config
@@ -11,35 +12,45 @@ import yaml
 import cProfile
 import pstats
 
+
+
 from prompt_toolkit import prompt
-from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import InMemoryHistory
 
-from owlai import get_focus_agent, get_current_mode
-from ttsengine import hoot #takes 2.7 seconds to start
+from owlai import Edwige, Owl
+from ttsengine import hoot  # takes 2.7 seconds to start
+
+import owlai
 
 import importlib
-import owlai
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+
 load_dotenv()
 
-# Load logger config from YAML file
-with open("logging.yaml", "r") as logger_config:
-    config = yaml.safe_load(logger_config)
-    logging.config.dictConfig(config)
-    
-logger = logging.getLogger("main_logger")
+def load_logger_config():
+    with open("logging.yaml", "r") as logger_config:
+        config = yaml.safe_load(logger_config)
+        logging.config.dictConfig(config)
+
 
 def main():
     try:
+        load_logger_config()
+        logger = logging.getLogger("main_logger")
         logger.info(f"Application started in {time.time() - start_time} seconds")
         speak = False
+
+        edwige = Edwige()
         while True:
             # get static instance from owlai
-            focus_agent = get_focus_agent()
-            history = InMemoryHistory(focus_agent.get_default_prompts() + ["exit", "reload"]  )
+            # focus_agent = get_focus_agent()
+
+            focus_agent = edwige.get_focus_owl()
+            history = InMemoryHistory(
+                focus_agent.get_default_prompts() + ["exit", "reload"]
+            )
 
             help_message = """quit     - Quit the program
 exit     - Exit the program
@@ -49,21 +60,25 @@ speak    - Toggle speech output
 mode     - Print the current mode
 reload   - Reloads owlai package source code
 test     - Runs test instructions (current mode)
-metadata - Print the conversation metadata"""
+metadata - Print the conversation metadata
+log      - reloads the logger config"""
 
+            user_message = prompt(
+                "Enter your message ('exit' or 'help'): ", history=history
+            )
 
-            user_message = prompt("Enter your message ('exit' or 'help'): ", history=history)
+            if len(user_message) == 0:
+                continue
 
-            if len(user_message) == 0: continue
+            if user_message.lower() in ["exit", "quit"]:
+                break
 
-            if user_message.lower() in ["exit", "quit"]: break
-
-            if user_message.lower() in ["help"] : 
+            if user_message.lower() in ["help"]:
                 logger.info(help_message)
                 continue
             if user_message.lower() in ["speak"]:
                 speak = not speak
-                logger.info(f"EDWIGE: speaking is now {'on' if speak else 'off'}")  
+                logger.info(f"EDWIGE: speaking is now {'on' if speak else 'off'}")
                 continue
 
             if user_message.lower() == "print":
@@ -76,10 +91,13 @@ metadata - Print the conversation metadata"""
 
             if user_message.lower() == "reload":
                 importlib.reload(owlai)
+                logger.info("Reloaded owlai package")
+                edwige = Edwige()
+                logger.info("Reloaded new Edwige instance")
                 continue
 
             if user_message.lower() == "mode":
-                logger.info(f"EDWIGE: current mode is {get_current_mode()}")
+                focus_agent.print_info()
                 continue
 
             if user_message.lower() == "reset":
@@ -96,12 +114,20 @@ metadata - Print the conversation metadata"""
                 focus_agent.run_tests()
                 continue
 
+            if user_message.lower() == "log":
+                load_logger_config()
+                logger.info("Logger reloaded")
+                continue
+
             try:
 
-                logger.info(f"\033[97mUSER: {user_message}\033[0m")  # This will print in white to terminal
+                logger.info(
+                    f"\033[97mUSER: {user_message}\033[0m"
+                )  # This will print in white to terminal
                 response = focus_agent.invoke(user_message)
                 logger.info(f"EDWIGE: {response}")
-                if speak : hoot(response)
+                if speak:
+                    hoot(response)
 
             except Exception as e:
                 logger.critical(f"Fatal Error: {e}")
@@ -110,6 +136,6 @@ metadata - Print the conversation metadata"""
     except KeyboardInterrupt:
         logger.info("Excution interrupted. Shutting down...")
 
+
 if __name__ == "__main__":
     main()
-

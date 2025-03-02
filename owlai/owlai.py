@@ -3,7 +3,7 @@ from subprocess import CompletedProcess
 from dotenv import load_dotenv
 import os
 import yaml
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
@@ -20,7 +20,7 @@ from langchain_core.tools import tool, BaseTool
 import sys
 import io
 import json
-from db import USER_DATABASE, get_user_by_password, MODE_RESOURCES
+from db import USER_DATABASE, get_user_by_password, CONFIG, get_system_prompt_by_role, get_default_prompts_by_role
 from spotify import play_song_on_spotify
 from pydantic import ValidationError
 
@@ -29,153 +29,174 @@ load_dotenv()
 
 logger = logging.getLogger("main_logger")
 
-current_mode = "welcome"
+focus_role = "welcome"
 
 user_context = "CONTEXT: "
 
-###### I have to declare tools before instanciating the agents because the tools functions need an instance to be referenced
-###### I like to have tools associated with a specific agent, but langchain does not support that. Maybe we'll have a tool manager later.
-@tool
-def identify_user_with_password(user_password: str) -> str:
-    """
-       Checks wether the password is valid.
-       A valid password is required and sufficient to identify the user.
-       The password is a sequence of words separated by spaces.
+toolbox_hook : Callable = None
 
-    Args:
-        user_password: a string containing a sequence of words separated by spaces.
-    """
-    global user_context
-    logger.debug(f"calling identify_user_by_password with {user_password}")
-    passwords = [user["password"] for user in USER_DATABASE.values()]
-
-    if user_password.lower() in passwords:
-        user_data = get_user_by_password(user_password)
-        user_context = f"CONTEXT: {user_data}"
-        return (
-            "User identified: " + user_data["first_name"] + " " + user_data["last_name"]
-        )
-    else:
-        return "Invalid password"
+class ToolBox:
 
 
-@tool
-def activate(mode: str):
-    """
-        Activates a different owlai mode.
-    Args:
-        mode: a string containing the mode to activate. possible values are:
-            - identification: activates identification mode
-            - system: activates system mode
-            - welcome: activates welcome mode
-            - old_system: switch to old system mode
-    """
-    global current_mode
-    current_mode = mode
-    message = f"Activated {mode} mode"
-    logger.debug(message)
-    return message
+    @tool
+    def identify_user_with_password(user_password: str) -> str:
+        """
+        Checks wether the password is valid.
+        A valid password is required and sufficient to identify the user.
+        The password is a sequence of words separated by spaces.
+
+        Args:
+            user_password: a string containing a sequence of words separated by spaces.
+        """
+        global user_context
+        logger.debug(f"calling identify_user_by_password with {user_password}")
+        passwords = [user["password"] for user in USER_DATABASE.values()]
+
+        if user_password.lower() in passwords:
+            user_data = get_user_by_password(user_password)
+            user_context = f"CONTEXT: {user_data}"
+            return (
+                "User identified: "
+                + user_data["first_name"]
+                + " "
+                + user_data["last_name"]
+            )
+        else:
+            return "Invalid password"
+
+    @tool
+    def activate(mode: str):
+        """
+            Activates a different owlai mode.
+        Args:
+            mode: a string containing the mode to activate. possible values are:
+                - identification: activates identification mode
+                - system: activates system mode
+                - welcome: activates welcome mode
+                - command_manager: activates command manager mode
+        """
+        global focus_role
+        focus_role = mode
+        message = f"Activated {mode} mode"
+        logger.debug(message)
+        return message
+
+    @tool
+    def run_task(task: str):
+        """
+            Runs a natural language tasks on the local machine.
+        Args:
+            script: a natural language string describing the command to run.
+        """
+        logger.debug(f"Running system task: {task} {toolbox_hook}")
+        command_stdout = toolbox_hook(task)
+        if command_stdout.endswith("\n"):
+            command_stdout = command_stdout[:-1]
+        logger.info(command_stdout)
+        return command_stdout
+
+    @tool
+    def play_song(song_name: str = "Fly Away", artist_name: str = "Lenny Kravitz"):
+        """
+            Plays a song.
+        Args:
+            song_name: (required) a string containing the name of the song to play.
+            artist_name: (required) a string containing the name of the artist of the song to play.
+        """
+        logger.info(f"Playing song: {song_name} by {artist_name}")
+        play_song_on_spotify(song_name, artist_name)
 
 
-@tool
-def run_task(task: str):
-    """
-        Runs a natural language tasks on the local machine.
-    Args:
-        script: a natural language string describing the command to run.
-    """
-    logger.debug(f"Running system task: {task}")
-    command_stdout = mode_agent_mapping["python"]._run_system_command(task)
-    if command_stdout.endswith("\n"):
-        command_stdout = command_stdout[:-1]
-    logger.info(command_stdout)
-    return command_stdout
+toolbox = ToolBox()
 
 
-@tool
-def play_song(song_name: str = "Fly Away", artist_name: Optional[str] = None):
-    """
-        Plays a song.
-    Args:
-        song_name: (required) a string containing the name of the song to play.
-        artist_name: (optional) a string containing the name of the artist of the song to play.
-    """
-    logger.info(f"Playing song: {song_name} by {artist_name}")
-    play_song_on_spotify(song_name, artist_name)
-
-
-class BaseAgent:
+class Owl:
 
     # Global message history shared by all agents
-    _message_history: List[BaseMessage] = []
+    message_history: List[BaseMessage] = []
 
     def __init__(
         self,
-        system_prompt: str,
-        model_provider: str = "openai",
-        tools: List[BaseTool] = [],
+        role: str = "welcome",
+        implementation: str = "openai",
+        model_name: str = "gpt-4o-mini",
+        temperature: float = 0.9,
+        max_tokens: int = 2048,
         max_context_tokens: int = 4096,
-        max_output_tokens: int = 2048,
+        tools: List[BaseTool] = [],
+        system_prompt: str = "You are a system agent from OwlAI",
     ):
-        self._system_prompt = system_prompt
-        self._chat_model = self.__get_chat_model(model_provider)
-        self._model_provider = model_provider
-        self._max_context_tokens = max_context_tokens
-        self._max_output_tokens = max_output_tokens
-        self._fifo_message_mode = False
-        self._total_tokens = 0
-        if len(tools) > 0:
-            self._tools = tools
-            self._tools_dict = {tool.name: tool for tool in self._tools}
-            self._chat_model = self._chat_model.bind_tools(self._tools)
+        self.role = role
+        self.implementation = implementation
+        self.model_name = model_name
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.max_context_tokens = max_context_tokens
+        self.tools = tools
+        self.system_prompt = system_prompt
+        self.chat_model = self.__get_chat_model()
 
-    def __get_chat_model(
-        self, model_provider: str = "openai", max_output_tokens: int = 2048
-    ) -> BaseChatModel:
-        """Returns a new model instance, don't call me."""
-        if model_provider == "openai":
+        self.fifo_message_mode = False
+        self.total_tokens = 0
+        if len(tools) > 0:
+            self.tools = tools
+            self.tools_dict = {tool.name: tool for tool in self.tools}
+            self.chat_model = self.chat_model.bind_tools(self.tools)
+
+    def __get_chat_model(self) -> BaseChatModel:
+        """Returns a new model instance nased on self parameters, This is the Model Factory."""
+        if self.implementation == "openai":
             openai_model = ChatOpenAI(
-                model_name="gpt-4o-mini", max_tokens=max_output_tokens
+                model_name=self.model_name,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                max_completion_tokens=self.max_tokens,
             )
             return openai_model
-        elif model_provider == "anthropic":
+        elif self.implementation == "anthropic":
             anthropic_model = ChatAnthropic(
-                model="claude-3-7-sonnet-20250219", max_tokens=max_output_tokens
-            )
+                model=self.model_name,
+                model_name=self.model_name,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                max_tokens_to_sample=self.max_tokens,
+          )
             return anthropic_model
         else:
-            raise ValueError(f"Unsupported model provider: {model_provider}")
+            raise ValueError(f"Unsupported model implementation provider: {self.implementation}")
 
     def _token_count(self, message: AIMessage):
         metadata = message.response_metadata
-        if self._model_provider == "openai":
+        if self.implementation == "openai":
             return metadata["token_usage"]["total_tokens"]
-        elif self._model_provider == "anthropic":
+        elif self.implementation == "anthropic":
             anthropic_total_tokens = (
                 metadata["usage"]["input_tokens"] + metadata["usage"]["output_tokens"]
             )
             return anthropic_total_tokens
         else:
             logger.warning(
-                f"Token count unsupported for model provider: {self._model_provider}"
+                f"Token count unsupported for model provider: {self.implementation}"
             )
             return -1
 
     def append_message(self, message: BaseMessage):
         if type(message) == AIMessage:
-            self._total_tokens = self._token_count(message)
-        if (self._total_tokens > self._max_context_tokens) and (
-            self._fifo_message_mode == False
+            self.total_tokens = self._token_count(message)
+        if (self.total_tokens > self.max_context_tokens) and (
+            self.fifo_message_mode == False
         ):
             logger.warning(
                 f"Total tokens {self._total_tokens} exceeded max context tokens {self._max_context_tokens} -> activating FIFO message mode"
             )
-            self._fifo_message_mode = True
-        if self._fifo_message_mode:
-            self._message_history.pop(1)  # Remove the oldest message
+            self.fifo_message_mode = True
+        if self.fifo_message_mode:
+            self.message_history.pop(1)  # Remove the oldest message
+            if (self.message_history[-1].type == "tool"):
+                self.message_history.pop(1)
             self.print_message_history()
 
-        self._message_history.append(message)
+        self.message_history.append(message)
 
     def _process_tool_calls(self, model_response: AIMessage) -> None:
         """Process tool calls from the model response and add results to chat history."""
@@ -197,7 +218,7 @@ class BaseAgent:
             tool_args = tool_call.get("arguments", {})
 
             # Check if tool exists
-            if tool_name not in self._tools_dict:
+            if tool_name not in self.tools_dict:
                 error_msg = f"Tool '{tool_name}' not found in available tools"
                 logger.error(error_msg)
                 tool_msg = ToolMessage(
@@ -209,7 +230,7 @@ class BaseAgent:
                 continue
 
             # Select the tool
-            selected_tool = self._tools_dict[tool_name]
+            selected_tool = self.tools_dict[tool_name]
 
             try:
                 # Invoke the tool
@@ -241,23 +262,23 @@ class BaseAgent:
     def invoke(self, message: str) -> str:
 
         # update system prompt with latestcontext
-        system_message = SystemMessage(f"{self._system_prompt}\n{user_context}")
-        if len(self._message_history) == 0:
-            self._message_history.append(system_message)
+        system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
+        if len(self.message_history) == 0:
+            self.message_history.append(system_message)
         else:
-            self._message_history[0] = system_message
+            self.message_history[0] = system_message
 
         self.append_message(HumanMessage(message))  # Add user message to history
-        model_response = self._chat_model.invoke(
-            self._message_history
+        model_response = self.chat_model.invoke(
+            self.message_history
         )  # Invoke the model
         self.append_message(model_response)  # Add model response to history
 
         self._process_tool_calls(model_response)
 
         if model_response.tool_calls:  # If tools were called, invoke the model again
-            model_response = self._chat_model.invoke(
-                self._message_history
+            model_response = self.chat_model.invoke(
+                self.message_history
             )  # Invoke the model again
             self.append_message(model_response)  # Add model response to history
             logger.debug(model_response.content)  # Log the model response
@@ -266,72 +287,50 @@ class BaseAgent:
         return model_response.content  # Return the model response
 
     def print_message_history(self):
-        for index, message in enumerate(self._message_history):
+        for index, message in enumerate(self.message_history):
             logger.info(
                 f"Message #{index}, {message.type}, {message.content[:100]  + "..." if len(message.content) > 100 else message.content }"
             )
 
     def print_message_metadata(self):
-        for index, message in enumerate(self._message_history):
+        for index, message in enumerate(self.message_history):
             if message.response_metadata:
                 logger.info(
                     f"Message #{index}, type: {message.type}, metadata: {message.response_metadata}"
                 )
 
     def reset_message_history(self):
-        if len(self._message_history) > 0:
-            self._message_history = [self._message_history[0]]
-            self._fifo_message_mode = False
+        if len(self.message_history) > 0:
+            self.message_history = [self.message_history[0]]
+            self.fifo_message_mode = False
 
     def get_default_prompts(self):
-        return MODE_RESOURCES[current_mode]["default_prompts"]
+        return CONFIG[focus_role]["default_prompts"]
 
     def run_tests(self):
-        if(len(MODE_RESOURCES[current_mode]["test_prompts"]) > 0):
+        if len(CONFIG[focus_role]["test_prompts"]) > 0:
             logger.info("Running tests for current mode")
-            for test in MODE_RESOURCES[current_mode]["test_prompts"]:
+            for test in CONFIG[focus_role]["test_prompts"]:
                 logger.info(f"USER: {test}")
                 self.invoke(test)
         else:
             logger.warning("No test prompts defined for current mode")
 
-class WelcomeAgent(BaseAgent):
-
-    def __init__(self, model_provider: str = "openai"):
-        super().__init__(
-            system_prompt=MODE_RESOURCES["welcome"]["system_prompt"],
-            model_provider=model_provider,
-            tools=[activate],
+    def print_info(self):
+        logger.info(
+            f"Role '{self.role}', model provider '{self.implementation}', model name '{self.chat_model.model_name}', tools {self.tools_dict.keys()}"
         )
 
 
-class IdentificationAgent(BaseAgent):
-    def __init__(self, model_provider: str = "openai"):
-        super().__init__(
-            system_prompt=MODE_RESOURCES["identification"]["system_prompt"],
-            model_provider=model_provider,
-            tools=[identify_user_with_password, activate],
-        )
+class _LocalPythonInterpreter(Owl):
+    """
+    Needs to have its own message queue to avoid publishing messages to the global message queue (main context).
+    """
 
-
-class SystemAgent(BaseAgent):
-    def __init__(self, model_provider: str = "openai"):
-        super().__init__(
-            system_prompt=MODE_RESOURCES["system"]["system_prompt"],
-            model_provider=model_provider,
-            tools=[activate, run_task, play_song],
-            max_output_tokens=200,
-        )
-
-
-class LocalPythonInterpreter(BaseAgent):
-    def __init__(self, model_provider: str = "anthropic"):
-        super().__init__(
-            system_prompt=MODE_RESOURCES["python"]["system_prompt"],
-            model_provider=model_provider,
-        )
-        self.__own_message_history = [
-            SystemMessage(f"{self._system_prompt}\n{user_context}")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lpi_own_message_history = [ 
+            SystemMessage(f"{self.system_prompt}\n{user_context}")
         ]
 
     def _run_system_command(self, user_query: str) -> str:
@@ -340,16 +339,16 @@ class LocalPythonInterpreter(BaseAgent):
         """
 
         user_message = HumanMessage(content=user_query)
-        self.__own_message_history.append(user_message)
+        self.lpi_own_message_history.append(user_message)
 
         try:
 
-            model_code_message = self._chat_model.invoke(self.__own_message_history)
+            model_code_message = self.chat_model.invoke(self.lpi_own_message_history)
 
             # here we could be stream writing to the file
             python_script = model_code_message.content
 
-            self.__own_message_history.append(model_code_message)
+            self.lpi_own_message_history.append(model_code_message)
 
             logger.debug(python_script)
 
@@ -414,25 +413,25 @@ class LocalPythonInterpreter(BaseAgent):
             if len(result.stdout) > 0:
                 result_message = f"{self._script_label()} - execution completed - Return code : {result.returncode} - STDOUT: {result.stdout}"
                 logger.debug(result_message)
-                self.__own_message_history.append(HumanMessage(result_message))
+                self.lpi_own_message_history.append(HumanMessage(result_message))
 
             if len(result.stderr) > 0:
-                stderr_message = f"{self._script_label()} - execution failed - Return code : {result.returncode} - STDERR: {result.stderr}"
+                stderr_message = f"{self._script_label()} - Error/Warning message - Return code : {result.returncode} - STDERR: {result.stderr}"
                 logger.warning(stderr_message)
-                self.__own_message_history.append(HumanMessage(stderr_message))
+                self.lpi_own_message_history.append(HumanMessage(stderr_message))
 
         ################ Error handling
         except subprocess.CalledProcessError as cpe:
 
             error_message = f"{self._script_label()} - execution failed: ProcessError: {str(cpe)} - {cpe.output} - {cpe.stdout} - {cpe.stderr}."
             logger.error(error_message)
-            self.__own_message_history.append(HumanMessage(error_message))
+            self.lpi_own_message_history.append(HumanMessage(error_message))
 
         except subprocess.TimeoutExpired as toe:
 
             error_message = f"{self._script_label()} execution failed: TimeoutExpired: {str(toe)} - {toe.output} - {toe.stdout} - {toe.stderr}."
             logger.error(error_message)
-            self.__own_message_history.append(HumanMessage(error_message))
+            self.lpi_own_message_history.append(HumanMessage(error_message))
 
         except Exception as e:
 
@@ -440,24 +439,85 @@ class LocalPythonInterpreter(BaseAgent):
                 f"{self._script_label()} - execution failed: Exception: {str(e)}"
             )
             logger.error(error_message)
-            self.__own_message_history.append(HumanMessage(error_message))
+            self.lpi_own_message_history.append(HumanMessage(error_message))
 
         return result
 
-def get_focus_agent():
-    return mode_agent_mapping[current_mode]
+class Edwige:
 
+    def __init__(self):
+        self.logger = logging.getLogger("main_logger")
+        self.focus_role = "welcome"
 
-def get_current_mode():
-    return current_mode
+    owls: Dict[str, Owl] = {}
 
-# static instances of the agents
-mode_agent_mapping = {
-    "identification": IdentificationAgent(),
-    "system": SystemAgent(),
-    "welcome": WelcomeAgent(),
-    "python": LocalPythonInterpreter(),
-}
+    roles = ["system", "welcome", "identification", "command_manager"]
+
+    owls["system"] = Owl(
+        role="system",
+        implementation="openai",
+        model_name="gpt-4o-mini",
+        temperature=0.9,
+        max_tokens=200,
+        max_context_tokens=4096,
+        tools=[toolbox.activate, toolbox.run_task, toolbox.play_song],
+        system_prompt=get_system_prompt_by_role("system")
+    )
+
+    owls["welcome"] = Owl(
+        role="welcome",
+        implementation="openai",
+        model_name="gpt-4o-mini",
+        temperature=0.9,
+        max_tokens=1000,
+        max_context_tokens=4096,
+        tools=[toolbox.activate],
+        system_prompt=get_system_prompt_by_role("welcome")
+    )
+
+    owls["identification"] = Owl(
+        role="identification",
+        implementation="openai",
+        model_name="gpt-4o-mini",
+        temperature=0.9,
+        max_tokens=200,
+        max_context_tokens=4096,
+        tools=[toolbox.activate, toolbox.identify_user_with_password],
+        system_prompt=get_system_prompt_by_role("identification")
+    )
+
+    owls["command_manager"] = _LocalPythonInterpreter(
+        role="command_manager",
+        implementation="anthropic",
+        model_name="claude-3-7-sonnet-20250219",
+        temperature=0.9,
+        max_tokens=2048,
+        max_context_tokens=4096,
+        tools=[],
+        system_prompt=get_system_prompt_by_role("command_manager"),
+    )
+
+    # static instances of the agents
+    mode_agent_mapping = {
+        "identification": owls["identification"],
+        "system": owls["system"],
+        "welcome": owls["welcome"],
+        "command_manager": owls["command_manager"],
+    }
+
+    # set the toolbox hook to the LocalPythonInterpreter
+    global toolbox_hook
+    toolbox_hook = owls["command_manager"]._run_system_command
+    
+    def get_focus_owl(self):
+        logger.debug(f"focus role: {focus_role}")
+        return self.mode_agent_mapping[focus_role]
+
+    def get_default_prompts(self):
+        return get_default_prompts_by_role(self.focus_role)
+
+    
+
 
 
 
