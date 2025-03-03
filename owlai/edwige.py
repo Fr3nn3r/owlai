@@ -21,6 +21,7 @@ from ttsengine import hoot  # takes 2.7 seconds to start
 
 import owlai
 
+
 import importlib
 
 # Load environment variables from .env file
@@ -28,6 +29,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Move magic strings to constants:
+DEFAULT_ROLE = "welcome"
+DEFAULT_ENV = "Athena"
+MAX_RETRIES = 5
 
 def load_logger_config():
     with open("logging.yaml", "r") as logger_config:

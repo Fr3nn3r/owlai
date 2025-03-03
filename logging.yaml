@@ -29,7 +29,7 @@ handlers:
 
 loggers:
   main_logger:
-    level: INFO
+    level: DEBUG
     handlers: [console, file]
     propagate: no
   spotify_logger:

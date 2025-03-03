@@ -18,6 +18,7 @@ from langchain_core.messages import (
 )
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
 import logging.config
 import logging
@@ -33,14 +34,14 @@ from db import (
     get_default_prompts_by_role,
 )
 from spotify import play_song_on_spotify
-from pydantic import ValidationError
+from pydantic.v1 import BaseSettings
 
 # Load environment variables from .env file
 load_dotenv()
 
 logger = logging.getLogger("main_logger")
 
-focus_role = "welcome"
+focus_role = "identification"
 
 user_context = "CONTEXT: "
 
@@ -122,6 +123,18 @@ toolbox = ToolBox()
 
 
 class Owl:
+    """
+    Base class for OwlAI agents.
+    
+    Attributes:
+        role (str): The role of the agent (welcome, system, etc.)
+        implementation (str): The model implementation to use
+        model_name (str): Name of the model to use
+        
+    Methods:
+        invoke(message: str) -> str: Process a user message
+        _process_tool_calls(model_response: AIMessage) -> None: Handle tool calls
+    """
 
     # Global message history shared by all agents
     message_history: List[BaseMessage] = []
@@ -158,21 +171,25 @@ class Owl:
         """Returns a new model instance nased on self parameters, This is the Model Factory."""
         if self.implementation == "openai":
             openai_model = ChatOpenAI(
-                model_name=self.model_name,
-                max_tokens=self.max_tokens,
+                name=self.model_name,
                 temperature=self.temperature,
                 max_completion_tokens=self.max_tokens,
             )
             return openai_model
         elif self.implementation == "anthropic":
             anthropic_model = ChatAnthropic(
-                model=self.model_name,
                 model_name=self.model_name,
-                max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 max_tokens_to_sample=self.max_tokens,
             )
             return anthropic_model
+        elif self.implementation == "ollama":
+            meta_model = ChatOllama(
+                model=self.model_name,
+                temperature=self.temperature,
+                num_predict=self.max_tokens,
+            )
+            return meta_model
         else:
             raise ValueError(
                 f"Unsupported model implementation provider: {self.implementation}"
@@ -274,7 +291,6 @@ class Owl:
                 self.append_message(tool_msg)
 
     def invoke(self, message: str) -> str:
-
         # update system prompt with latestcontext
         system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
         if len(self.message_history) == 0:
@@ -283,28 +299,25 @@ class Owl:
             self.message_history[0] = system_message
 
         self.append_message(HumanMessage(message))  # Add user message to history
-        model_response = self.chat_model.invoke(
-            self.message_history
-        )  # Invoke the model
-        self.append_message(model_response)  # Add model response to history
+        response = self.chat_model.invoke(self.message_history)
+        self.append_message(response)  # Add model response to history
 
-        self._process_tool_calls(model_response)
+        self._process_tool_calls(response)
 
-        if model_response.tool_calls:  # If tools were called, invoke the model again
-            model_response = self.chat_model.invoke(
-                self.message_history
-            )  # Invoke the model again
-            self.append_message(model_response)  # Add model response to history
-            logger.debug(model_response.content)  # Log the model response
+        if response.tool_calls:  # If tools were called, invoke the model again
+            response = self.chat_model.invoke(self.message_history)
+            self.append_message(response)  # Add model response to history
+            logger.debug(response.content)  # Log the model response
 
-        self._total_tokens = self._token_count(model_response)
-        return model_response.content  # Return the model response
+        self._total_tokens = self._token_count(response)
+        return response.content  # Return the model response
 
     def print_message_history(self):
         for index, message in enumerate(self.message_history):
-            logger.info(
-                f"Message #{index} '{message.type}' '{message.content[:100]  + "..." if len(message.content) > 100 else message.content }'"
-            )
+            if index > 0: # skip the system message
+                logger.info(
+                    f"Message #{index} '{message.type}' '{message.content[:100]  + "..." if len(message.content) > 100 else message.content }'"
+                )
 
     def print_message_metadata(self):
         for index, message in enumerate(self.message_history):
@@ -332,8 +345,15 @@ class Owl:
 
     def print_info(self):
         logger.info(
-            f"Role '{self.role}', model provider '{self.implementation}', model name '{self.chat_model.model_name}', tools {self.tools_dict.keys()}"
+            f"Role '{self.role}', model provider '{self.implementation}', model name '{self.model_name}', tools {self.tools_dict.keys()}"
         )
+
+    # Add proper resource cleanup:
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cleanup()
 
 
 class LocalPythonInterpreter(Owl):
@@ -481,8 +501,8 @@ class Edwige:
 
     owls["welcome"] = Owl(
         role="welcome",
-        implementation="openai",
-        model_name="gpt-4o-mini",
+        implementation="ollama",
+        model_name="llama3.1:8b",
         temperature=0.9,
         max_tokens=1000,
         max_context_tokens=4096,
@@ -522,3 +542,14 @@ class Edwige:
 
     def get_default_prompts(self):
         return get_default_prompts_by_role(self.focus_role)
+
+
+class OwlConfig(BaseSettings):
+    role: str
+    implementation: str
+    model_name: str
+    temperature: float
+
+    def validate_config(self, config: Dict[str, Any]) -> bool:
+        required_fields = ["role", "implementation", "model_name"]
+        return all(field in config for field in required_fields)

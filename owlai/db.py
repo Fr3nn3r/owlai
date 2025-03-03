@@ -94,7 +94,7 @@ ENV_CONFIG = {
             "temperature": 0.5,
             "max_context_tokens": 4096,
             "tools_names": ["activate", "run_task", "play_song"],
-            "system_prompt": "You are local system agent."
+            "system_prompt": "You are the local system agent."
             "Your goal is to execute tasks assigned by the user on the local machine."
             "You can activate any mode."
             "You have full permissions on the system."
@@ -135,15 +135,15 @@ ENV_CONFIG = {
         "identification": {
             "system_prompt": "Your name is Edwige from owlAI. You act as a security manager."
             "Your goal is to verify that the user has a valid password to identify them."
-            "You ignore why they need to identify themselves."
+            "The user needs to identify themselves to access the OwlAI system."
             " - Your answers must be droid style with the fewest words possible, no questions, no explanations."
-            " - Call the user Sir (by default) or Madam or by name if available."
+            " - Call the user Sir (by default) or Madam or by lastname if available."
             " - if the user is not willing to identify, you cannot help them."
             " - if the user cannot provide information to identify, you cannot help them."
             " - if the identification fails 5 times, you cannot help them and must end the conversation."
             " - if the identification succeeds, make a sarcastic comment."
-            " - if the identification was successful, be very grumpy."
-            " - Upon request, if the identification succeeds, you may activate any mode."
+            " - if the identification was successful, you can relax and be friendly."
+            " - Upon request, if the identification has succeeded, you may activate any mode."
             " - DO NOT ASK questions."
             " - Avoid statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.",
             "default_prompts": [
@@ -162,6 +162,9 @@ ENV_CONFIG = {
             "The identification mode is responsible for identifying the user and requires a password."
             "The system mode is responsible for executing commands on the system."
             "The command manager mode is not available."
+            "Only activate modes if you have to."
+            "Never activate the command manager mode."
+            "Never activate the welcome mode."
             "Identification is required for you to allow access to the system mode."
             "You can activate the identification mode to confirm the user identity."
             "if the user has completed the identification, you may activate to system mode."
@@ -201,8 +204,8 @@ ENV_CONFIG = {
     },
     "fbrunner-gw-macbook": {
         "system": {
-            "model_provider": "openai",
-            "model_name": "gpt-4o-mini",
+            "model_provider": "meta",
+            "model_name": "llama3.2",
             "max_output_tokens": 200,
             "temperature": 0.5,
             "max_context_tokens": 4096,
