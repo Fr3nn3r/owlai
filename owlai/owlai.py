@@ -1,3 +1,8 @@
+#       ,_,
+#      (O,O)
+#      (   )
+#      -"-"-
+
 import subprocess
 from subprocess import CompletedProcess
 from dotenv import load_dotenv
@@ -15,12 +20,18 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
 import logging.config
-import logging  # Loop over test instructions before prompting user
+import logging
 from langchain_core.tools import tool, BaseTool
 import sys
 import io
 import json
-from db import USER_DATABASE, get_user_by_password, CONFIG, get_system_prompt_by_role, get_default_prompts_by_role
+from db import (
+    USER_DATABASE,
+    get_user_by_password,
+    CONFIG,
+    get_system_prompt_by_role,
+    get_default_prompts_by_role,
+)
 from spotify import play_song_on_spotify
 from pydantic import ValidationError
 
@@ -33,10 +44,10 @@ focus_role = "welcome"
 
 user_context = "CONTEXT: "
 
-toolbox_hook : Callable = None
+toolbox_hook: Callable = None
+
 
 class ToolBox:
-
 
     @tool
     def identify_user_with_password(user_password: str) -> str:
@@ -160,10 +171,12 @@ class Owl:
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 max_tokens_to_sample=self.max_tokens,
-          )
+            )
             return anthropic_model
         else:
-            raise ValueError(f"Unsupported model implementation provider: {self.implementation}")
+            raise ValueError(
+                f"Unsupported model implementation provider: {self.implementation}"
+            )
 
     def _token_count(self, message: AIMessage):
         metadata = message.response_metadata
@@ -176,7 +189,7 @@ class Owl:
             return anthropic_total_tokens
         else:
             logger.warning(
-                f"Token count unsupported for model provider: {self.implementation}"
+                f"Token count unsupported for model provider: '{self.implementation}'"
             )
             return -1
 
@@ -187,12 +200,14 @@ class Owl:
             self.fifo_message_mode == False
         ):
             logger.warning(
-                f"Total tokens {self._total_tokens} exceeded max context tokens {self._max_context_tokens} -> activating FIFO message mode"
+                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.max_context_tokens}' -> activating FIFO message mode"
             )
             self.fifo_message_mode = True
         if self.fifo_message_mode:
             self.message_history.pop(1)  # Remove the oldest message
-            if (self.message_history[-1].type == "tool"):
+            if (
+                self.message_history[-1].type == "tool"
+            ):  # Remove the tool message if any
                 self.message_history.pop(1)
             self.print_message_history()
 
@@ -206,11 +221,11 @@ class Owl:
 
         for tool_call in model_response.tool_calls:
             # Loop over tool calls
-            logger.debug(f"Tool call requested: {tool_call}")
+            logger.debug(f"Tool call requested: '{tool_call}'")
 
             # Skip if no tool calls or empty
             if not tool_call or "name" not in tool_call:
-                logger.warning(f"Invalid tool call format: {tool_call}")
+                logger.warning(f"Invalid tool call format: '{tool_call}'")
                 continue
 
             # Get tool name and arguments
@@ -245,13 +260,12 @@ class Owl:
 
                 # Add tool response to history
                 self.append_message(tool_msg)
-                logger.debug(f"Tool '{tool_name}' response: {tool_result}")
 
             except Exception as e:
-                logger.error(f"Error invoking tool {tool_name}: {e} ({tool_call})")
+                logger.error(f"Error invoking tool '{tool_name}': '{e}' ({tool_call})")
 
                 # Create error message
-                error_content = f"Error executing {tool_name}: {str(e)}"
+                error_content = f"Error executing '{tool_name}': '{str(e)}'"
                 tool_msg = ToolMessage(
                     content=error_content,
                     tool_call_id=tool_call.get("id", "unknown"),
@@ -289,14 +303,14 @@ class Owl:
     def print_message_history(self):
         for index, message in enumerate(self.message_history):
             logger.info(
-                f"Message #{index}, {message.type}, {message.content[:100]  + "..." if len(message.content) > 100 else message.content }"
+                f"Message #{index} '{message.type}' '{message.content[:100]  + "..." if len(message.content) > 100 else message.content }'"
             )
 
     def print_message_metadata(self):
         for index, message in enumerate(self.message_history):
             if message.response_metadata:
                 logger.info(
-                    f"Message #{index}, type: {message.type}, metadata: {message.response_metadata}"
+                    f"Message #{index} type: '{message.type}' metadata: '{message.response_metadata}'"
                 )
 
     def reset_message_history(self):
@@ -305,16 +319,16 @@ class Owl:
             self.fifo_message_mode = False
 
     def get_default_prompts(self):
-        return CONFIG[focus_role]["default_prompts"]
+        return CONFIG[self.role]["default_prompts"]
 
     def run_tests(self):
-        if len(CONFIG[focus_role]["test_prompts"]) > 0:
-            logger.info("Running tests for current mode")
-            for test in CONFIG[focus_role]["test_prompts"]:
+        if len(CONFIG[self.role]["test_prompts"]) > 0:
+            logger.info(f"Running tests for owl role '{self.role}'")
+            for test in CONFIG[self.role]["test_prompts"]:
                 logger.info(f"USER: {test}")
                 self.invoke(test)
         else:
-            logger.warning("No test prompts defined for current mode")
+            logger.warning("No test prompts defined for owl role '{self.role}'")
 
     def print_info(self):
         logger.info(
@@ -322,14 +336,14 @@ class Owl:
         )
 
 
-class _LocalPythonInterpreter(Owl):
+class LocalPythonInterpreter(Owl):
     """
     Needs to have its own message queue to avoid publishing messages to the global message queue (main context).
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.lpi_own_message_history = [ 
+        self.lpi_own_message_history = [
             SystemMessage(f"{self.system_prompt}\n{user_context}")
         ]
 
@@ -443,6 +457,7 @@ class _LocalPythonInterpreter(Owl):
 
         return result
 
+
 class Edwige:
 
     def __init__(self):
@@ -461,7 +476,7 @@ class Edwige:
         max_tokens=200,
         max_context_tokens=4096,
         tools=[toolbox.activate, toolbox.run_task, toolbox.play_song],
-        system_prompt=get_system_prompt_by_role("system")
+        system_prompt=get_system_prompt_by_role("system"),
     )
 
     owls["welcome"] = Owl(
@@ -472,7 +487,7 @@ class Edwige:
         max_tokens=1000,
         max_context_tokens=4096,
         tools=[toolbox.activate],
-        system_prompt=get_system_prompt_by_role("welcome")
+        system_prompt=get_system_prompt_by_role("welcome"),
     )
 
     owls["identification"] = Owl(
@@ -483,10 +498,10 @@ class Edwige:
         max_tokens=200,
         max_context_tokens=4096,
         tools=[toolbox.activate, toolbox.identify_user_with_password],
-        system_prompt=get_system_prompt_by_role("identification")
+        system_prompt=get_system_prompt_by_role("identification"),
     )
 
-    owls["command_manager"] = _LocalPythonInterpreter(
+    owls["command_manager"] = LocalPythonInterpreter(
         role="command_manager",
         implementation="anthropic",
         model_name="claude-3-7-sonnet-20250219",
@@ -497,27 +512,13 @@ class Edwige:
         system_prompt=get_system_prompt_by_role("command_manager"),
     )
 
-    # static instances of the agents
-    mode_agent_mapping = {
-        "identification": owls["identification"],
-        "system": owls["system"],
-        "welcome": owls["welcome"],
-        "command_manager": owls["command_manager"],
-    }
-
     # set the toolbox hook to the LocalPythonInterpreter
     global toolbox_hook
     toolbox_hook = owls["command_manager"]._run_system_command
-    
+
     def get_focus_owl(self):
         logger.debug(f"focus role: {focus_role}")
-        return self.mode_agent_mapping[focus_role]
+        return self.owls[focus_role]
 
     def get_default_prompts(self):
         return get_default_prompts_by_role(self.focus_role)
-
-    
-
-
-
-

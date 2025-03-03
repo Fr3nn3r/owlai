@@ -13,7 +13,6 @@ import cProfile
 import pstats
 
 
-
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
@@ -28,6 +27,7 @@ import importlib
 from dotenv import load_dotenv
 
 load_dotenv()
+
 
 def load_logger_config():
     with open("logging.yaml", "r") as logger_config:
@@ -44,8 +44,6 @@ def main():
 
         edwige = Edwige()
         while True:
-            # get static instance from owlai
-            # focus_agent = get_focus_agent()
 
             focus_agent = edwige.get_focus_owl()
             history = InMemoryHistory(

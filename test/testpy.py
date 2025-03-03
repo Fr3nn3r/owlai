@@ -1,26 +1,17 @@
-class BaseAgent:
-    def __init__(self, **kwargs):
-        self.config = kwargs  # Store config as a dictionary
-        #print("BaseAgent initialized with:", self.config)
-        print("BaseAgent initialized with:", self.config["model_provider"])
+# let's test the local python interpreter
 
-class SystemAgent(BaseAgent):
-    def __init__(self, config):
-        # Pass the unpacked config dictionary as keyword arguments
-        super().__init__(**config)
+from owlai import LocalPythonInterpreter, get_system_prompt_by_role
 
-# Example CONFIG dictionary
-CONFIG = {
-    "system": {
-        "model_provider": "openai",
-        "model_name": "gpt-4o-mini",
-        "max_output_tokens": 200,
-        "temperature": 0.5,
-        "max_context_tokens": 4096,
-        "tools_names": ["activate", "run_task", "play_song"],
-        "system_prompt": "You are local system agent."
-    }
-}
+lpi = LocalPythonInterpreter(
+        role="command_manager",
+        implementation="anthropic",
+        model_name="claude-3-7-sonnet-20250219",
+        temperature=0.9,
+        max_tokens=2048,
+        max_context_tokens=4096,
+        tools=[],
+        system_prompt=get_system_prompt_by_role("command_manager"),
+    )
 
-# Create instance of SystemAgent
-agent = SystemAgent(CONFIG["system"]["model_provider"], model_provider="openai")
+lpi.run_tests()
+
