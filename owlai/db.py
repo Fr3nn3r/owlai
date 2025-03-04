@@ -201,6 +201,27 @@ ENV_CONFIG = {
             "default_prompts": None,
             "test_prompts": [],
         },
+        "qna": {
+            "system_prompt": "You are the knowledge base of the system. "
+            "You are responsible for answering questions based on your tools.",
+            "default_prompts": None,
+            "test_prompts": [],
+        },
+        "rag_tool": {
+            "system_prompt": """
+You are a helpful assistant that can answer questions based on the context provided and not prior knowledge.
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+""",
+            "default_prompts": None,
+            "test_prompts": [],
+        },
     },
     "fbrunner-gw-macbook": {
         "system": {

@@ -86,6 +86,7 @@ class ToolBox:
                 - system: activates system mode
                 - welcome: activates welcome mode
                 - command_manager: activates command manager mode
+                - qna: activates qna mode
         """
         global focus_role
         focus_role = mode
@@ -478,6 +479,26 @@ class LocalPythonInterpreter(Owl):
         return result
 
 
+class LocalRAGTool(Owl):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lrt_own_message_history = [
+            SystemMessage(f"{self.system_prompt}\n{user_context}")
+        ]
+
+    def rag_query(self, question: str) -> str:
+        """
+        Send a prompt to the model and executes the output as a python script.
+        """
+        return self.chat_model.invoke(self.lrt_own_message_history)
+
+    def index_folder(self, folder_path: str):
+        """
+        Index a folder and its contents.
+        """
+        return self.chat_model.invoke(self.lrt_own_message_history)
+
 class Edwige:
 
     def __init__(self):
@@ -486,7 +507,7 @@ class Edwige:
 
     owls: Dict[str, Owl] = {}
 
-    roles = ["system", "welcome", "identification", "command_manager"]
+    roles = ["system", "welcome", "identification", "command_manager", "qna"]
 
     owls["system"] = Owl(
         role="system",
@@ -530,6 +551,28 @@ class Edwige:
         max_context_tokens=4096,
         tools=[],
         system_prompt=get_system_prompt_by_role("command_manager"),
+    )
+
+    owls["qna"] = Owl(
+        role="qna",
+        implementation="openai",
+        model_name="gpt-4o-mini",
+        temperature=0.9,
+        max_tokens=4096,
+        max_context_tokens=8192,
+        tools=[toolbox.get_answer_from_knowledge_base],
+        system_prompt=get_system_prompt_by_role("qna"),
+    )
+
+    owls["rag_tool"] = LocalRAGTool(
+        role="rag_tool",
+        implementation="openai",
+        model_name="gpt-4o-mini",
+        temperature=0.9,
+        max_tokens=4096,
+        max_context_tokens=8192,
+        tools=[],
+        system_prompt=get_system_prompt_by_role("rag_tool"),
     )
 
     # set the toolbox hook to the LocalPythonInterpreter
