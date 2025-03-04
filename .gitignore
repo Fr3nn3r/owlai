@@ -8,6 +8,8 @@ models/
 .idea/
 .vscode/
 scripts/
+data
+logs
 .env
 *.log
 *.wav
