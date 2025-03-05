@@ -105,7 +105,7 @@ class ToolBox:
         Args:
             script: a natural language string describing the command to run.
         """
-        logger.debug(f"Running system task: {task} {toolbox_hook}")
+        logger.debug(f"Running system task: {task}")
         command_stdout = toolbox_hook(task)
         if command_stdout.endswith("\n"):
             command_stdout = command_stdout[:-1]
@@ -407,7 +407,7 @@ class LocalPythonInterpreter(Owl):
 
             self.lpi_own_message_history.append(model_code_message)
 
-            logger.debug(f"Raw script: {python_script}")
+            #logger.debug(f"Raw script: {python_script}") # a bit too verbose
 
         except Exception as e:
             error_message = f"Error generating python script: {str(e)}"
