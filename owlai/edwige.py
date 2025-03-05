@@ -1,3 +1,8 @@
+#  ,___,
+# ( o,o )
+# { `" `}
+#  " - "
+
 import time
 
 start_time = time.time()
@@ -8,10 +13,6 @@ import logging.config
 
 import logging
 import yaml
-
-import cProfile
-import pstats
-
 
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
