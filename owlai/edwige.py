@@ -1,7 +1,7 @@
 import time
 
 start_time = time.time()
-print(f"Application start_time: {start_time}")
+print(f"Application loading please wait...")
 
 import logging
 import logging.config
@@ -82,7 +82,7 @@ log      - reloads the logger config"""
                 continue
             if user_message.lower() in ["speak"]:
                 speak = not speak
-                logger.info(f"EDWIGE: speaking is now {'on' if speak else 'off'}")
+                logger.info(f"AI: speaking is now {'on' if speak else 'off'}")
                 continue
 
             if user_message.lower() == "print":
@@ -130,10 +130,10 @@ log      - reloads the logger config"""
             try:
 
                 logger.info(
-                    f"\033[97mUSER: {user_message}\033[0m"
+                    f"USER: {user_message}"
                 )  # This will print in white to terminal
                 response = focus_agent.invoke(user_message)
-                logger.info(f"EDWIGE: {response}")
+                logger.info(f"AI: {response}")
                 if speak:
                     hoot(response)
 

@@ -7,7 +7,6 @@ import subprocess
 from subprocess import CompletedProcess
 from dotenv import load_dotenv
 import os
-import yaml
 from typing import List, Dict, Any, Optional, Callable
 from langchain_core.messages import (
     BaseMessage,
@@ -24,9 +23,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 import logging.config
 import logging
 from langchain_core.tools import tool, BaseTool
-import sys
-import io
-import json
+import re
 from db import (
     USER_DATABASE,
     get_user_by_password,
@@ -112,7 +109,7 @@ class ToolBox:
         command_stdout = toolbox_hook(task)
         if command_stdout.endswith("\n"):
             command_stdout = command_stdout[:-1]
-        logger.info(command_stdout)
+        logger.info(f"Command output: {command_stdout}")
         return command_stdout
 
     @tool
@@ -452,6 +449,9 @@ class LocalPythonInterpreter(Owl):
 
         return file_relative_pathname
 
+    def remove_python_markup_simple(self, text):
+        return text.replace("```", "").replace("```", "")
+
     # saves script to a temo file, executes the script handling error, updates the conversation
     # returns a completed process with stdout stderr
     def _execute_as_python(self, code: str) -> CompletedProcess[str]:
@@ -631,7 +631,7 @@ class Edwige:
     toolbox_hook_rag_engine = owls["rag_tool"].rag_question
 
     def get_focus_owl(self):
-        logger.debug(f"Focus mode: {focus_role}")
+        logger.debug(f"Active mode: {focus_role}")
         return self.owls[focus_role]
 
     def get_default_prompts(self):
