@@ -16,6 +16,7 @@ from langchain_core.messages import (
     AIMessage,
     ToolMessage,
 )
+from langchain_core.prompt_values import PromptValue
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
@@ -36,6 +37,10 @@ from db import (
 from spotify import play_song_on_spotify
 from pydantic.v1 import BaseSettings
 
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_core.prompts import PromptTemplate
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -46,6 +51,8 @@ focus_role = "identification"
 user_context = "CONTEXT: "
 
 toolbox_hook: Callable = None
+
+toolbox_hook_rag_engine : Callable = None
 
 
 class ToolBox:
@@ -119,6 +126,19 @@ class ToolBox:
         logger.info(f"Playing song: {song_name} by {artist_name}")
         play_song_on_spotify(song_name, artist_name)
 
+    @tool
+    def get_answer_from_knowledge_base(question: str):
+        """
+            Gets an answer from the knowledge base.
+        Args:
+            question: a string containing the question to answer.
+        """
+        logger.debug(f"Running RAG question: {question} {toolbox_hook_rag_engine}")
+        rag_answer = toolbox_hook_rag_engine(question)
+        #logger.debug(rag_answer)
+        return rag_answer
+
+        return "This is a test answer"
 
 toolbox = ToolBox()
 
@@ -126,12 +146,12 @@ toolbox = ToolBox()
 class Owl:
     """
     Base class for OwlAI agents.
-    
+
     Attributes:
         role (str): The role of the agent (welcome, system, etc.)
         implementation (str): The model implementation to use
         model_name (str): Name of the model to use
-        
+
     Methods:
         invoke(message: str) -> str: Process a user message
         _process_tool_calls(model_response: AIMessage) -> None: Handle tool calls
@@ -308,17 +328,16 @@ class Owl:
         if response.tool_calls:  # If tools were called, invoke the model again
             response = self.chat_model.invoke(self.message_history)
             self.append_message(response)  # Add model response to history
-            logger.debug(response.content)  # Log the model response
+            #logger.debug(response.content)  # Log the model response
 
         self._total_tokens = self._token_count(response)
         return response.content  # Return the model response
 
     def print_message_history(self):
         for index, message in enumerate(self.message_history):
-            if index > 0: # skip the system message
-                logger.info(
-                    f"Message #{index} '{message.type}' '{message.content[:100]  + "..." if len(message.content) > 100 else message.content }'"
-                )
+            logger.info(
+                f"Message #{index} '{message.type}' '{message.content[:100]  + "..." if len(message.content) > 100 else message.content }'"
+            )
 
     def print_message_metadata(self):
         for index, message in enumerate(self.message_history):
@@ -326,6 +345,12 @@ class Owl:
                 logger.info(
                     f"Message #{index} type: '{message.type}' metadata: '{message.response_metadata}'"
                 )
+
+    def print_system_prompt(self):
+        if len(self.message_history) > 0 :
+            logger.info(f"System prompt: '{self.message_history[0].content}'")
+        else:
+            logger.info(f"System prompt: '{self.system_prompt}'")
 
     def reset_message_history(self):
         if len(self.message_history) > 0:
@@ -352,7 +377,7 @@ class Owl:
     # Add proper resource cleanup:
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cleanup()
 
@@ -385,7 +410,7 @@ class LocalPythonInterpreter(Owl):
 
             self.lpi_own_message_history.append(model_code_message)
 
-            logger.debug(python_script)
+            logger.debug(f"Raw script: {python_script}")
 
         except Exception as e:
             error_message = f"Error generating python script: {str(e)}"
@@ -483,21 +508,45 @@ class LocalRAGTool(Owl):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.lrt_own_message_history = [
-            SystemMessage(f"{self.system_prompt}\n{user_context}")
-        ]
+        embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
+        db_persist_directory = "data/vector"
+        embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
-    def rag_query(self, question: str) -> str:
+        self.prompt = PromptTemplate.from_template(self.system_prompt)
+        self.vector_store = Chroma(embedding_function=embeddings, persist_directory=db_persist_directory)
+
+    def rag_question(self, question: str) -> str:
         """
-        Send a prompt to the model and executes the output as a python script.
+        Runs the RAG query against the vector store and returns an answer to the question.
+
+        Args:
+            question: a string containing the question to answer.
         """
-        return self.chat_model.invoke(self.lrt_own_message_history)
+
+        retrieved_docs = self.vector_store.similarity_search(query=question, k=4)
+
+        for doc in retrieved_docs:
+            logger.debug(f"Document matched: {doc.page_content[:100]} {doc.metadata}")
+
+        docs_content = "\n\n".join(doc.page_content.encode("utf-8", errors="ignore").decode("utf-8") for doc in retrieved_docs)
+        #message_with_question_and_context : PromptValue = self.prompt.invoke({"question": question, "context": docs_content})
+        message_with_question_and_context = self.prompt.format(question=question, context=docs_content)
+        currated_message_with_question_and_context = message_with_question_and_context.encode("utf-8", errors="ignore").decode("utf-8")
+        #logger.debug(f"length [chars]: {len(message_with_question_and_context.to_string())} - {message_with_question_and_context.to_string()}")
+        messages = [SystemMessage(currated_message_with_question_and_context)]
+        messages = self.chat_model.invoke(messages)
+
+        logger.debug(f"Raw RAG answer: {messages.content}")
+
+        #no history management for now
+        return messages.content
 
     def index_folder(self, folder_path: str):
         """
-        Index a folder and its contents.
+        Index a folder and its contents (this should be done offline).
         """
-        return self.chat_model.invoke(self.lrt_own_message_history)
+        return "Do this offline idiot"
+
 
 class Edwige:
 
@@ -522,8 +571,8 @@ class Edwige:
 
     owls["welcome"] = Owl(
         role="welcome",
-        implementation="ollama",
-        model_name="llama3.1:8b",
+        implementation="openai",
+        model_name="gpt-4o-mini",
         temperature=0.9,
         max_tokens=1000,
         max_context_tokens=4096,
@@ -544,8 +593,8 @@ class Edwige:
 
     owls["command_manager"] = LocalPythonInterpreter(
         role="command_manager",
-        implementation="anthropic",
-        model_name="claude-3-7-sonnet-20250219",
+        implementation="openai",
+        model_name="gpt-4o-mini",
         temperature=0.9,
         max_tokens=2048,
         max_context_tokens=4096,
@@ -559,7 +608,7 @@ class Edwige:
         model_name="gpt-4o-mini",
         temperature=0.9,
         max_tokens=4096,
-        max_context_tokens=8192,
+        max_context_tokens=4096,
         tools=[toolbox.get_answer_from_knowledge_base],
         system_prompt=get_system_prompt_by_role("qna"),
     )
@@ -575,12 +624,14 @@ class Edwige:
         system_prompt=get_system_prompt_by_role("rag_tool"),
     )
 
-    # set the toolbox hook to the LocalPythonInterpreter
+    # set the toolbox hooks
     global toolbox_hook
     toolbox_hook = owls["command_manager"]._run_system_command
+    global toolbox_hook_rag_engine
+    toolbox_hook_rag_engine = owls["rag_tool"].rag_question
 
     def get_focus_owl(self):
-        logger.debug(f"focus role: {focus_role}")
+        logger.debug(f"Focus mode: {focus_role}")
         return self.owls[focus_role]
 
     def get_default_prompts(self):

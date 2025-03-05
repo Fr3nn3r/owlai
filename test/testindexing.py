@@ -1,22 +1,18 @@
-import getpass
+
 import os
-import shutil
+
 import asyncio
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
+
 from langchain_huggingface import HuggingFaceEmbeddings
-
 from langchain_chroma import Chroma
-from langchain import hub
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from typing_extensions import List, TypedDict
-
+from langchain_core.prompts import PromptTemplate
 
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 
-from langchain_core.prompts import PromptTemplate
+
 #from langchain.document_loaders import DirectoryLoader
 from langchain_community.document_loaders import DirectoryLoader
 
@@ -113,7 +109,7 @@ async def index_folder_contents(folder_path: str, verbose: bool = False):
     documents = loader.load()
 
     # Split documents into chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=400)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
     all_splits = text_splitter.split_documents(documents)
 
     # Index chunks

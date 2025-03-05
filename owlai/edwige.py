@@ -52,17 +52,18 @@ def main():
 
             focus_agent = edwige.get_focus_owl()
             history = InMemoryHistory(
-                focus_agent.get_default_prompts() + ["exit", "reload"]
+                reversed(focus_agent.get_default_prompts() + ["exit"])
             )
 
             help_message = """quit     - Quit the program
 exit     - Exit the program
 print    - Print the conversation history
+prints   - Print the active system prompt
 reset    - Reset the conversation (new chat)
 speak    - Toggle speech output
-mode     - Print the current mode
+mode     - Print the active mode
 reload   - Reloads owlai package source code
-test     - Runs test instructions (current mode)
+test     - Runs test instructions (active mode)
 metadata - Print the conversation metadata
 log      - reloads the logger config"""
 
@@ -86,6 +87,10 @@ log      - reloads the logger config"""
 
             if user_message.lower() == "print":
                 focus_agent.print_message_history()
+                continue
+
+            if user_message.lower() == "prints":
+                focus_agent.print_system_prompt()
                 continue
 
             if user_message.lower() == "metadata":
