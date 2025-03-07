@@ -17,11 +17,8 @@ import yaml
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
-from owlai import Edwige, Owl
-from ttsengine import hoot  # takes 2.7 seconds to start
-
+from owlai import Edwige, Owl, hoot  # For direct use
 import owlai
-
 
 import importlib
 
@@ -34,6 +31,7 @@ load_dotenv()
 DEFAULT_ROLE = "welcome"
 DEFAULT_ENV = "Athena"
 MAX_RETRIES = 5
+
 
 def load_logger_config():
     with open("logging.yaml", "r") as logger_config:
@@ -83,7 +81,7 @@ log      - reloads the logger config"""
                 continue
             if user_message.lower() in ["speak"]:
                 speak = not speak
-                logger.info(f"AI: speaking is now {'on' if speak else 'off'}")
+                logger.info(f"Speaking is now {'on' if speak else 'off'}")
                 continue
 
             if user_message.lower() == "print":
@@ -99,10 +97,11 @@ log      - reloads the logger config"""
                 continue
 
             if user_message.lower() == "reload":
-                importlib.reload(owlai)
+                importlib.reload(owlai.owlai)
+                importlib.reload(owlai.db)
+                importlib.reload(owlai.spotify)
+                importlib.reload(owlai.ttsengine)
                 logger.info("Reloaded owlai package")
-                edwige = Edwige()
-                logger.info("Reloaded new Edwige instance")
                 continue
 
             if user_message.lower() == "mode":
@@ -130,9 +129,7 @@ log      - reloads the logger config"""
 
             try:
 
-                logger.info(
-                    f"USER: {user_message}"
-                )  # This will print in white to terminal
+                logger.info(f"USER: {user_message}")
                 response = focus_agent.invoke(user_message)
                 logger.info(f"AI: {response}")
                 if speak:

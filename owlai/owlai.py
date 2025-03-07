@@ -24,14 +24,14 @@ import logging.config
 import logging
 from langchain_core.tools import tool, BaseTool
 import re
-from db import (
+from .db import (
     USER_DATABASE,
     get_user_by_password,
     CONFIG,
     get_system_prompt_by_role,
     get_default_prompts_by_role,
 )
-from spotify import play_song_on_spotify
+from .spotify import play_song_on_spotify
 from pydantic.v1 import BaseSettings
 
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -81,7 +81,7 @@ class ToolBox:
             return "Invalid password"
 
     @tool
-    def activate(mode: str):
+    def activate_mode(mode: str):
         """
             Activates a different owlai mode.
         Args:
@@ -368,7 +368,7 @@ class Owl:
 
     def print_info(self):
         logger.info(
-            f"Role '{self.role}', model provider '{self.implementation}', model name '{self.model_name}', tools {self.tools_dict.keys()}"
+            f"role='{self.role}', model-provider='{self.implementation}', model-name='{self.model_name}', tools {self.tools_dict.keys()}"
         )
 
     # Add proper resource cleanup:
@@ -562,10 +562,10 @@ class Edwige:
         role="system",
         implementation="openai",
         model_name="gpt-4o-mini",
-        temperature=0.9,
+        temperature=0.1,
         max_tokens=200,
         max_context_tokens=4096,
-        tools=[toolbox.activate, toolbox.run_task, toolbox.play_song],
+        tools=[toolbox.activate_mode, toolbox.run_task, toolbox.play_song],
         system_prompt=get_system_prompt_by_role("system"),
     )
 
@@ -573,21 +573,21 @@ class Edwige:
         role="welcome",
         implementation="openai",
         model_name="gpt-4o-mini",
-        temperature=0.9,
+        temperature=0.1,
         max_tokens=1000,
         max_context_tokens=4096,
-        tools=[toolbox.activate],
+        tools=[toolbox.activate_mode],
         system_prompt=get_system_prompt_by_role("welcome"),
     )
 
     owls["identification"] = Owl(
         role="identification",
         implementation="openai",
-        model_name="gpt-4o-mini",
-        temperature=0.9,
+        model_name="gpt-3.5-turbo",
+        temperature=0.1,
         max_tokens=200,
         max_context_tokens=4096,
-        tools=[toolbox.activate, toolbox.identify_user_with_password],
+        tools=[toolbox.activate_mode, toolbox.identify_user_with_password],
         system_prompt=get_system_prompt_by_role("identification"),
     )
 
@@ -595,7 +595,7 @@ class Edwige:
         role="command_manager",
         implementation="openai",
         model_name="gpt-4o-mini",
-        temperature=0.9,
+        temperature=0.1,
         max_tokens=2048,
         max_context_tokens=4096,
         tools=[],
@@ -606,10 +606,10 @@ class Edwige:
         role="qna",
         implementation="openai",
         model_name="gpt-4o-mini",
-        temperature=0.9,
+        temperature=0.1,
         max_tokens=4096,
         max_context_tokens=4096,
-        tools=[toolbox.get_answer_from_knowledge_base],
+        tools=[toolbox.get_answer_from_knowledge_base, toolbox.activate_mode],
         system_prompt=get_system_prompt_by_role("qna"),
     )
 
@@ -617,7 +617,7 @@ class Edwige:
         role="rag_tool",
         implementation="openai",
         model_name="gpt-4o-mini",
-        temperature=0.9,
+        temperature=0.1,
         max_tokens=4096,
         max_context_tokens=8192,
         tools=[],

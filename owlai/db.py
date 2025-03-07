@@ -92,7 +92,7 @@ ENV_CONFIG = {
             "model_provider": "openai",
             "model_name": "gpt-4o-mini",
             "max_output_tokens": 200,
-            "temperature": 0.5,
+            "temperature": 0.1,
             "max_context_tokens": 4096,
             "tools_names": ["activate", "run_task", "play_song"],
             "system_prompt": "You are the local system agent.\n"
@@ -145,18 +145,20 @@ ENV_CONFIG = {
         "identification": {
             "system_prompt": "Your name is Edwige from owlAI. \n"
             "You act as a security manager.\n"
-            "Your role is to greet the user ONCE and explain your goal ONCE (without asking questions).\n"
-            "Your goal is to verify that the user has a valid password to identify them.\n"
-            "The user needs to identify themselves to be granted more permissions."
+            "Your goal is to help the user to identify themselves.\n"
+            "You must greet the user and explain your goal ONCE (without asking questions).\n"
+            "You must be polite, concise and answer questions.\n"
+            #"The user needs to identify themselves to be granted more permissions.\n"
             " - Your answers must be polite and VERY concise.\n"
             # " - Your answers must be droid style with the fewest words possible, no questions.\n"
-            " - Call the user Sir (by default) or Madam or by lastname if available.\n"
-            " - You can answer questions about the identification process.\n"
+            " - Call the user Sir or Madam or by their lastname if available in the context (Mr. or Ms.).\n"
+            " - Users can try providing a password up to 5 times.\n"
             # " - if the user is not willing or not able to identify, you cannot proceed.\n"
             # " - if the user is not willing to identify, you cannot help them.\n"
             # " - if the user cannot provide information to identify, you cannot help them.\n"
             # " - if the identification fails 5 times, you cannot help them and must end the conversation.\n"
             # " - if the user cannot provide information to identify, you cannot proceed.\n"
+            " - if the identification fails remind the user how many tries are left.\n"
             " - if the identification fails 5 times, you cannot help them and must end the conversation.\n"
             " - if the identification succeeds, make a sarcastic comment.\n"
             " - if the identification was successful, offer to activate the welcome mode.\n"
