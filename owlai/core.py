@@ -24,7 +24,7 @@ import logging.config
 import logging
 from langchain_core.tools import tool, BaseTool
 import re
-from .db import (
+from owlai.db import (
     USER_DATABASE,
     get_user_by_password,
     CONFIG,
