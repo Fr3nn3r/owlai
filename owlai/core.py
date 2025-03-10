@@ -8,6 +8,7 @@ from subprocess import CompletedProcess
 from dotenv import load_dotenv
 import os
 from typing import List, Dict, Any, Optional, Callable
+from typing_extensions import TypedDict, deprecated
 from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
@@ -354,18 +355,6 @@ class Owl:
             self.message_history = [self.message_history[0]]
             self.fifo_message_mode = False
 
-    def get_default_prompts(self):
-        return CONFIG[self.role]["default_prompts"]
-
-    def run_tests(self):
-        if len(CONFIG[self.role]["test_prompts"]) > 0:
-            logger.info(f"Running tests for owl role '{self.role}'")
-            for test in CONFIG[self.role]["test_prompts"]:
-                logger.info(f"USER: {test}")
-                self.invoke(test)
-        else:
-            logger.warning("No test prompts defined for owl role '{self.role}'")
-
     def print_info(self):
         logger.info(
             f"role='{self.role}', model-provider='{self.implementation}', model-name='{self.model_name}', tools {self.tools_dict.keys()}"
@@ -548,13 +537,119 @@ class LocalRAGTool(Owl):
         return "Do this offline idiot"
 
 
+
+
+class OwlConfig(BaseSettings):
+    role: str
+    implementation: str
+    model_name: str
+    temperature: float
+
+    def validate_config(self, config: Dict[str, Any]) -> bool:
+        required_fields = ["role", "implementation", "model_name"]
+        return all(field in config for field in required_fields)
+
+from langchain.chat_models import init_chat_model
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import create_react_agent
+from rich.console import Console
+
+def sprint(*args):
+    """ A smart print function for JSON-like structures """
+    console = Console()
+    for arg in args:
+        console.print(arg)  # Normal print with `rich`
+
+class OwlAIAgent: 
+
+    def __init__(
+        self,
+        implementation: str = "openai",
+        model_name: str = "gpt-4o-mini",
+        temperature: float = 0.9,
+        max_tokens: int = 2048,
+        max_context_tokens: int = 4096,
+        tools: List[BaseTool] = [],
+        system_prompt: str = None,
+    ):
+        self.implementation = implementation
+        self.model_name = model_name
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.max_context_tokens = max_context_tokens
+        self.tools = tools
+        self.system_prompt = system_prompt
+        self.chat_model = init_chat_model(model=model_name, 
+                    model_provider=implementation, 
+                    temperature=temperature,
+                    max_tokens=max_tokens)
+
+        self.state_memory = MemorySaver()
+        self.state_config = {"configurable": {"thread_id": str(id(self))}}
+    
+        self.agent_graph = create_react_agent(
+            self.chat_model, 
+            self.tools, 
+            prompt=SystemMessage(self.system_prompt), 
+            checkpointer=self.state_memory 
+        )
+
+    def invoke(self, message: str) -> str:
+        graph_response = self.agent_graph.invoke({"messages": [HumanMessage(message)]}, self.state_config)
+
+        if (logger.isEnabledFor(logging.DEBUG)):
+            sprint(graph_response)
+
+        return self._return_last_message_content(graph_response)
+
+    def _return_last_message_content(self, response: Dict[str, Any]) -> str:
+        return response["messages"][-1].content
+
+    def print_message_history(self):
+        state = self.agent_graph.get_state(self.state_config)
+        for index, message in enumerate(state.values["messages"]):
+            logger.info(
+                f"Message #{index} type: '{message.type}' content: '{str(message.content)[:100] + "..." if len(str(message.content)) > 100 else str(message.content)}'"
+            )
+            if (logger.isEnabledFor(logging.DEBUG)):
+                sprint(message)
+
+    def print_message_metadata(self):
+        state = self.agent_graph.get_state(self.state_config)
+        for index, message in enumerate(state.values["messages"]):          
+            if message.response_metadata:
+                logger.info(
+                    f"Message #{index} type: '{message.type}' metadata: '{message.response_metadata}'"
+                )
+
+    def print_system_prompt(self):
+        logger.info(f"System prompt: '{self.system_prompt}'")
+
+    def reset_message_history(self):
+        logger.warning("Resetting message history not supported")
+
+    def run_tests(self):
+        logger.warning("Running tests not supported (NOT TO BE MANAGED HERE)")
+
+    def print_info(self):
+        logger.info(
+            f"model-provider='{self.implementation}', model-name='{self.model_name}', tools='{', '.join([t.name for t in self.tools])}'"
+        )
+
+    # NOT SURE WHAT THIS IS... 
+    # Add proper resource cleanup (???):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        logger.warning("Cleanup not supported (???)")
+
 class Edwige:
 
     def __init__(self):
         self.logger = logging.getLogger("main_logger")
-        self.focus_role = "welcome"
 
-    owls: Dict[str, Owl] = {}
+    owls: Dict[str, Any] = {}
 
     roles = ["system", "welcome", "identification", "command_manager", "qna"]
 
@@ -580,8 +675,8 @@ class Edwige:
         system_prompt=get_system_prompt_by_role("welcome"),
     )
 
-    owls["identification"] = Owl(
-        role="identification",
+    owls["identification"] = OwlAIAgent(
+        #role="identification",
         implementation="openai",
         model_name="gpt-3.5-turbo",
         temperature=0.1,
@@ -635,15 +730,16 @@ class Edwige:
         return self.owls[focus_role]
 
     def get_default_prompts(self):
-        return get_default_prompts_by_role(self.focus_role)
+        return get_default_prompts_by_role(focus_role)
+
+    def run_tests(self):
+        if len(CONFIG[focus_role]["test_prompts"]) > 0:
+            logger.info(f"Running tests for mode '{focus_role}'")
+            for test in CONFIG[focus_role]["test_prompts"]:
+                logger.info(f"USER: {test}")
+                self.owls[focus_role].invoke(test)
+        else:
+            logger.warning("No test prompts defined for owl role '{focus_role}'")
 
 
-class OwlConfig(BaseSettings):
-    role: str
-    implementation: str
-    model_name: str
-    temperature: float
 
-    def validate_config(self, config: Dict[str, Any]) -> bool:
-        required_fields = ["role", "implementation", "model_name"]
-        return all(field in config for field in required_fields)

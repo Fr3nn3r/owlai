@@ -17,7 +17,9 @@ import yaml
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
-from owlai import Edwige, Owl, hoot  # For direct use
+from owlai.core import Edwige  # For direct use
+from owlai.ttsengine import hoot
+from owlai.db import CONFIG
 import owlai
 
 import importlib
@@ -50,8 +52,9 @@ def main():
         while True:
 
             focus_agent = edwige.get_focus_owl()
+            default_prompts = edwige.get_default_prompts()
             history = InMemoryHistory(
-                reversed(focus_agent.get_default_prompts() + ["exit"])
+                reversed(default_prompts + ["exit"])
             )
 
             help_message = """quit     - Quit the program
@@ -97,7 +100,7 @@ log      - reloads the logger config"""
                 continue
 
             if user_message.lower() == "reload":
-                importlib.reload(owlai.owlai)
+                importlib.reload(owlai.core)
                 importlib.reload(owlai.db)
                 importlib.reload(owlai.spotify)
                 importlib.reload(owlai.ttsengine)
@@ -119,7 +122,7 @@ log      - reloads the logger config"""
                 continue
 
             if user_message.lower() == "test":
-                focus_agent.run_tests()
+                edwige.run_tests()
                 continue
 
             if user_message.lower() == "log":
