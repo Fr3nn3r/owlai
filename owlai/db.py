@@ -92,57 +92,6 @@ def get_system_prompt_by_role(role: str) -> str:
 def get_default_prompts_by_role(role: str) -> list[str]:
     return CONFIG[role]["default_prompts"]
 
-
-class OwlConfig(BaseSettings):
-    role: str
-    implementation: str = "openai"  # default value
-    model_name: str
-    temperature: float = 0.9
-    max_tokens: int = 2048
-    max_context_tokens: int = 4096
-    tools_names: List[str] = []
-    system_prompt: str
-    default_prompts: Optional[List[str]] = None
-    test_prompts: List[str] = []
-
-    class Config:
-        validate_assignment = True
-
-    @field_validator('role')
-    @classmethod  # Required for field_validator
-    def validate_role(cls, v):
-        valid_roles = ["system", "welcome", "identification", "command_manager", "qna", "rag_tool"]
-        if v not in valid_roles:
-            raise ValueError(f"Invalid role: {v}. Must be one of {valid_roles}")
-        return v
-
-def load_owl_config(role: str) -> OwlConfig:
-    """Load and validate configuration for a specific owl role."""
-    if role not in CONFIG:
-        raise ValueError(f"Configuration not found for role: {role}")
-    
-    try:
-        # Convert the raw config dict to OwlConfig instance
-        config_data = CONFIG[role]
-        owl_config = OwlConfig(
-            role=role,
-            implementation=config_data.get("model_provider", "openai"),
-            model_name=config_data.get("model_name", "gpt-4o-mini"),
-            temperature=config_data.get("temperature", 0.9),
-            max_tokens=config_data.get("max_output_tokens", 2048),
-            max_context_tokens=config_data.get("max_context_tokens", 4096),
-            tools_names=config_data.get("tools_names", []),
-            system_prompt=config_data["system_prompt"],
-            default_prompts=config_data.get("default_prompts"),
-            test_prompts=config_data.get("test_prompts", [])
-        )
-        return owl_config
-    
-    except ValidationError as e:
-        logger.error(f"Configuration validation failed for role {role}: {e}")
-        raise
-
-
 CONFIG = {
     "system": {
         "model_provider": "openai",
@@ -289,6 +238,33 @@ CONFIG = {
         ],
         "test_prompts": [],
     },
+    "qna": {
+        "model_provider": "openai",
+        "model_name": "gpt-4o-mini",
+        "max_output_tokens": 2049,
+        "temperature": 0.1,
+        "max_context_tokens": 4096,
+        "tools_names": [],
+        "system_prompt": "Your name is Edwige from owlAI.\n"
+        "Your goals is to answer questions with your tools.\n"
+        " - Avoid statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n"
+        " - Just provide the answer, no follow up questions or statements.\n",
+        "default_prompts": [
+            "What did the Paul Graham do growing up?",
+            "What did the Paul Graham during his school days?",
+            "What languages did Paul Graham use?",
+            "Who was Rich Draves?",
+            "What happened to the Paul Graham in the summer of 2016?",
+            "What happened to the Paul Graham in the fall of 1992?",
+            "How much exactly was allocated to a tax credit to promote investment in green technologies in the 2023 Canadian federal budget?",
+            "How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
+            "What is the color of henry the fourth white horse?",
+        ],
+        "test_prompts": [],
+    },
+}
+
+TOOLS_CONFIG = {
     "command_manager": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
@@ -318,30 +294,6 @@ CONFIG = {
         "default_prompts": None,
         "test_prompts": [],
     },
-    "qna": {
-        "model_provider": "openai",
-        "model_name": "gpt-4o-mini",
-        "max_output_tokens": 2049,
-        "temperature": 0.1,
-        "max_context_tokens": 4096,
-        "tools_names": [],
-        "system_prompt": "Your name is Edwige from owlAI.\n"
-        "Your goals is to answer questions with your tools.\n"
-        " - Avoid statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n"
-        " - Just provide the answer, no follow up questions or statements.\n",
-        "default_prompts": [
-            "What did the Paul Graham do growing up?",
-            "What did the Paul Graham during his school days?",
-            "What languages did Paul Graham use?",
-            "Who was Rich Draves?",
-            "What happened to the Paul Graham in the summer of 2016?",
-            "What happened to the Paul Graham in the fall of 1992?",
-            "How much exactly was allocated to a tax credit to promote investment in green technologies in the 2023 Canadian federal budget?",
-            "How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
-            "What is the color of henry the fourth white horse?",
-        ],
-        "test_prompts": [],
-    },
     "rag_tool": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
@@ -361,7 +313,5 @@ CONFIG = {
     },    
 }
 
-def get_valid_roles() -> List[str]:
-    """Returns list of all valid owl roles from CONFIG."""
-    return list(CONFIG.keys())
+
 

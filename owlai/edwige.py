@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any
-from .db import load_owl_config
-from .core import Owl, OwlAIAgent
+from .db import CONFIG
+from .core import Owl, OwlAIAgent, list_roles, load_owl_config, LocalPythonInterpreter, LocalRAGTool
 from .tools import (
     toolbox,
     toolbox_hook,
@@ -17,6 +17,8 @@ class AgentManager:
         self.logger = logging.getLogger("main_logger")
         self.owls: Dict[str, Any] = {}
         self._initialize_owls()
+
+        roles = list_roles(CONFIG)
 
     def _initialize_owls(self):
         """Initialize all owl agents with validated configurations."""

@@ -9,6 +9,8 @@ from langchain_chroma import Chroma
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from .core import OwlCheek
+
 logger = logging.getLogger("main_logger")
 
 class ToolBox:
@@ -92,7 +94,7 @@ class ToolBox:
         rag_answer = toolbox_hook_rag_engine(question)
         return rag_answer
 
-class LocalPythonInterpreter:
+class LocalPythonInterpreter(OwlCheek):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.lpi_own_message_history = [
@@ -182,7 +184,7 @@ class LocalPythonInterpreter:
             self.lpi_own_message_history.append(HumanMessage(error_message))
             raise
 
-class LocalRAGTool:
+class LocalRAGTool(OwlCheek):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"

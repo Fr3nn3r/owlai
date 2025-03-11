@@ -45,15 +45,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from rich.console import Console
 
-from .tools import (
-    toolbox, 
-    LocalPythonInterpreter, 
-    LocalRAGTool,
-    toolbox_hook,
-    toolbox_hook_rag_engine,
-    user_context,
-    focus_role
-)
+from pydantic import BaseSettings, field_validator, ValidationError
 
 # Load environment variables from .env file
 load_dotenv()
@@ -147,10 +139,244 @@ class _ToolBox:
         return "This is a test answer"
 
 
+
 #toolbox = ToolBox()
 
+class OwlConfig(BaseSettings):
+    role: str
+    implementation: str = "openai"  # default value
+    model_name: str
+    temperature: float = 0.9
+    max_tokens: int = 2048
+    max_context_tokens: int = 4096
+    tools_names: List[str] = []
+    system_prompt: str
+    default_prompts: Optional[List[str]] = None
+    test_prompts: List[str] = []
 
-class Owl:
+    class Config:
+        validate_assignment = True
+
+def load_owl_from_config(role: str, config: dict[str, dict[str, Any]]) -> OwlConfig:
+    """Load and validate configuration for a specific owl role."""
+    if role not in config:
+        raise ValueError(f"Configuration not found for role: {role}")
+    
+    try:
+        # Convert the raw config dict to OwlConfig instance
+        config_data = config[role]
+        owl_config = OwlConfig(
+            role=role,
+            implementation=config_data.get("model_provider", "openai"),
+            model_name=config_data.get("model_name", "gpt-4o-mini"),
+            temperature=config_data.get("temperature", 0.9),
+            max_tokens=config_data.get("max_output_tokens", 2048),
+            max_context_tokens=config_data.get("max_context_tokens", 4096),
+            tools_names=config_data.get("tools_names", []),
+            system_prompt=config_data["system_prompt"],
+            default_prompts=config_data.get("default_prompts"),
+            test_prompts=config_data.get("test_prompts", [])
+        )
+        return owl_config
+    
+    except ValidationError as e:
+        logger.error(f"Configuration validation failed for role {role}: {e}")
+        raise
+
+
+def list_roles(config) -> List[str]:
+    """Returns list of all valid owl roles from CONFIG."""
+    return list(config.keys())
+
+
+
+class OwlCheek() :
+
+    def __init__(
+        self,
+        config : OwlConfig,
+    ):
+        self.config = config
+        self.chat_model : BaseChatModel = init_chat_model(
+            model=config.model_name,
+            model_provider=config.implementation,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+        )
+
+class Owl(OwlCheek):
+
+    def __init__(
+        self,
+        config : OwlConfig,
+        tools: List[BaseTool] = [],
+    ):
+        super().__init__(config)
+        self.max_context_tokens = config.max_context_tokens
+        self.message_history: List[BaseMessage] = []
+
+        self.fifo_message_mode = False
+        self.total_tokens = 0
+
+        if len(config.tools) > 0:
+            self.tools = tools
+            self.tools_dict = {tool.name: tool for tool in self.tools}
+            self.chat_model = self.chat_model.bind_tools(self.tools)
+
+    def _token_count(self, message: AIMessage):
+        metadata = message.response_metadata
+        if self.implementation == "openai":
+            return metadata["token_usage"]["total_tokens"]
+        elif self.implementation == "anthropic":
+            anthropic_total_tokens = (
+                metadata["usage"]["input_tokens"] + metadata["usage"]["output_tokens"]
+            )
+            return anthropic_total_tokens
+        else:
+            logger.warning(
+                f"Token count unsupported for model provider: '{self.implementation}'"
+            )
+            return -1
+
+    def append_message(self, message: BaseMessage):
+        if type(message) == AIMessage:
+            self.total_tokens = self._token_count(message)
+        if (self.total_tokens > self.max_context_tokens) and (
+            self.fifo_message_mode == False
+        ):
+            logger.warning(
+                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.max_context_tokens}' -> activating FIFO message mode"
+            )
+            self.fifo_message_mode = True
+        if self.fifo_message_mode:
+            self.message_history.pop(1)  # Remove the oldest message
+            if (
+                self.message_history[-1].type == "tool"
+            ):  # Remove the tool message if any
+                self.message_history.pop(1)
+            self.print_message_history()
+
+        self.message_history.append(message)
+
+    def _process_tool_calls(self, model_response: AIMessage) -> None:
+        """Process tool calls from the model response and add results to chat history."""
+        if not hasattr(model_response, "tool_calls") or not model_response.tool_calls:
+            logger.debug("No tool calls in response")
+            return
+
+        for tool_call in model_response.tool_calls:
+            # Loop over tool calls
+            logger.debug(f"Tool call requested: '{tool_call}'")
+
+            # Skip if no tool calls or empty
+            if not tool_call or "name" not in tool_call:
+                logger.warning(f"Invalid tool call format: '{tool_call}'")
+                continue
+
+            # Get tool name and arguments
+            tool_name = tool_call["name"].lower()
+            tool_args = tool_call.get("arguments", {})
+
+            # Check if tool exists
+            if tool_name not in self.tools_dict:
+                error_msg = f"Tool '{tool_name}' not found in available tools"
+                logger.error(error_msg)
+                tool_msg = ToolMessage(
+                    content=f"Error: {error_msg}",
+                    tool_call_id=tool_call.get("id", "unknown"),
+                    name=tool_name,
+                )
+                self.append_message(tool_msg)
+                continue
+
+            # Select the tool
+            selected_tool = self.tools_dict[tool_name]
+
+            try:
+                # Invoke the tool
+                tool_result = selected_tool.invoke(tool_call)
+
+                # Create tool message
+                tool_msg = ToolMessage(
+                    content=str(tool_result),
+                    tool_call_id=tool_call.get("id", "unknown"),
+                    name=tool_name,
+                )
+
+                # Add tool response to history
+                self.append_message(tool_msg)
+
+            except Exception as e:
+                logger.error(f"Error invoking tool '{tool_name}': '{e}' ({tool_call})")
+
+                # Create error message
+                error_content = f"Error executing '{tool_name}': '{str(e)}'"
+                tool_msg = ToolMessage(
+                    content=error_content,
+                    tool_call_id=tool_call.get("id", "unknown"),
+                    name=tool_name,
+                )
+                self.append_message(tool_msg)
+
+    def invoke(self, message: str) -> str:
+        # update system prompt with latestcontext
+        system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
+        if len(self.message_history) == 0:
+            self.message_history.append(system_message)
+        else:
+            self.message_history[0] = system_message
+
+        self.append_message(HumanMessage(message))  # Add user message to history
+        response = self.chat_model.invoke(self.message_history)
+        self.append_message(response)  # Add model response to history
+
+        self._process_tool_calls(response)
+
+        if response.tool_calls:  # If tools were called, invoke the model again
+            response = self.chat_model.invoke(self.message_history)
+            self.append_message(response)  # Add model response to history
+            # logger.debug(response.content)  # Log the model response
+
+        self._total_tokens = self._token_count(response)
+        return response.content  # Return the model response
+
+    def print_message_history(self):
+        for index, message in enumerate(self.message_history):
+            logger.info(
+                f"Message #{index} '{message.type}' '{ (message.content[:100]  + '...' if len(message.content) > 100 else message.content )}'"
+            )
+
+    def print_message_metadata(self):
+        for index, message in enumerate(self.message_history):
+            if message.response_metadata:
+                logger.info(
+                    f"Message #{index} type: '{message.type}' metadata: '{message.response_metadata}'"
+                )
+
+    def print_system_prompt(self):
+        if len(self.message_history) > 0:
+            logger.info(f"System prompt: '{self.message_history[0].content}'")
+        else:
+            logger.info(f"System prompt: '{self.system_prompt}'")
+
+    def reset_message_history(self):
+        if len(self.message_history) > 0:
+            self.message_history = [self.message_history[0]]
+            self.fifo_message_mode = False
+
+    def print_info(self):
+        logger.info(
+            f"role='{self.role}', model-provider='{self.implementation}', model-name='{self.model_name}', tools {self.tools_dict.keys()}"
+        )
+
+    # Add proper resource cleanup:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cleanup()
+
+class _Owl:
     """
     Base class for OwlAI agents.
 
@@ -169,16 +395,16 @@ class Owl:
 
     def __init__(
         self,
-        role: str = "welcome",
+        #role: str = "welcome",
         implementation: str = "openai",
         model_name: str = "gpt-4o-mini",
-        temperature: float = 0.9,
+        temperature: float = 0.1,
         max_tokens: int = 2048,
         max_context_tokens: int = 4096,
         tools: List[BaseTool] = [],
-        system_prompt: str = "You are a system agent from OwlAI",
+        system_prompt: str = None,
     ):
-        self.role = role
+        #self.role = role
         self.implementation = implementation
         self.model_name = model_name
         self.temperature = temperature
