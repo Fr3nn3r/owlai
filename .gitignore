@@ -18,3 +18,5 @@ logs
 *.pyd
 *.pyw
 *.prof
+.DS_Store
+.venv_old/

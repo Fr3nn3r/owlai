@@ -31,6 +31,7 @@ from owlai.db import (
     CONFIG,
     get_system_prompt_by_role,
     get_default_prompts_by_role,
+    load_owl_config,
 )
 from .spotify import play_song_on_spotify
 from pydantic.v1 import BaseSettings
@@ -39,21 +40,28 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import PromptTemplate
 
+from langchain.chat_models import init_chat_model
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import create_react_agent
+from rich.console import Console
+
+from .tools import (
+    toolbox, 
+    LocalPythonInterpreter, 
+    LocalRAGTool,
+    toolbox_hook,
+    toolbox_hook_rag_engine,
+    user_context,
+    focus_role
+)
+
 # Load environment variables from .env file
 load_dotenv()
 
 logger = logging.getLogger("main_logger")
 
-focus_role = "identification"
 
-user_context = "CONTEXT: "
-
-toolbox_hook: Callable = None
-
-toolbox_hook_rag_engine : Callable = None
-
-
-class ToolBox:
+class _ToolBox:
 
     @tool
     def identify_user_with_password(user_password: str) -> str:
@@ -133,12 +141,13 @@ class ToolBox:
         """
         logger.debug(f"Running RAG question: {question} {toolbox_hook_rag_engine}")
         rag_answer = toolbox_hook_rag_engine(question)
-        #logger.debug(rag_answer)
+        # logger.debug(rag_answer)
         return rag_answer
 
         return "This is a test answer"
 
-toolbox = ToolBox()
+
+#toolbox = ToolBox()
 
 
 class Owl:
@@ -326,7 +335,7 @@ class Owl:
         if response.tool_calls:  # If tools were called, invoke the model again
             response = self.chat_model.invoke(self.message_history)
             self.append_message(response)  # Add model response to history
-            #logger.debug(response.content)  # Log the model response
+            # logger.debug(response.content)  # Log the model response
 
         self._total_tokens = self._token_count(response)
         return response.content  # Return the model response
@@ -334,7 +343,7 @@ class Owl:
     def print_message_history(self):
         for index, message in enumerate(self.message_history):
             logger.info(
-                f"Message #{index} '{message.type}' '{message.content[:100]  + "..." if len(message.content) > 100 else message.content }'"
+                f"Message #{index} '{message.type}' '{ (message.content[:100]  + '...' if len(message.content) > 100 else message.content )}'"
             )
 
     def print_message_metadata(self):
@@ -345,7 +354,7 @@ class Owl:
                 )
 
     def print_system_prompt(self):
-        if len(self.message_history) > 0 :
+        if len(self.message_history) > 0:
             logger.info(f"System prompt: '{self.message_history[0].content}'")
         else:
             logger.info(f"System prompt: '{self.system_prompt}'")
@@ -368,7 +377,7 @@ class Owl:
         self.cleanup()
 
 
-class LocalPythonInterpreter(Owl):
+class _LocalPythonInterpreter(Owl):
     """
     Needs to have its own message queue to avoid publishing messages to the global message queue (main context).
     """
@@ -396,7 +405,7 @@ class LocalPythonInterpreter(Owl):
 
             self.lpi_own_message_history.append(model_code_message)
 
-            #logger.debug(f"Raw script: {python_script}") # a bit too verbose
+            # logger.debug(f"Raw script: {python_script}") # a bit too verbose
 
         except Exception as e:
             error_message = f"Error generating python script: {str(e)}"
@@ -493,7 +502,7 @@ class LocalPythonInterpreter(Owl):
         return result
 
 
-class LocalRAGTool(Owl):
+class _LocalRAGTool(Owl):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -502,7 +511,9 @@ class LocalRAGTool(Owl):
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
         self.prompt = PromptTemplate.from_template(self.system_prompt)
-        self.vector_store = Chroma(embedding_function=embeddings, persist_directory=db_persist_directory)
+        self.vector_store = Chroma(
+            embedding_function=embeddings, persist_directory=db_persist_directory
+        )
 
     def rag_question(self, question: str) -> str:
         """
@@ -517,17 +528,26 @@ class LocalRAGTool(Owl):
         for doc in retrieved_docs:
             logger.debug(f"Document matched: {doc.page_content[:100]} {doc.metadata}")
 
-        docs_content = "\n\n".join(doc.page_content.encode("utf-8", errors="ignore").decode("utf-8") for doc in retrieved_docs)
-        #message_with_question_and_context : PromptValue = self.prompt.invoke({"question": question, "context": docs_content})
-        message_with_question_and_context = self.prompt.format(question=question, context=docs_content)
-        currated_message_with_question_and_context = message_with_question_and_context.encode("utf-8", errors="ignore").decode("utf-8")
-        #logger.debug(f"length [chars]: {len(message_with_question_and_context.to_string())} - {message_with_question_and_context.to_string()}")
+        docs_content = "\n\n".join(
+            doc.page_content.encode("utf-8", errors="ignore").decode("utf-8")
+            for doc in retrieved_docs
+        )
+        # message_with_question_and_context : PromptValue = self.prompt.invoke({"question": question, "context": docs_content})
+        message_with_question_and_context = self.prompt.format(
+            question=question, context=docs_content
+        )
+        currated_message_with_question_and_context = (
+            message_with_question_and_context.encode("utf-8", errors="ignore").decode(
+                "utf-8"
+            )
+        )
+        # logger.debug(f"length [chars]: {len(message_with_question_and_context.to_string())} - {message_with_question_and_context.to_string()}")
         messages = [SystemMessage(currated_message_with_question_and_context)]
         messages = self.chat_model.invoke(messages)
 
         logger.debug(f"Raw RAG answer: {messages.content}")
 
-        #no history management for now
+        # no history management for now
         return messages.content
 
     def index_folder(self, folder_path: str):
@@ -537,30 +557,14 @@ class LocalRAGTool(Owl):
         return "Do this offline idiot"
 
 
-
-
-class OwlConfig(BaseSettings):
-    role: str
-    implementation: str
-    model_name: str
-    temperature: float
-
-    def validate_config(self, config: Dict[str, Any]) -> bool:
-        required_fields = ["role", "implementation", "model_name"]
-        return all(field in config for field in required_fields)
-
-from langchain.chat_models import init_chat_model
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import create_react_agent
-from rich.console import Console
-
 def sprint(*args):
-    """ A smart print function for JSON-like structures """
+    """A smart print function for JSON-like structures"""
     console = Console()
     for arg in args:
         console.print(arg)  # Normal print with `rich`
 
-class OwlAIAgent: 
+
+class OwlAIAgent:
 
     def __init__(
         self,
@@ -579,25 +583,29 @@ class OwlAIAgent:
         self.max_context_tokens = max_context_tokens
         self.tools = tools
         self.system_prompt = system_prompt
-        self.chat_model = init_chat_model(model=model_name, 
-                    model_provider=implementation, 
-                    temperature=temperature,
-                    max_tokens=max_tokens)
+        self.chat_model = init_chat_model(
+            model=model_name,
+            model_provider=implementation,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
         self.state_memory = MemorySaver()
         self.state_config = {"configurable": {"thread_id": str(id(self))}}
-    
+
         self.agent_graph = create_react_agent(
-            self.chat_model, 
-            self.tools, 
-            prompt=SystemMessage(self.system_prompt), 
-            checkpointer=self.state_memory 
+            self.chat_model,
+            self.tools,
+            prompt=SystemMessage(self.system_prompt),
+            checkpointer=self.state_memory,
         )
 
     def invoke(self, message: str) -> str:
-        graph_response = self.agent_graph.invoke({"messages": [HumanMessage(message)]}, self.state_config)
+        graph_response = self.agent_graph.invoke(
+            {"messages": [HumanMessage(message)]}, self.state_config
+        )
 
-        if (logger.isEnabledFor(logging.DEBUG)):
+        if logger.isEnabledFor(logging.DEBUG):
             sprint(graph_response)
 
         return self._return_last_message_content(graph_response)
@@ -609,14 +617,14 @@ class OwlAIAgent:
         state = self.agent_graph.get_state(self.state_config)
         for index, message in enumerate(state.values["messages"]):
             logger.info(
-                f"Message #{index} type: '{message.type}' content: '{str(message.content)[:100] + "..." if len(str(message.content)) > 100 else str(message.content)}'"
+                f"Message #{index} type: '{message.type}' content: '{ (message.content[:100] + '...' if len(message.content) > 100 else message.content)}'"
             )
-            if (logger.isEnabledFor(logging.DEBUG)):
+            if logger.isEnabledFor(logging.DEBUG):
                 sprint(message)
 
     def print_message_metadata(self):
         state = self.agent_graph.get_state(self.state_config)
-        for index, message in enumerate(state.values["messages"]):          
+        for index, message in enumerate(state.values["messages"]):
             if message.response_metadata:
                 logger.info(
                     f"Message #{index} type: '{message.type}' metadata: '{message.response_metadata}'"
@@ -636,7 +644,7 @@ class OwlAIAgent:
             f"model-provider='{self.implementation}', model-name='{self.model_name}', tools='{', '.join([t.name for t in self.tools])}'"
         )
 
-    # NOT SURE WHAT THIS IS... 
+    # NOT SURE WHAT THIS IS...
     # Add proper resource cleanup (???):
     def __enter__(self):
         return self
@@ -644,102 +652,7 @@ class OwlAIAgent:
     def __exit__(self, exc_type, exc_val, exc_tb):
         logger.warning("Cleanup not supported (???)")
 
-class Edwige:
-
-    def __init__(self):
-        self.logger = logging.getLogger("main_logger")
-
-    owls: Dict[str, Any] = {}
-
-    roles = ["system", "welcome", "identification", "command_manager", "qna"]
-
-    owls["system"] = Owl(
-        role="system",
-        implementation="openai",
-        model_name="gpt-4o-mini",
-        temperature=0.1,
-        max_tokens=200,
-        max_context_tokens=4096,
-        tools=[toolbox.activate_mode, toolbox.run_task, toolbox.play_song],
-        system_prompt=get_system_prompt_by_role("system"),
-    )
-
-    owls["welcome"] = Owl(
-        role="welcome",
-        implementation="openai",
-        model_name="gpt-4o-mini",
-        temperature=0.1,
-        max_tokens=1000,
-        max_context_tokens=4096,
-        tools=[toolbox.activate_mode],
-        system_prompt=get_system_prompt_by_role("welcome"),
-    )
-
-    owls["identification"] = OwlAIAgent(
-        #role="identification",
-        implementation="openai",
-        model_name="gpt-3.5-turbo",
-        temperature=0.1,
-        max_tokens=200,
-        max_context_tokens=4096,
-        tools=[toolbox.activate_mode, toolbox.identify_user_with_password],
-        system_prompt=get_system_prompt_by_role("identification"),
-    )
-
-    owls["command_manager"] = LocalPythonInterpreter(
-        role="command_manager",
-        implementation="openai",
-        model_name="gpt-4o-mini",
-        temperature=0.1,
-        max_tokens=2048,
-        max_context_tokens=4096,
-        tools=[],
-        system_prompt=get_system_prompt_by_role("command_manager"),
-    )
-
-    owls["qna"] = Owl(
-        role="qna",
-        implementation="openai",
-        model_name="gpt-4o-mini",
-        temperature=0.1,
-        max_tokens=4096,
-        max_context_tokens=4096,
-        tools=[toolbox.get_answer_from_knowledge_base, toolbox.activate_mode],
-        system_prompt=get_system_prompt_by_role("qna"),
-    )
-
-    owls["rag_tool"] = LocalRAGTool(
-        role="rag_tool",
-        implementation="openai",
-        model_name="gpt-4o-mini",
-        temperature=0.1,
-        max_tokens=4096,
-        max_context_tokens=8192,
-        tools=[],
-        system_prompt=get_system_prompt_by_role("rag_tool"),
-    )
-
-    # set the toolbox hooks
-    global toolbox_hook
-    toolbox_hook = owls["command_manager"]._run_system_command
-    global toolbox_hook_rag_engine
-    toolbox_hook_rag_engine = owls["rag_tool"].rag_question
-
-    def get_focus_owl(self):
-        logger.debug(f"Active mode: {focus_role}")
-        return self.owls[focus_role]
-
-    def get_default_prompts(self):
-        return get_default_prompts_by_role(focus_role)
-
-    def run_tests(self):
-        if len(CONFIG[focus_role]["test_prompts"]) > 0:
-            logger.info(f"Running tests for mode '{focus_role}'")
-            for test in CONFIG[focus_role]["test_prompts"]:
-                logger.info(f"USER: {test}")
-                self.owls[focus_role].invoke(test)
-        else:
-            logger.warning("No test prompts defined for owl role '{focus_role}'")
-
+# Remove Edwige class and add this import if needed elsewhere
+#from .manager import Edwige
 
 
