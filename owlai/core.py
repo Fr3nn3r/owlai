@@ -28,13 +28,9 @@ import re
 from owlai.db import (
     USER_DATABASE,
     get_user_by_password,
-    CONFIG,
-    get_system_prompt_by_role,
-    get_default_prompts_by_role,
-    load_owl_config,
 )
 from .spotify import play_song_on_spotify
-from pydantic.v1 import BaseSettings
+from pydantic import BaseModel, ValidationError
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -45,13 +41,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from rich.console import Console
 
-from pydantic import BaseSettings, field_validator, ValidationError
-
 # Load environment variables from .env file
 load_dotenv()
 
 logger = logging.getLogger("main_logger")
 
+user_context: str = "CONTEXT: "
+
+focus_role: str = "identification"
 
 class _ToolBox:
 
@@ -142,7 +139,7 @@ class _ToolBox:
 
 #toolbox = ToolBox()
 
-class OwlConfig(BaseSettings):
+class OwlConfig(BaseModel):
     role: str
     implementation: str = "openai"  # default value
     model_name: str
@@ -215,13 +212,18 @@ class Owl(OwlCheek):
         self.max_context_tokens = config.max_context_tokens
         self.message_history: List[BaseMessage] = []
 
+
         self.fifo_message_mode = False
         self.total_tokens = 0
 
-        if len(config.tools) > 0:
-            self.tools = tools
-            self.tools_dict = {tool.name: tool for tool in self.tools}
-            self.chat_model = self.chat_model.bind_tools(self.tools)
+        if len(tools) > 0:
+            self.callable_tools = tools
+            self.tools_dict = {tool.name: tool for tool in self.callable_tools}
+            self.chat_model = self.chat_model.bind_tools(self.callable_tools)
+
+        #backward compatibility
+        self.system_prompt = config.system_prompt
+        self.implementation = config.implementation
 
     def _token_count(self, message: AIMessage):
         metadata = message.response_metadata
@@ -365,9 +367,8 @@ class Owl(OwlCheek):
             self.fifo_message_mode = False
 
     def print_info(self):
-        logger.info(
-            f"role='{self.role}', model-provider='{self.implementation}', model-name='{self.model_name}', tools {self.tools_dict.keys()}"
-        )
+        sprint(self.config)
+    
 
     # Add proper resource cleanup:
     def __enter__(self):

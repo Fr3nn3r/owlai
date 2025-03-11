@@ -17,10 +17,8 @@ import yaml
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
-from owlai.core import Edwige  # For direct use
-from owlai.ttsengine import hoot
-from owlai.db import CONFIG
-import owlai
+from .ttsengine import hoot
+from .db import CONFIG
 
 import importlib
 
@@ -32,14 +30,30 @@ load_dotenv()
 import logging
 from typing import Dict, Any
 from .db import CONFIG
-from .core import Owl, OwlAIAgent, list_roles, load_config, LocalPythonInterpreter, LocalRAGTool
+from .core import (
+    Owl,
+    OwlAIAgent,
+    list_roles,
+    load_config,
+)
 from .tools import (
     toolbox,
     toolbox_hook,
     toolbox_hook_rag_engine,
+    LocalPythonInterpreter,
+    LocalRAGTool,
 )
 
+from .db import get_default_prompts_by_role
+from .tools import focus_role
+from .db import CONFIG
+from .tools import focus_role
+from .tools import focus_role
+from .tools import get_tools
+import owlai
+
 logger = logging.getLogger("main_logger")
+
 
 class AgentManager:
     """OwlAI agent manager"""
@@ -47,12 +61,11 @@ class AgentManager:
     def __init__(self):
         self.logger = logging.getLogger("main_logger")
         self.owls: Dict[str, Any] = {}
-        #self._initialize_owls()
+        # self._initialize_owls()
 
-        for irole in list_roles(CONFIG) :
-            config = load_config(irole,CONFIG)
-            self.owls[irole] = Owl(config)
-
+        for irole in list_roles(CONFIG):
+            config = load_config(irole, CONFIG)
+            self.owls[irole] = Owl(config,get_tools(config.tools_names))
 
     def _initialize_owls(self):
         """Initialize all owl agents with validated configurations."""
@@ -145,26 +158,23 @@ class AgentManager:
             raise
 
     def get_focus_owl(self):
-        from .tools import focus_role
+
         logger.debug(f"Active mode: {focus_role}")
         return self.owls[focus_role]
 
     def get_default_prompts(self):
-        from .db import get_default_prompts_by_role
-        from .tools import focus_role
+
         return get_default_prompts_by_role(focus_role)
 
     def run_tests(self):
-        from .db import CONFIG
-        from .tools import focus_role
+
         if len(CONFIG[focus_role]["test_prompts"]) > 0:
             logger.info(f"Running tests for mode '{focus_role}'")
             for test in CONFIG[focus_role]["test_prompts"]:
                 logger.info(f"USER: {test}")
                 self.owls[focus_role].invoke(test)
         else:
-            logger.warning(f"No test prompts defined for owl role '{focus_role}'") 
-
+            logger.warning(f"No test prompts defined for owl role '{focus_role}'")
 
 
 def load_logger_config():
@@ -185,9 +195,7 @@ def main():
 
             focus_agent = edwige.get_focus_owl()
             default_prompts = edwige.get_default_prompts()
-            history = InMemoryHistory(
-                reversed(default_prompts + ["exit"])
-            )
+            history = InMemoryHistory(reversed(default_prompts + ["exit"]))
 
             help_message = """quit     - Quit the program
 exit     - Exit the program

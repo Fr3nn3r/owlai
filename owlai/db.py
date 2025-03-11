@@ -1,9 +1,6 @@
 import os
 from dotenv import load_dotenv
 from typing import List, Optional
-from pydantic import BaseSettings, field_validator, ValidationError
-
-
 import logging
 
 # Get logger

@@ -9,9 +9,10 @@ from langchain_chroma import Chroma
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from .core import OwlCheek
+from .core import OwlCheek, list_roles
 
 logger = logging.getLogger("main_logger")
+
 
 class ToolBox:
     @tool
@@ -25,6 +26,7 @@ class ToolBox:
             user_password: a string containing a sequence of words separated by spaces.
         """
         from .db import get_user_by_password  # Import here to avoid circular imports
+
         global user_context
         logger.debug(f"calling identify_user_by_password with {user_password}")
         user_data = get_user_by_password(user_password)
@@ -46,10 +48,10 @@ class ToolBox:
         Args:
             mode: a string containing the mode to activate.
         """
-        from .db import get_valid_roles  # Import here to avoid circular imports
+
         global focus_role
-        if mode not in get_valid_roles():
-            return f"Invalid mode: {mode}"
+        #if mode not in list_roles():
+        #    return f"Invalid mode: {mode}"
         focus_role = mode
         message = f"Activated {mode} mode"
         logger.debug(message)
@@ -79,6 +81,7 @@ class ToolBox:
             artist_name: (required) a string containing the name of the artist of the song to play.
         """
         from .spotify import play_song_on_spotify
+
         logger.info(f"Playing song: {song_name} by {artist_name}")
         play_song_on_spotify(song_name, artist_name)
 
@@ -93,6 +96,7 @@ class ToolBox:
         logger.debug(f"Running RAG question: {question} {toolbox_hook_rag_engine}")
         rag_answer = toolbox_hook_rag_engine(question)
         return rag_answer
+
 
 class LocalPythonInterpreter(OwlCheek):
     def __init__(self, *args, **kwargs):
@@ -179,10 +183,13 @@ class LocalPythonInterpreter(OwlCheek):
             raise
 
         except Exception as e:
-            error_message = f"{self._script_label()} - execution failed: Exception: {str(e)}"
+            error_message = (
+                f"{self._script_label()} - execution failed: Exception: {str(e)}"
+            )
             logger.error(error_message)
             self.lpi_own_message_history.append(HumanMessage(error_message))
             raise
+
 
 class LocalRAGTool(OwlCheek):
     def __init__(self, *args, **kwargs):
@@ -225,9 +232,23 @@ class LocalRAGTool(OwlCheek):
         logger.debug(f"Raw RAG answer: {messages.content}")
         return messages.content
 
+
 # Global instances
 toolbox = ToolBox()
+
+mapping = {
+    "activate": toolbox.activate_mode,
+    "identify_user_with_password": toolbox.identify_user_with_password,
+    "run_task": toolbox.run_task,
+    "play_song": toolbox.play_song,
+    "get_answer_from_knowledge_base": toolbox.get_answer_from_knowledge_base,
+}
+
+""" Returns the list of callabée tools from the list of tool names based on mapping above (we could have a naming convention to remove the mapping)"""
+def get_tools(keys : [str] ) -> [Callable] :
+    return [mapping[key] for key in keys if key in mapping]
+
 toolbox_hook: Callable = None
 toolbox_hook_rag_engine: Callable = None
 user_context: str = "CONTEXT: "
-focus_role: str = "identification" 
+focus_role: str = "identification"
