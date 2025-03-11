@@ -157,7 +157,7 @@ class OwlConfig(BaseSettings):
     class Config:
         validate_assignment = True
 
-def load_owl_from_config(role: str, config: dict[str, dict[str, Any]]) -> OwlConfig:
+def load_config(role: str, config: dict[str, dict[str, Any]]) -> OwlConfig:
     """Load and validate configuration for a specific owl role."""
     if role not in config:
         raise ValueError(f"Configuration not found for role: {role}")

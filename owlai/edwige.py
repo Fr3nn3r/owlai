@@ -1,7 +1,38 @@
+#  ,___,
+# ( o,o )
+# { `" `}
+#  " - "
+
+import time
+
+start_time = time.time()
+print(f"Application loading please wait...")
+
+import logging
+import logging.config
+
+import logging
+import yaml
+
+from prompt_toolkit import prompt
+from prompt_toolkit.history import InMemoryHistory
+
+from owlai.core import Edwige  # For direct use
+from owlai.ttsengine import hoot
+from owlai.db import CONFIG
+import owlai
+
+import importlib
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import logging
 from typing import Dict, Any
 from .db import CONFIG
-from .core import Owl, OwlAIAgent, list_roles, load_owl_config, LocalPythonInterpreter, LocalRAGTool
+from .core import Owl, OwlAIAgent, list_roles, load_config, LocalPythonInterpreter, LocalRAGTool
 from .tools import (
     toolbox,
     toolbox_hook,
@@ -16,9 +47,12 @@ class AgentManager:
     def __init__(self):
         self.logger = logging.getLogger("main_logger")
         self.owls: Dict[str, Any] = {}
-        self._initialize_owls()
+        #self._initialize_owls()
 
-        roles = list_roles(CONFIG)
+        for irole in list_roles(CONFIG) :
+            config = load_config(irole,CONFIG)
+            self.owls[irole] = Owl(config)
+
 
     def _initialize_owls(self):
         """Initialize all owl agents with validated configurations."""
@@ -130,3 +164,119 @@ class AgentManager:
                 self.owls[focus_role].invoke(test)
         else:
             logger.warning(f"No test prompts defined for owl role '{focus_role}'") 
+
+
+
+def load_logger_config():
+    with open("logging.yaml", "r") as logger_config:
+        config = yaml.safe_load(logger_config)
+        logging.config.dictConfig(config)
+
+
+def main():
+    try:
+        load_logger_config()
+        logger = logging.getLogger("main_logger")
+        logger.info(f"Application started in {time.time() - start_time} seconds")
+        speak = False
+
+        edwige = AgentManager()
+        while True:
+
+            focus_agent = edwige.get_focus_owl()
+            default_prompts = edwige.get_default_prompts()
+            history = InMemoryHistory(
+                reversed(default_prompts + ["exit"])
+            )
+
+            help_message = """quit     - Quit the program
+exit     - Exit the program
+print    - Print the conversation history
+prints   - Print the active system prompt
+reset    - Reset the conversation (new chat)
+speak    - Toggle speech output
+mode     - Print the active mode
+reload   - Reloads owlai package source code
+test     - Runs test instructions (active mode)
+metadata - Print the conversation metadata
+log      - reloads the logger config"""
+
+            user_message = prompt(
+                "Enter your message ('exit' or 'help'): ", history=history
+            )
+
+            if len(user_message) == 0:
+                continue
+
+            if user_message.lower() in ["exit", "quit"]:
+                break
+
+            if user_message.lower() in ["help"]:
+                logger.info(help_message)
+                continue
+            if user_message.lower() in ["speak"]:
+                speak = not speak
+                logger.info(f"Speaking is now {'on' if speak else 'off'}")
+                continue
+
+            if user_message.lower() == "print":
+                focus_agent.print_message_history()
+                continue
+
+            if user_message.lower() == "prints":
+                focus_agent.print_system_prompt()
+                continue
+
+            if user_message.lower() == "metadata":
+                focus_agent.print_message_metadata()
+                continue
+
+            if user_message.lower() == "reload":
+                importlib.reload(owlai.core)
+                importlib.reload(owlai.db)
+                importlib.reload(owlai.spotify)
+                importlib.reload(owlai.ttsengine)
+                logger.info("Reloaded owlai package")
+                continue
+
+            if user_message.lower() == "mode":
+                focus_agent.print_info()
+                continue
+
+            if user_message.lower() == "reset":
+                focus_agent.reset_message_history()
+                logger.info("Conversation reset")
+                continue
+
+            if user_message.lower() == "reset":
+                focus_agent.reset_message_history()
+                logger.info("Conversation reset")
+                continue
+
+            if user_message.lower() == "test":
+                edwige.run_tests()
+                continue
+
+            if user_message.lower() == "log":
+                load_logger_config()
+                logger.info("Logger reloaded")
+                continue
+
+            try:
+
+                logger.info(f"USER: {user_message}")
+                response = focus_agent.invoke(user_message)
+                logger.info(f"AI: {response}")
+                if speak:
+                    hoot(response)
+
+            except Exception as e:
+                logger.critical(f"Fatal Error: {e}")
+                raise
+
+    except KeyboardInterrupt:
+        logger.info("Excution interrupted. Shutting down...")
+
+
+if __name__ == "__main__":
+    main()
