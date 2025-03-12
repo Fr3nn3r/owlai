@@ -48,7 +48,7 @@ logger = logging.getLogger("main_logger")
 
 user_context: str = "CONTEXT: "
 
-focus_role: str = "identification"
+
 
 class _ToolBox:
 

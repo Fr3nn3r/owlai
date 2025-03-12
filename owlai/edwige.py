@@ -45,10 +45,8 @@ from .tools import (
 )
 
 from .db import get_default_prompts_by_role
-from .tools import focus_role
+from .tools import get_focus_role
 from .db import CONFIG
-from .tools import focus_role
-from .tools import focus_role
 from .tools import get_tools
 import owlai
 
@@ -159,22 +157,22 @@ class AgentManager:
 
     def get_focus_owl(self):
 
-        logger.debug(f"Active mode: {focus_role}")
-        return self.owls[focus_role]
+        logger.debug(f"Active mode: {get_focus_role()}")
+        return self.owls[get_focus_role()]
 
     def get_default_prompts(self):
 
-        return get_default_prompts_by_role(focus_role)
+        return get_default_prompts_by_role(get_focus_role())
 
     def run_tests(self):
 
-        if len(CONFIG[focus_role]["test_prompts"]) > 0:
-            logger.info(f"Running tests for mode '{focus_role}'")
-            for test in CONFIG[focus_role]["test_prompts"]:
+        if len(CONFIG[get_focus_role()]["test_prompts"]) > 0:
+            logger.info(f"Running tests for mode '{get_focus_role()}'")
+            for test in CONFIG[get_focus_role()]["test_prompts"]:
                 logger.info(f"USER: {test}")
-                self.owls[focus_role].invoke(test)
+                self.owls[get_focus_role()].invoke(test)
         else:
-            logger.warning(f"No test prompts defined for owl role '{focus_role}'")
+            logger.warning(f"No test prompts defined for owl role '{get_focus_role()}'")
 
 
 def load_logger_config():

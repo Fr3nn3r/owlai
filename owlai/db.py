@@ -262,7 +262,7 @@ CONFIG = {
 }
 
 TOOLS_CONFIG = {
-    "command_manager": {
+    "python_interpreter": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
