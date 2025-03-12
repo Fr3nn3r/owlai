@@ -1,3 +1,8 @@
+#  ,___,
+#  [O.o]
+#  /)__)
+#  --"--"--
+
 import logging
 import os
 import subprocess
@@ -9,26 +14,28 @@ from langchain_chroma import Chroma
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from .core import OwlAgent, list_roles, load_config
+from .core import OwlAgent
 from .db import TOOLS_CONFIG
 
-logger = logging.getLogger("main_logger")
+logger = logging.getLogger("tools")
 
 
 class LocalPythonInterpreter(OwlAgent):
 
+    _script_count = 0
+
     def _run_system_command(self, user_query: str) -> str:
         """Send a prompt to the model and executes the output as a python script."""
-        self.message_history = [
+        self._message_history = [
             SystemMessage(f"{self.system_prompt}")
         ]
         user_message = HumanMessage(content=user_query)
-        self.lpi_own_message_history.append(user_message)
+        self._message_history.append(user_message)
 
         try:
-            model_code_message = self.chat_model.invoke(self.lpi_own_message_history)
+            model_code_message = self.chat_model.invoke(self._message_history)
             python_script = model_code_message.content
-            self.lpi_own_message_history.append(model_code_message)
+            self._message_history.append(model_code_message)
         except Exception as e:
             error_message = f"Error generating python script: {str(e)}"
             logger.error(error_message)
@@ -77,25 +84,25 @@ class LocalPythonInterpreter(OwlAgent):
             if len(result.stdout) > 0:
                 result_message = f"{self._script_label()} - execution completed - Return code : {result.returncode} - STDOUT: {result.stdout}"
                 logger.debug(result_message)
-                self.lpi_own_message_history.append(HumanMessage(result_message))
+                self._message_history.append(HumanMessage(result_message))
 
             if len(result.stderr) > 0:
                 stderr_message = f"{self._script_label()} - Error/Warning message - Return code : {result.returncode} - STDERR: {result.stderr}"
                 logger.warning(stderr_message)
-                self.lpi_own_message_history.append(HumanMessage(stderr_message))
+                self._message_history.append(HumanMessage(stderr_message))
 
             return result
 
         except subprocess.CalledProcessError as cpe:
             error_message = f"{self._script_label()} - execution failed: ProcessError: {str(cpe)} - {cpe.output} - {cpe.stdout} - {cpe.stderr}."
             logger.error(error_message)
-            self.lpi_own_message_history.append(HumanMessage(error_message))
+            self._message_history.append(HumanMessage(error_message))
             raise
 
         except subprocess.TimeoutExpired as toe:
             error_message = f"{self._script_label()} execution failed: TimeoutExpired: {str(toe)} - {toe.output} - {toe.stdout} - {toe.stderr}."
             logger.error(error_message)
-            self.lpi_own_message_history.append(HumanMessage(error_message))
+            self._message_history.append(HumanMessage(error_message))
             raise
 
         except Exception as e:
@@ -103,7 +110,7 @@ class LocalPythonInterpreter(OwlAgent):
                 f"{self._script_label()} - execution failed: Exception: {str(e)}"
             )
             logger.error(error_message)
-            self.lpi_own_message_history.append(HumanMessage(error_message))
+            self._message_history.append(HumanMessage(error_message))
             raise
 
 
@@ -246,7 +253,7 @@ class ToolBox:
 toolbox = ToolBox()
 
 mapping = {
-    "activate": toolbox.activate_mode,
+    "activate_mode": toolbox.activate_mode,
     "identify_user_with_password": toolbox.identify_user_with_password,
     "run_task": toolbox.run_task,
     "play_song": toolbox.play_song,

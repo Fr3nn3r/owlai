@@ -1,13 +1,13 @@
+#  /\_/\
+# ((@v@))
+# ():::()
+#  VV-VV
+
 import os
-from dotenv import load_dotenv
-from typing import List, Optional
 import logging
 
 # Get logger
-logger = logging.getLogger("main_logger")
-
-# Load environment variables
-load_dotenv()
+logger = logging.getLogger("db")
 
 # Get environment
 ENV = os.getenv("ENVIRONMENT", "Athena")
@@ -96,7 +96,7 @@ CONFIG = {
         "max_output_tokens": 200,
         "temperature": 0.1,
         "context_size": 4096,
-        "tools_names": ["activate", "run_task", "play_song"],
+        "tools_names": ["activate_mode", "run_task", "play_song"],
         "system_prompt": "You are the local system agent.\n"
         "Your goal is to execute tasks assigned by the user on the local machine.\n"
         "You can activate any mode.\n"
@@ -150,7 +150,7 @@ CONFIG = {
         "max_output_tokens": 200,
         "temperature": 0.1,
         "context_size": 4096,
-        "tools_names": ["activate", "identify_user_with_password"],
+        "tools_names": ["activate_mode", "identify_user_with_password"],
         "system_prompt": "Your name is Edwige from owlAI. \n"
         "You act as a security manager.\n"
         "Your goal is to help the user to identify themselves.\n"
@@ -195,7 +195,7 @@ CONFIG = {
         "max_output_tokens": 2049,
         "temperature": 0.1,
         "context_size": 4096,
-        "tools_names": ["activate"],
+        "tools_names": ["activate_mode"],
         "system_prompt": "Your name is Edwige from owlAI.\n"
         "Your goals are: \n"
         " 1. to help the user understand the capabilities of the system.\n"

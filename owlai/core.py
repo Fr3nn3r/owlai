@@ -1,9 +1,8 @@
-#       ,_,
-#      (O,O)
-#      (   )
-#      -"-"-
+#  ,_,
+# (O,O)
+# (   )
+# -"-"-
 
-from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
 from langchain_core.messages import (
     BaseMessage,
@@ -23,9 +22,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from rich.console import Console
 
-load_dotenv()
-
-logger = logging.getLogger("main_logger")
+logger = logging.getLogger("core")
 
 user_context: str = "CONTEXT: "
 
@@ -43,13 +40,14 @@ class OwlAgent(BaseModel):
     test_prompts: List[str] = []
 
     #Runtime updated properties
-    message_history: List[BaseMessage] = []
     total_tokens: int = 0
     fifo_message_mode: bool = False
     callable_tools : List[BaseTool] = []
 
     #Private attribute
     _chat_model_cache: BaseChatModel = None  
+    _tool_dict: Dict[str, BaseTool] = {}
+    _message_history: List[BaseMessage] = []
 
     @property
     def chat_model(self) -> BaseChatModel:
@@ -64,7 +62,10 @@ class OwlAgent(BaseModel):
 
     def init_callable_tools(self, tools : List[BaseTool]) :
         self.callable_tools = tools
-        self.chat_model.bind_tools(tools)
+        self._chat_model_cache = self.chat_model.bind_tools(tools)
+        for tool in tools:
+            self._tool_dict[tool.name] = tool
+        return self._chat_model_cache
 
     def _token_count(self, message: AIMessage):
         metadata = message.response_metadata
@@ -93,14 +94,14 @@ class OwlAgent(BaseModel):
             )
             self.fifo_message_mode = True
         if self.fifo_message_mode:
-            self.message_history.pop(1)  # Remove the oldest message
+            self._message_history.pop(1)  # Remove the oldest message
             if (
-                self.message_history[-1].type == "tool"
+                self._message_history[-1].type == "tool"
             ):  # Remove the tool message if any
-                self.message_history.pop(1)
+                self._message_history.pop(1)
             self.print_message_history()
 
-        self.message_history.append(message)
+        self._message_history.append(message)
 
     def _process_tool_calls(self, model_response: AIMessage) -> None:
         """Process tool calls from the model response and add results to chat history."""
@@ -134,7 +135,7 @@ class OwlAgent(BaseModel):
                 continue
 
             # Select the tool
-            selected_tool = get_tool[tool_name]
+            selected_tool = self._tool_dict[tool_name]
 
             try:
                 # Invoke the tool
@@ -165,19 +166,19 @@ class OwlAgent(BaseModel):
     def invoke(self, message: str) -> str:
         # update system prompt with latestcontext
         system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
-        if len(self.message_history) == 0:
-            self.message_history.append(system_message)
+        if len(self._message_history) == 0:
+            self._message_history.append(system_message)
         else:
-            self.message_history[0] = system_message
+            self._message_history[0] = system_message
 
         self.append_message(HumanMessage(message))  # Add user message to history
-        response = self.chat_model.invoke(self.message_history)
+        response = self.chat_model.invoke(self._message_history)
         self.append_message(response)  # Add model response to history
 
         self._process_tool_calls(response)
 
         if response.tool_calls:  # If tools were called, invoke the model again
-            response = self.chat_model.invoke(self.message_history)
+            response = self.chat_model.invoke(self._message_history)
             self.append_message(response)  # Add model response to history
             # logger.debug(response.content)  # Log the model response
 
@@ -185,31 +186,31 @@ class OwlAgent(BaseModel):
         return response.content  # Return the model response
 
     def print_message_history(self):
-        for index, message in enumerate(self.message_history):
-            logger.info(
-                f"Message #{index} '{message.type}' '{ (message.content[:100]  + '...' if len(message.content) > 100 else message.content )}'"
-            )
+        sprint(self._message_history)
 
     def print_message_metadata(self):
-        for index, message in enumerate(self.message_history):
+        for index, message in enumerate(self._message_history):
             if message.response_metadata:
                 logger.info(
                     f"Message #{index} type: '{message.type}' metadata: '{message.response_metadata}'"
                 )
 
     def print_system_prompt(self):
-        if len(self.message_history) > 0:
-            logger.info(f"System prompt: '{self.message_history[0].content}'")
+        if len(self._message_history) > 0:
+            logger.info(f"System prompt: '{self._message_history[0].content}'")
         else:
             logger.info(f"System prompt: '{self.system_prompt}'")
 
     def reset_message_history(self):
-        if len(self.message_history) > 0:
-            self.message_history = [self.message_history[0]]
+        if len(self._message_history) > 0:
+            self._message_history = [self._message_history[0]]
             self.fifo_message_mode = False
 
     def print_info(self):
         sprint(self)
+
+    def print_model_info(self):
+        sprint(self.chat_model)
 
 
 def sprint(*args):
@@ -267,7 +268,7 @@ class OwlAIAgent:
     def _return_last_message_content(self, response: Dict[str, Any]) -> str:
         return response["messages"][-1].content
 
-    def print_message_history(self):
+    def print__message_history(self):
         state = self.agent_graph.get_state(self.state_config)
         for index, message in enumerate(state.values["messages"]):
             logger.info(
@@ -287,7 +288,7 @@ class OwlAIAgent:
     def print_system_prompt(self):
         logger.info(f"System prompt: '{self.system_prompt}'")
 
-    def reset_message_history(self):
+    def reset__message_history(self):
         logger.warning("Resetting message history not supported")
 
     def run_tests(self):

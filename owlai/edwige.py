@@ -22,8 +22,6 @@ from .db import CONFIG
 from .core import (
     OwlAgent,
     OwlAIAgent,
-    list_roles,
-    load_config,
 )
 
 from pydantic import ValidationError
@@ -35,9 +33,9 @@ import owlai
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
-load_dotenv()
+#load_dotenv()
 
-logger = logging.getLogger("main_logger")
+logger = logging.getLogger("manager")
 
 class AgentManager:
     """OwlAI agent manager"""
@@ -83,7 +81,7 @@ def load_logger_config():
 def main():
     try:
         load_logger_config()
-        logger = logging.getLogger("main_logger")
+        #logger = logging.getLogger("main_logger")
         logger.info(f"Application started in {time.time() - start_time} seconds")
         speak = False
 
@@ -100,7 +98,8 @@ print    - Print the conversation history
 prints   - Print the active system prompt
 reset    - Reset the conversation (new chat)
 speak    - Toggle speech output
-mode     - Print the active mode
+focus    - Info about the active agent
+model    - Info about the active agent's model
 reload   - Reloads owlai package source code
 test     - Runs test instructions (active mode)
 metadata - Print the conversation metadata
@@ -139,13 +138,17 @@ log      - reloads the logger config"""
             if user_message.lower() == "reload":
                 importlib.reload(owlai.core)
                 importlib.reload(owlai.db)
-                importlib.reload(owlai.spotify)
-                importlib.reload(owlai.ttsengine)
+                #importlib.reload(owlai.spotify)
+                #importlib.reload(owlai.ttsengine)
                 logger.info("Reloaded owlai package")
                 continue
 
-            if user_message.lower() == "mode":
+            if user_message.lower() == "focus":
                 focus_agent.print_info()
+                continue
+
+            if user_message.lower() == "model":
+                focus_agent.print_model_info()
                 continue
 
             if user_message.lower() == "reset":
