@@ -95,7 +95,7 @@ CONFIG = {
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 200,
         "temperature": 0.1,
-        "max_context_tokens": 4096,
+        "context_size": 4096,
         "tools_names": ["activate", "run_task", "play_song"],
         "system_prompt": "You are the local system agent.\n"
         "Your goal is to execute tasks assigned by the user on the local machine.\n"
@@ -149,7 +149,7 @@ CONFIG = {
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 200,
         "temperature": 0.1,
-        "max_context_tokens": 4096,
+        "context_size": 4096,
         "tools_names": ["activate", "identify_user_with_password"],
         "system_prompt": "Your name is Edwige from owlAI. \n"
         "You act as a security manager.\n"
@@ -194,7 +194,7 @@ CONFIG = {
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,
-        "max_context_tokens": 4096,
+        "context_size": 4096,
         "tools_names": ["activate"],
         "system_prompt": "Your name is Edwige from owlAI.\n"
         "Your goals are: \n"
@@ -240,7 +240,7 @@ CONFIG = {
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,
-        "max_context_tokens": 4096,
+        "context_size": 4096,
         "tools_names": [],
         "system_prompt": "Your name is Edwige from owlAI.\n"
         "Your goals is to answer questions with your tools.\n"
@@ -267,7 +267,7 @@ TOOLS_CONFIG = {
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,
-        "max_context_tokens": 4096,
+        "context_size": 4096,
         "tools_names": [],
         "system_prompt": "You are a python assistant.\n"
         "Convert user query into a valid self sufficient python script.\n"
@@ -296,7 +296,7 @@ TOOLS_CONFIG = {
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,
-        "max_context_tokens": 4096,
+        "context_size": 4096,
         "tools_names": [],
         "system_prompt": "You must answer questions based on the context provided below and NEVER use prior knowledge.\n"
         "Provide as much details as possible based on the context provided.\n"

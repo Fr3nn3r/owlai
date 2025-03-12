@@ -259,6 +259,9 @@ mapping = {
 def get_tools(keys : list[str] ) -> list[Callable] :
     return [mapping[key] for key in keys if key in mapping]
 
+def get_tools(key : str ) -> Callable :
+    return mapping[key] 
+
 toolbox_hook: Callable = None
 toolbox_hook_rag_engine: Callable = None
 user_context: str = "CONTEXT: "

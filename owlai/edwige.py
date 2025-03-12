@@ -30,6 +30,8 @@ from .db import get_default_prompts_by_role
 from .tools import get_focus_role
 from .tools import get_tools
 import owlai
+from prompt_toolkit import prompt
+from prompt_toolkit.history import InMemoryHistory
 
 load_dotenv()
 
