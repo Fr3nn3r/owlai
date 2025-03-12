@@ -20,11 +20,13 @@ from dotenv import load_dotenv
 from typing import Dict, Any
 from .db import CONFIG
 from .core import (
-    Owl,
+    OwlAgent,
     OwlAIAgent,
     list_roles,
     load_config,
 )
+
+from pydantic import ValidationError
 
 from .db import get_default_prompts_by_role
 from .tools import get_focus_role
@@ -43,11 +45,14 @@ class AgentManager:
     def __init__(self):
         self.logger = logging.getLogger("main_logger")
         self.owls: Dict[str, Any] = {}
-        # self._initialize_owls()
 
-        for irole in list_roles(CONFIG):
-            config = load_config(irole, CONFIG)
-            self.owls[irole] = Owl(config,get_tools(config.tools_names))
+        for irole in list(CONFIG.keys()):
+            try :
+                agent = OwlAgent(**CONFIG[irole])
+                agent.init_callable_tools(get_tools(agent.tools_names))
+                self.owls[irole] = agent
+            except ValidationError as e:
+                logger.error(f"Configuration validation failed for role {irole}: {e}")
 
     def get_focus_owl(self):
 

@@ -9,22 +9,19 @@ from langchain_chroma import Chroma
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from .core import OwlCheek, list_roles, load_config
+from .core import OwlAgent, list_roles, load_config
 from .db import TOOLS_CONFIG
 
 logger = logging.getLogger("main_logger")
 
 
-class LocalPythonInterpreter(OwlCheek):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.lpi_own_message_history = [
-            SystemMessage(f"{self.config.system_prompt}")
-        ]
-        self._script_count = 0
+class LocalPythonInterpreter(OwlAgent):
 
     def _run_system_command(self, user_query: str) -> str:
         """Send a prompt to the model and executes the output as a python script."""
+        self.message_history = [
+            SystemMessage(f"{self.system_prompt}")
+        ]
         user_message = HumanMessage(content=user_query)
         self.lpi_own_message_history.append(user_message)
 
@@ -110,15 +107,19 @@ class LocalPythonInterpreter(OwlCheek):
             raise
 
 
-class LocalRAGTool(OwlCheek):
+class LocalRAGTool(OwlAgent):
+
+    _prompt = None
+    _vector_store = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
         db_persist_directory = "data/vector"
         embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
-        self.prompt = PromptTemplate.from_template(self.config.system_prompt)
-        self.vector_store = Chroma(
+        self._prompt = PromptTemplate.from_template(self.system_prompt)
+        self._vector_store = Chroma(
             embedding_function=embeddings, persist_directory=db_persist_directory
         )
 
@@ -151,11 +152,8 @@ class LocalRAGTool(OwlCheek):
         logger.debug(f"Raw RAG answer: {messages.content}")
         return messages.content
 
-_lpi_config = load_config("python_interpreter",TOOLS_CONFIG)
-_lrt_config = load_config("rag_tool",TOOLS_CONFIG)
-
-_local_python_interpreter = LocalPythonInterpreter(_lpi_config)
-_local_rag_tool = LocalRAGTool(_lrt_config)
+_local_python_interpreter = LocalPythonInterpreter(**TOOLS_CONFIG["python_interpreter"])
+_local_rag_tool = LocalRAGTool(**TOOLS_CONFIG["rag_tool"])
 
 class ToolBox:
 
@@ -259,8 +257,8 @@ mapping = {
 def get_tools(keys : list[str] ) -> list[Callable] :
     return [mapping[key] for key in keys if key in mapping]
 
-def get_tools(key : str ) -> Callable :
-    return mapping[key] 
+def get_tool(key : str ) -> Callable :
+    return mapping[key]
 
 toolbox_hook: Callable = None
 toolbox_hook_rag_engine: Callable = None
