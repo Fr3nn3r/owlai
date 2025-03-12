@@ -256,7 +256,7 @@ mapping = {
 }
 
 """ Returns the list of callabée tools from the list of tool names based on mapping above (we could have a naming convention to remove the mapping)"""
-def get_tools(keys : [str] ) -> [Callable] :
+def get_tools(keys : list[str] ) -> list[Callable] :
     return [mapping[key] for key in keys if key in mapping]
 
 toolbox_hook: Callable = None
