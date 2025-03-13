@@ -6,7 +6,7 @@ formatters:
     format: "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
   stdout:
     (): colorlog.ColoredFormatter
-    format: "%(log_color)s %(name)7s %(levelname)5s %(message)s"
+    format: "%(log_color)s%(name)5s %(levelname)5s | %(message)s"
     log_colors:
       DEBUG: "cyan"
       INFO: "green"
@@ -44,7 +44,7 @@ loggers:
     level: DEBUG
     handlers: [console, file]
     propagate: no
-  main_logger:
+  main:
     level: DEBUG
     handlers: [console, file]
     propagate: no

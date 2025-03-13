@@ -4,6 +4,7 @@ temp/
 models/
 .cache
 .venv/
+.venv2/
 .pytest_cache/
 .idea/
 .vscode/

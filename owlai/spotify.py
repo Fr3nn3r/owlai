@@ -2,7 +2,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import logging
 
-logger = logging.getLogger("spotify")
+logger = logging.getLogger("main")
 
 # Authenticate with Spotify API
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(

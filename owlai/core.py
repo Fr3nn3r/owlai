@@ -22,7 +22,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from rich.console import Console
 
-logger = logging.getLogger("core")
+logger = logging.getLogger("main")
 
 user_context: str = "CONTEXT: "
 

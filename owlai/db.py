@@ -7,7 +7,7 @@ import os
 import logging
 
 # Get logger
-logger = logging.getLogger("db")
+logger = logging.getLogger("main")
 
 # Get environment
 ENV = os.getenv("ENVIRONMENT", "Athena")

@@ -35,7 +35,7 @@ from prompt_toolkit.history import InMemoryHistory
 
 #load_dotenv()
 
-logger = logging.getLogger("manager")
+logger = logging.getLogger("main")
 
 class AgentManager:
     """OwlAI agent manager"""

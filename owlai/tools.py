@@ -17,8 +17,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from .core import OwlAgent
 from .db import TOOLS_CONFIG
 
-logger = logging.getLogger("tools")
-
+logger = logging.getLogger("main")
 
 class LocalPythonInterpreter(OwlAgent):
 
@@ -215,6 +214,7 @@ class ToolBox:
         Args:
             script: a natural language string describing the command to run.
         """
+
         toolbox_hook = _local_python_interpreter._run_system_command
         logger.debug(f"Running system task: {task}")
         command_stdout = toolbox_hook(task)

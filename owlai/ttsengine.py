@@ -7,7 +7,7 @@ import logging.config
 import logging
 import yaml
 
-logger = logging.getLogger("main_logger")
+logger = logging.getLogger("ttsengine")
 
 ################################# TTS
 
