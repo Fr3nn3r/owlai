@@ -52,7 +52,11 @@ loggers:
     level: DEBUG
     handlers: [console, file]
     propagate: no
-
+  ragtool:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: no
+    
 root:
   level: DEBUG
   handlers: [file]

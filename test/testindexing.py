@@ -14,8 +14,17 @@ from langchain_core.prompts import PromptTemplate
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 
 
+
+
+
 #from langchain.document_loaders import DirectoryLoader
 from langchain_community.document_loaders import DirectoryLoader
+
+
+
+
+
+
 
 questions = [
     "What did the Paul Graham do growing up?",
@@ -48,7 +57,14 @@ def test_indexing():
     #from langchain_openai import OpenAIEmbeddings
 
     #embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    embeddings = HuggingFaceEmbeddings(
+        
+        
+
+
+
+
+        model_name="sentence-transformers/all-mpnet-base-v2")
 
     vector_store = Chroma(embedding_function=embeddings)
 
