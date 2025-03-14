@@ -4,7 +4,6 @@ from owlai.edwige import AgentManager
 
 role_to_evaluate = "identification"
 
-
 #Building config from CORE adding a judge LLM
 TEST_CONFIG = {
     role_to_evaluate : CONFIG[role_to_evaluate],

@@ -41,7 +41,7 @@ class AgentManager:
     """OwlAI agent manager"""
 
     def __init__(self):
-        self.logger = logging.getLogger("main_logger")
+
         self.owls: Dict[str, Any] = {}
 
         for irole in list(CONFIG.keys()):
@@ -136,10 +136,12 @@ log      - reloads the logger config"""
                 continue
 
             if user_message.lower() == "reload":
-                importlib.reload(owlai.core)
                 importlib.reload(owlai.db)
+                importlib.reload(owlai.tools)
+                importlib.reload(owlai.core)
                 #importlib.reload(owlai.spotify)
                 #importlib.reload(owlai.ttsengine)
+                edwige = AgentManager()
                 logger.info("Reloaded owlai package")
                 continue
 

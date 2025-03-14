@@ -13,8 +13,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_community.tools.tavily_search import TavilySearchResults
 
-from .core import OwlAgent
+from .core import OwlAgent, sprint
 from .db import TOOLS_CONFIG
 
 logger = logging.getLogger("main")
@@ -135,20 +136,20 @@ class LocalRAGTool(OwlAgent):
         Args:
             question: a string containing the question to answer.
         """
-        retrieved_docs = self.vector_store.similarity_search(query=question, k=4)
-
+        retrieved_docs = self._vector_store.similarity_search(query=question, k=4)
+        logger.debug(f"{ len(retrieved_docs)} document(s) matched")
         for doc in retrieved_docs:
-            logger.debug(f"Document matched: {doc.page_content[:100]} {doc.metadata}")
+            if logger.isEnabledFor(logging.DEBUG): sprint(doc)
 
         docs_content = "\n\n".join(
-            doc.page_content.encode("utf-8", errors="ignore").decode("utf-8")
+            doc.page_content.encode("ascii", errors="replace").decode("utf-8")
             for doc in retrieved_docs
         )
-        message_with_question_and_context = self.prompt.format(
+        message_with_question_and_context = self._prompt.format(
             question=question, context=docs_content
         )
         currated_message_with_question_and_context = (
-            message_with_question_and_context.encode("utf-8", errors="ignore").decode(
+            message_with_question_and_context.encode("ascii", errors="replace").decode(
                 "utf-8"
             )
         )
@@ -160,6 +161,7 @@ class LocalRAGTool(OwlAgent):
 
 _local_python_interpreter = LocalPythonInterpreter(**TOOLS_CONFIG["python_interpreter"])
 _local_rag_tool = LocalRAGTool(**TOOLS_CONFIG["rag_tool"])
+_tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
 
 class ToolBox:
 
@@ -244,7 +246,7 @@ class ToolBox:
             question: a string containing the question to answer.
         """
         toolbox_hook_rag_engine = _local_rag_tool.rag_question
-        logger.debug(f"Running RAG question: {question} {toolbox_hook_rag_engine}")
+        logger.debug(f"Running RAG question: {question}")
         rag_answer = toolbox_hook_rag_engine(question)
         return rag_answer
 
@@ -258,6 +260,7 @@ mapping = {
     "run_task": toolbox.run_task,
     "play_song": toolbox.play_song,
     "get_answer_from_knowledge_base": toolbox.get_answer_from_knowledge_base,
+    "tavily_search_results_json": _tavily_tool,
 }
 
 """ Returns the list of callabée tools from the list of tool names based on mapping above (we could have a naming convention to remove the mapping)"""
@@ -270,7 +273,7 @@ def get_tool(key : str ) -> Callable :
 toolbox_hook: Callable = None
 toolbox_hook_rag_engine: Callable = None
 user_context: str = "CONTEXT: "
-focus_role: str = "identification"
+focus_role: str = "qna"
 
 def get_focus_role() -> str :
     return focus_role

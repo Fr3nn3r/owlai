@@ -241,21 +241,27 @@ CONFIG = {
         "max_output_tokens": 2049,
         "temperature": 0.1,
         "context_size": 4096,
-        "tools_names": [],
+        "tools_names": ["get_answer_from_knowledge_base"],
         "system_prompt": "Your name is Edwige from owlAI.\n"
         "Your goals is to answer questions with your tools.\n"
+        " - If a tool execution fails, notify the user with the tool name and the error message.\n"        
+        " - Attempt only one tool executions per query.\n"        
         " - Avoid statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n"
-        " - Just provide the answer, no follow up questions or statements.\n",
+        " - Just provide the answer, no follow up questions or statements.\n"
+        ,
         "default_prompts": [
-            "What did the Paul Graham do growing up?",
-            "What did the Paul Graham during his school days?",
+            "What did Paul Graham do growing up?",
+            "What did Paul Graham do during his school days?",
             "What languages did Paul Graham use?",
             "Who was Rich Draves?",
+            "What was the last result of AC Milan soccer team?",
+            "When is AC Milan soccer team playing next?",
             "What happened to the Paul Graham in the summer of 2016?",
             "What happened to the Paul Graham in the fall of 1992?",
             "How much exactly was allocated to a tax credit to promote investment in green technologies in the 2023 Canadian federal budget?",
             "How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
             "What is the color of henry the fourth white horse?",
+
         ],
         "test_prompts": [],
     },
@@ -307,7 +313,10 @@ TOOLS_CONFIG = {
         "Answer:\n",
         "default_prompts": None,
         "test_prompts": [],
-    },    
+    },
+    "tavily_search_results_json": {
+        "max_results": 2,
+    },
 }
 
 

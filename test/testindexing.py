@@ -8,6 +8,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import SentenceTransformersTokenTextSplitter
 from langchain_core.prompts import PromptTemplate
 
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
@@ -23,8 +24,8 @@ questions = [
     "Who was Rich Draves?",
     "What happened to the Paul Graham in the summer of 2016?",
     "What happened to the Paul Graham in the fall of 1992?",
-    "How much exactly was allocated to a tax credit to promote investment in green technologies in the 2023 Canadian federal budget?",
-    "How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
+    #"How much exactly was allocated to a tax credit to promote investment in green technologies in the 2023 Canadian federal budget?",
+    #"How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
 ]
 
 prompt = PromptTemplate.from_template("""
@@ -51,16 +52,18 @@ def test_indexing():
 
     vector_store = Chroma(embedding_function=embeddings)
 
-    canada_loader = PyPDFLoader("data/2023_canadian_budget.pdf")
-    canada_docs = canada_loader.load()
+    #canada_loader = PyPDFLoader("data/2023_canadian_budget.pdf")
+    #canada_docs = canada_loader.load()
 
-    loader = TextLoader("data/paul_graham_essay.txt")
+    loader = TextLoader("data/input/paul_graham_essay.txt")
     paul_graham_docs = loader.load()
 
-    docs = canada_docs + paul_graham_docs
+    docs = paul_graham_docs # + canada_docs
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=400)
+    text_splitter = SentenceTransformersTokenTextSplitter(chunk_overlap=50)
     all_splits = text_splitter.split_documents(docs)
+
+    print(f"Number of chunks: {len(all_splits)}")
 
     # Index chunks
     _ = vector_store.add_documents(documents=all_splits)
@@ -82,7 +85,7 @@ def test_indexing():
 
 
     for question in questions:
-        print(f"Question: {question} *************************************************************")
+        print(f"Question: {question} *************************************************************\n")
         print(f"Answer: {rag_query(question, verbose=False)}")
         print("\n\n")
 
@@ -137,6 +140,10 @@ async def index_folder_contents(folder_path: str, verbose: bool = False):
 
     return vector_store
 
-store = asyncio.run(index_folder_contents("data/input"))
+#store = asyncio.run(index_folder_contents("data/input"))
+
+print("Application started")
+test_indexing()
+
 
 

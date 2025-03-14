@@ -5,6 +5,7 @@ models/
 .cache
 .venv/
 .venv2/
+.venv-eval
 .pytest_cache/
 .idea/
 .vscode/
@@ -21,3 +22,4 @@ logs
 *.prof
 .DS_Store
 .venv_old/
+orch/

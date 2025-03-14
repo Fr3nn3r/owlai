@@ -138,6 +138,7 @@ class OwlAgent(BaseModel):
             selected_tool = self._tool_dict[tool_name]
 
             try:
+                logger.debug(f"Invoking tool '{tool_name}' with arguments: {tool_args}")
                 # Invoke the tool
                 tool_result = selected_tool.invoke(tool_call)
 
@@ -162,6 +163,7 @@ class OwlAgent(BaseModel):
                     name=tool_name,
                 )
                 self.append_message(tool_msg)
+                continue
 
     def invoke(self, message: str) -> str:
         # update system prompt with latestcontext
