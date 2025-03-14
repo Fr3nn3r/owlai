@@ -152,7 +152,6 @@ def main():
         docs_processed = []
         for doc in tqdm(knowledge_base, desc="Splitting documents"):
             result = text_splitter.split_documents([doc])
-            logger.debug(result)
             docs_processed += result
 
         logger.info(
@@ -479,9 +478,19 @@ Question: {question}""",
                 "What is the color of henry the fourth white horse?",
             ],
         },
+        {
+            "input_data_folder": "data/dataset-0003",
+            "questions": [
+                "What is Arakis?",
+                "Who is Duncan Idaho?",
+                "Who is the traitor?",
+                "What are the powers of the Bene Gesserit?",
+                "How does Paul defeat the Emperor?",
+            ],
+        },
     ]
 
-    dataset = datasets[1]
+    dataset = datasets[2]
 
     input_data_folder = dataset["input_data_folder"]
 

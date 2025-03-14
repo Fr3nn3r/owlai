@@ -82,12 +82,14 @@ def get_user_by_password(password):
             return {**user_data, "user_id": user_id}  # Include user_id in the response
     return None  # Return None if password is not found
 
+
 def get_system_prompt_by_role(role: str) -> str:
     return CONFIG[role]["system_prompt"]
 
 
 def get_default_prompts_by_role(role: str) -> list[str]:
     return CONFIG[role]["default_prompts"]
+
 
 CONFIG = {
     "system": {
@@ -156,7 +158,7 @@ CONFIG = {
         "Your goal is to help the user to identify themselves.\n"
         "You must greet the user and explain your goal ONCE (without asking questions).\n"
         "You must be polite, concise and answer questions.\n"
-        #"The user needs to identify themselves to be granted more permissions.\n"
+        # "The user needs to identify themselves to be granted more permissions.\n"
         " - Your answers must be polite and VERY concise.\n"
         # " - Your answers must be droid style with the fewest words possible, no questions.\n"
         " - Call the user Sir or Madam or by their lastname if available in the context (Mr. or Ms.).\n"
@@ -217,8 +219,7 @@ CONFIG = {
         "- Use short sentences.\n"
         "- Respond with max 2 sentences.\n"
         "- Use context to personalize the conversation, call the user by firstname if you know it.\n"
-        "- Make no statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n"
-        ,
+        "- Make no statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n",
         "default_prompts": [
             "system mode",
             "qna mode",
@@ -244,12 +245,20 @@ CONFIG = {
         "tools_names": ["get_answer_from_knowledge_base"],
         "system_prompt": "Your name is Edwige from owlAI.\n"
         "Your goals is to answer questions with your tools.\n"
-        " - If a tool execution fails, notify the user with the tool name and the error message.\n"        
-        " - Attempt only one tool executions per query.\n"        
+        " - If a tool execution fails, notify the user with the tool name and the error message.\n"
+        " - Attempt only one tool executions per query.\n"
         " - Avoid statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n"
-        " - Just provide the answer, no follow up questions or statements.\n"
-        ,
+        " - Just provide the answer, no follow up questions or statements.\n",
         "default_prompts": [
+            "Who is Naruto?",
+            "Provide details about Orochimaru",
+            "Who is the strongest ninja in the world?",
+            "How is sasuke's personality",
+            "Who is the sensei of naruto?",
+            "What is a sharingan?",
+            "What is the akatsuki?",
+            "Who is the first Hokage?",
+            "What was the last result of the AC Milan soccer team?",
             "What did Paul Graham do growing up?",
             "What did Paul Graham do during his school days?",
             "What languages did Paul Graham use?",
@@ -261,7 +270,6 @@ CONFIG = {
             "How much exactly was allocated to a tax credit to promote investment in green technologies in the 2023 Canadian federal budget?",
             "How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
             "What is the color of henry the fourth white horse?",
-
         ],
         "test_prompts": [],
     },
@@ -313,11 +321,14 @@ TOOLS_CONFIG = {
         "Answer:\n",
         "default_prompts": None,
         "test_prompts": [],
+        "embeddings_model_name": "thenlper/gte-small",
+        "input_data_folders": [
+            "data/dataset-0000",
+            "data/dataset-0001",
+            "data/dataset-0003",
+        ],
     },
     "tavily_search_results_json": {
         "max_results": 2,
     },
 }
-
-
-

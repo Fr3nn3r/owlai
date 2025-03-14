@@ -17,8 +17,11 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 
 from .core import OwlAgent, sprint
 from .db import TOOLS_CONFIG
+from .rag import load_vector_store
+from .rag import retrieve_relevant_chunks
 
 logger = logging.getLogger("main")
+
 
 class LocalPythonInterpreter(OwlAgent):
 
@@ -26,9 +29,7 @@ class LocalPythonInterpreter(OwlAgent):
 
     def _run_system_command(self, user_query: str) -> str:
         """Send a prompt to the model and executes the output as a python script."""
-        self._message_history = [
-            SystemMessage(f"{self.system_prompt}")
-        ]
+        self._message_history = [SystemMessage(f"{self.system_prompt}")]
         user_message = HumanMessage(content=user_query)
         self._message_history.append(user_message)
 
@@ -71,7 +72,7 @@ class LocalPythonInterpreter(OwlAgent):
     def _execute_as_python(self, code: str) -> CompletedProcess[str]:
         try:
             file_relative_pathname = self._save_to_file(code)
-            #python.exe depends on windows... beurk time to switch to better implementation
+            # python.exe depends on windows... beurk time to switch to better implementation
             result = subprocess.run(
                 ["python.exe", file_relative_pathname],
                 shell=True,
@@ -117,18 +118,34 @@ class LocalPythonInterpreter(OwlAgent):
 class LocalRAGTool(OwlAgent):
 
     _prompt = None
-    _vector_store = None
+    _vector_stores = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
-        db_persist_directory = "data/vector"
-        embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+        embeddings_model_name = TOOLS_CONFIG["rag_tool"]["embeddings_model_name"]
+        embeddings = HuggingFaceEmbeddings(
+            model_name=embeddings_model_name,
+            multi_process=True,
+            model_kwargs={"device": "cuda"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
 
         self._prompt = PromptTemplate.from_template(self.system_prompt)
-        self._vector_store = Chroma(
-            embedding_function=embeddings, persist_directory=db_persist_directory
-        )
+
+        input_data_folders = TOOLS_CONFIG["rag_tool"]["input_data_folders"]
+
+        self._vector_stores = None
+        for ifolder in input_data_folders:
+            current_store = load_vector_store(ifolder, embeddings)
+            if self._vector_stores is None:
+                self._vector_stores = current_store
+            else:
+                self._vector_stores.merge_from(current_store)
+
+        if self._vector_stores is None:
+            raise ValueError("No vector stores found")
+
+        logger.info(f"Loaded dataset stores: {input_data_folders}")
 
     def rag_question(self, question: str) -> str:
         """
@@ -136,11 +153,10 @@ class LocalRAGTool(OwlAgent):
         Args:
             question: a string containing the question to answer.
         """
-        retrieved_docs = self._vector_store.similarity_search(query=question, k=4)
-        logger.debug(f"{ len(retrieved_docs)} document(s) matched")
-        for doc in retrieved_docs:
-            if logger.isEnabledFor(logging.DEBUG): sprint(doc)
 
+        retrieved_docs = retrieve_relevant_chunks(question, self._vector_stores)
+
+        # WTF does this do??
         docs_content = "\n\n".join(
             doc.page_content.encode("ascii", errors="replace").decode("utf-8")
             for doc in retrieved_docs
@@ -159,13 +175,13 @@ class LocalRAGTool(OwlAgent):
         logger.debug(f"Raw RAG answer: {messages.content}")
         return messages.content
 
+
 _local_python_interpreter = LocalPythonInterpreter(**TOOLS_CONFIG["python_interpreter"])
 _local_rag_tool = LocalRAGTool(**TOOLS_CONFIG["rag_tool"])
 _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
 
+
 class ToolBox:
-
-
 
     @tool
     def identify_user_with_password(user_password: str) -> str:
@@ -202,7 +218,7 @@ class ToolBox:
         """
 
         global focus_role
-        #if mode not in list_roles():
+        # if mode not in list_roles():
         #    return f"Invalid mode: {mode}"
         focus_role = mode
         message = f"Activated {mode} mode"
@@ -264,16 +280,21 @@ mapping = {
 }
 
 """ Returns the list of callabée tools from the list of tool names based on mapping above (we could have a naming convention to remove the mapping)"""
-def get_tools(keys : list[str] ) -> list[Callable] :
+
+
+def get_tools(keys: list[str]) -> list[Callable]:
     return [mapping[key] for key in keys if key in mapping]
 
-def get_tool(key : str ) -> Callable :
+
+def get_tool(key: str) -> Callable:
     return mapping[key]
+
 
 toolbox_hook: Callable = None
 toolbox_hook_rag_engine: Callable = None
 user_context: str = "CONTEXT: "
 focus_role: str = "qna"
 
-def get_focus_role() -> str :
+
+def get_focus_role() -> str:
     return focus_role
