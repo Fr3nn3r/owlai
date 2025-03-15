@@ -1,4 +1,4 @@
-print("Loading RAG module")
+print("Loading rag module")
 from typing import Optional, List, Tuple, Any
 import os
 import time
@@ -20,6 +20,13 @@ from langchain_core.callbacks import (
 
 from .core import OwlAgent
 from .db import TOOLS_CONFIG
+import warnings
+
+logging.getLogger("tqdm").setLevel(logging.WARNING)
+warnings.simplefilter("ignore", category=FutureWarning)
+import sentence_transformers
+
+sentence_transformers.util.tqdm = lambda x, *args, **kwargs: x
 
 logger = logging.getLogger("ragtool")
 
@@ -109,7 +116,7 @@ class LocalRAGTool(OwlAgent):
         messages = [SystemMessage(currated_message_with_question_and_context)]
         messages = self.chat_model.invoke(messages)
 
-        # logger.debug(f"Raw RAG answer: {messages.content}")
+        logger.debug(f"Raw RAG answer: {messages.content}")
         return messages.content
 
     def load_vector_store(

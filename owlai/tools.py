@@ -5,27 +5,15 @@
 
 print("Loading tools module")
 import logging
-import os
-import subprocess
-from subprocess import CompletedProcess
+
 from typing import Callable
-from langchain_core.tools import tool, BaseTool
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
-from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-from .core import OwlAgent, sprint
 from .db import TOOLS_CONFIG
-from .interpreter import LocalPythonInterpreter
+
 from .interpreter import OwlSystemInterpreter
-from .rag import LocalRAGTool, OwlMemoryTool
-from ragatouille import RAGPretrainedModel
-
-import warnings
-
-warnings.simplefilter("ignore", category=FutureWarning)
+from .rag import OwlMemoryTool
 
 logger = logging.getLogger("tools")
 
@@ -38,10 +26,6 @@ class ToolBox:
     toolbox_hook_rag_engine: Callable = None
     user_context: str = "CONTEXT: "
 
-    # _local_python_interpreter = LocalPythonInterpreter(
-    #    **TOOLS_CONFIG["python_interpreter"]
-    # )
-    # _local_rag_tool = LocalRAGTool(**TOOLS_CONFIG["rag_tool"])
     _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
     _owl_system_interpreter = OwlSystemInterpreter(
         **TOOLS_CONFIG["owl_system_interpreter"]
@@ -107,22 +91,6 @@ class ToolBox:
         return message
 
     @tool
-    def run_task(task: str):
-        """
-        Runs a natural language tasks on the local machine.
-        Args:
-            script: a natural language string describing the command to run.
-        """
-
-        toolbox_hook = _local_python_interpreter._run_system_command
-        logger.debug(f"Running system task: {task}")
-        command_stdout = toolbox_hook(task)
-        if command_stdout.endswith("\n"):
-            command_stdout = command_stdout[:-1]
-        logger.info(f"Command output: {command_stdout}")
-        return command_stdout
-
-    @tool
     def play_song(song_name: str = "Fly Away", artist_name: str = "Lenny Kravitz"):
         """
         Plays a song.
@@ -134,18 +102,6 @@ class ToolBox:
 
         logger.info(f"Playing song: {song_name} by {artist_name}")
         play_song_on_spotify(song_name, artist_name)
-
-    @tool
-    def get_answer_from_knowledge_base(question: str):
-        """
-        Gets an answer from the knowledge base.
-        Args:
-            question: a string containing the question to answer.
-        """
-        toolbox_hook_rag_engine = _local_rag_tool.rag_question
-        logger.debug(f"Running RAG question: {question}")
-        rag_answer = toolbox_hook_rag_engine(question)
-        return rag_answer
 
     def get_focus_role(self) -> str:
         self.focus_role = focus_role

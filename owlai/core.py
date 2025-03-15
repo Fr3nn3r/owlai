@@ -3,6 +3,7 @@
 # (   )
 # -"-"-
 print("Loading core module")
+
 from typing import List, Dict, Any, Optional
 from langchain_core.messages import (
     BaseMessage,
@@ -14,8 +15,8 @@ from langchain_core.messages import (
 from langchain_core.language_models.chat_models import BaseChatModel
 import logging.config
 import logging
-from langchain_core.tools import tool, BaseTool
-from pydantic import BaseModel, ValidationError
+from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
