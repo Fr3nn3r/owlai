@@ -10,11 +10,25 @@ from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage
 from ragatouille import RAGPretrainedModel
+from pydantic import BaseModel, Field
+from langchain_core.tools import BaseTool
+from typing import Dict, List, Literal, Optional, Tuple, Type, Union
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
 
 from .core import OwlAgent
 from .db import TOOLS_CONFIG
 
 logger = logging.getLogger("ragtool")
+
+
+class OwlMemoryInput(BaseModel):
+
+    query: str = Field(
+        description="a natural language question to answer from the knowledge base"
+    )
 
 
 class LocalRAGTool(OwlAgent):
@@ -24,18 +38,18 @@ class LocalRAGTool(OwlAgent):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        embeddings_model_name = TOOLS_CONFIG["rag_tool"]["embeddings_model_name"]
+        embeddings_model_name = TOOLS_CONFIG["owl_memory_tool"]["embeddings_model_name"]
         self._embeddings = HuggingFaceEmbeddings(
             model_name=embeddings_model_name,
             multi_process=True,
             model_kwargs={"device": "cuda"},
             encode_kwargs={"normalize_embeddings": True},
         )
-        reranker_name = TOOLS_CONFIG["rag_tool"]["reranker_name"]
+        reranker_name = TOOLS_CONFIG["owl_memory_tool"]["reranker_name"]
         self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
         self._prompt = PromptTemplate.from_template(self.system_prompt)
 
-        input_data_folders = TOOLS_CONFIG["rag_tool"]["input_data_folders"]
+        input_data_folders = TOOLS_CONFIG["owl_memory_tool"]["input_data_folders"]
 
         self._vector_stores = None
         for ifolder in input_data_folders:
@@ -57,8 +71,8 @@ class LocalRAGTool(OwlAgent):
             question: a string containing the question to answer.
         """
 
-        k = TOOLS_CONFIG["rag_tool"]["num_retrieved_docs"]
-        k_final = TOOLS_CONFIG["rag_tool"]["num_docs_final"]
+        k = TOOLS_CONFIG["owl_memory_tool"]["num_retrieved_docs"]
+        k_final = TOOLS_CONFIG["owl_memory_tool"]["num_docs_final"]
 
         retrieved_docs, reranked_docs = self.retrieve_relevant_chunks(
             query=question,
@@ -174,3 +188,27 @@ class LocalRAGTool(OwlAgent):
         retrieved_docs = retrieved_docs[:num_docs_final]
 
         return retrieved_docs, reranked_docs
+
+
+class OwlMemoryTool(BaseTool, LocalRAGTool):
+    """Tool that retrieves information from the owl memory base"""
+
+    name: str = "owl_memory_tool"
+    description: str = "Gets answers from the knowledge base"
+    args_schema: Type[BaseModel] = OwlMemoryInput
+
+    def _run(
+        self,
+        query: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> Tuple[Union[List[Dict[str, str]], str], Dict]:
+        """Use the tool."""
+        return self.rag_question(query)
+
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> Tuple[Union[List[Dict[str, str]], str], Dict]:
+        """Use the tool asynchronously."""
+        return self.rag_question(query)

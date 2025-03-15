@@ -52,9 +52,6 @@ class OwlAgent(BaseModel):
 
     @property
     def chat_model(self) -> BaseChatModel:
-        logger.debug(
-            f"Chat model: {self.model_name} {self.implementation} {self.temperature} {self.max_tokens}"
-        )
         if self._chat_model_cache is None:
             self._chat_model_cache = init_chat_model(
                 model=self.model_name,
@@ -219,6 +216,9 @@ class OwlAgent(BaseModel):
         sprint(self)
 
     def print_model_info(self):
+        logger.debug(
+            f"Chat model: {self.model_name} {self.implementation} {self.temperature} {self.max_tokens}"
+        )
         sprint(self.chat_model)
 
 

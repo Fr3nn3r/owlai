@@ -28,13 +28,11 @@ from .core import (
 from pydantic import ValidationError
 
 from .db import get_default_prompts_by_role
-from .tools import get_focus_role
-from .tools import get_tools
+from .tools import ToolBox
 import owlai
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 from multiprocessing import freeze_support
-import os
 
 logger: Logger
 
@@ -45,33 +43,36 @@ class AgentManager:
     def __init__(self):
 
         self.owls: Dict[str, Any] = {}
+        self.toolbox = ToolBox()
 
         for irole in list(CONFIG.keys()):
             try:
                 agent = OwlAgent(**CONFIG[irole])
-                agent.init_callable_tools(get_tools(agent.tools_names))
+                agent.init_callable_tools(self.toolbox.get_tools(agent.tools_names))
                 self.owls[irole] = agent
             except ValidationError as e:
                 logger.error(f"Configuration validation failed for role {irole}: {e}")
 
     def get_focus_owl(self):
 
-        logger.debug(f"Active mode: {get_focus_role()}")
-        return self.owls[get_focus_role()]
+        logger.debug(f"Active mode: {self.toolbox.get_focus_role()}")
+        return self.owls[self.toolbox.get_focus_role()]
 
     def get_default_prompts(self):
 
-        return get_default_prompts_by_role(get_focus_role())
+        return get_default_prompts_by_role(self.toolbox.get_focus_role())
 
     def run_tests(self):
 
-        if len(CONFIG[get_focus_role()]["test_prompts"]) > 0:
-            logger.info(f"Running tests for mode '{get_focus_role()}'")
-            for test in CONFIG[get_focus_role()]["test_prompts"]:
+        if len(CONFIG[self.toolbox.get_focus_role()]["test_prompts"]) > 0:
+            logger.info(f"Running tests for mode '{self.toolbox.get_focus_role()}'")
+            for test in CONFIG[self.toolbox.get_focus_role()]["test_prompts"]:
                 logger.info(f"USER: {test}")
-                self.owls[get_focus_role()].invoke(test)
+                self.owls[self.toolbox.get_focus_role()].invoke(test)
         else:
-            logger.warning(f"No test prompts defined for owl role '{get_focus_role()}'")
+            logger.warning(
+                f"No test prompts defined for owl role '{self.toolbox.get_focus_role()}'"
+            )
 
 
 def load_logger_config():
@@ -84,7 +85,7 @@ def main():
     try:
         load_logger_config()
         global logger
-        logger = logging.getLogger("main_logger")
+        logger = logging.getLogger("main")
         logger.info(f"Application started in {time.time() - start_time} seconds")
         speak = False
 

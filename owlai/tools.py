@@ -20,7 +20,7 @@ from .core import OwlAgent, sprint
 from .db import TOOLS_CONFIG
 from .interpreter import LocalPythonInterpreter
 from .interpreter import OwlSystemInterpreter
-from .rag import LocalRAGTool
+from .rag import LocalRAGTool, OwlMemoryTool
 from ragatouille import RAGPretrainedModel
 
 import warnings
@@ -29,25 +29,32 @@ warnings.simplefilter("ignore", category=FutureWarning)
 
 logger = logging.getLogger("tools")
 
+focus_role: str = "qna"
+
 
 class ToolBox:
+
+    toolbox_hook: Callable = None
+    toolbox_hook_rag_engine: Callable = None
+    user_context: str = "CONTEXT: "
 
     # _local_python_interpreter = LocalPythonInterpreter(
     #    **TOOLS_CONFIG["python_interpreter"]
     # )
-    _local_rag_tool = LocalRAGTool(**TOOLS_CONFIG["rag_tool"])
+    # _local_rag_tool = LocalRAGTool(**TOOLS_CONFIG["rag_tool"])
     _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
     _owl_system_interpreter = OwlSystemInterpreter(
         **TOOLS_CONFIG["owl_system_interpreter"]
     )
+    _owl_memory_tool = OwlMemoryTool(**TOOLS_CONFIG["owl_memory_tool"])
 
     def __init__(self):
         self.mapping = {
             "activate_mode": self.activate_mode,
             "identify_user_with_password": self.identify_user_with_password,
-            "run_task": self._owl_system_interpreter,
+            "owl_system_interpreter": self._owl_system_interpreter,
             "play_song": self.play_song,
-            "get_answer_from_knowledge_base": self.get_answer_from_knowledge_base,
+            "owl_memory_tool": self._owl_memory_tool,
             "tavily_search_results_json": self._tavily_tool,
         }
 
@@ -140,10 +147,6 @@ class ToolBox:
         rag_answer = toolbox_hook_rag_engine(question)
         return rag_answer
 
-    toolbox_hook: Callable = None
-    toolbox_hook_rag_engine: Callable = None
-    user_context: str = "CONTEXT: "
-    focus_role: str = "welcome"
-
-    def get_focus_role() -> str:
-        return focus_role
+    def get_focus_role(self) -> str:
+        self.focus_role = focus_role
+        return self.focus_role

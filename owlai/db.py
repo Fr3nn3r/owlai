@@ -91,7 +91,7 @@ CONFIG = {
         "max_output_tokens": 200,
         "temperature": 0.1,
         "context_size": 4096,
-        "tools_names": ["activate_mode", "run_task", "play_song"],
+        "tools_names": ["activate_mode", "owl_system_interpreter", "play_song"],
         "system_prompt": "You are the local system agent.\n"
         "Your goal is to execute tasks assigned by the user on the local machine.\n"
         "You can activate any mode.\n"
@@ -235,7 +235,7 @@ CONFIG = {
         "max_output_tokens": 2049,
         "temperature": 0.1,
         "context_size": 4096,
-        "tools_names": ["get_answer_from_knowledge_base"],
+        "tools_names": ["owl_memory_tool"],
         "system_prompt": "Your name is Edwige from owlAI.\n"
         "Your goals is to answer questions with your tools.\n"
         " - If a tool execution fails, notify the user with the tool name and the error message.\n"
@@ -298,7 +298,7 @@ TOOLS_CONFIG = {
         "default_prompts": None,
         "test_prompts": [],
     },
-    "rag_tool": {
+    "owl_memory_tool": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 4096,
