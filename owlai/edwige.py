@@ -18,6 +18,7 @@ import importlib
 from dotenv import load_dotenv
 
 from typing import Dict, Any
+from logging import Logger
 from .db import CONFIG
 from .core import (
     OwlAgent,
@@ -32,10 +33,11 @@ from .tools import get_tools
 import owlai
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
+from multiprocessing import freeze_support
+import os
 
-#load_dotenv()
+logger: Logger
 
-logger = logging.getLogger("main")
 
 class AgentManager:
     """OwlAI agent manager"""
@@ -45,7 +47,7 @@ class AgentManager:
         self.owls: Dict[str, Any] = {}
 
         for irole in list(CONFIG.keys()):
-            try :
+            try:
                 agent = OwlAgent(**CONFIG[irole])
                 agent.init_callable_tools(get_tools(agent.tools_names))
                 self.owls[irole] = agent
@@ -81,7 +83,8 @@ def load_logger_config():
 def main():
     try:
         load_logger_config()
-        #logger = logging.getLogger("main_logger")
+        global logger
+        logger = logging.getLogger("main_logger")
         logger.info(f"Application started in {time.time() - start_time} seconds")
         speak = False
 
@@ -139,8 +142,8 @@ log      - reloads the logger config"""
                 importlib.reload(owlai.db)
                 importlib.reload(owlai.tools)
                 importlib.reload(owlai.core)
-                #importlib.reload(owlai.spotify)
-                #importlib.reload(owlai.ttsengine)
+                # importlib.reload(owlai.spotify)
+                # importlib.reload(owlai.ttsengine)
                 edwige = AgentManager()
                 logger.info("Reloaded owlai package")
                 continue
@@ -172,6 +175,15 @@ log      - reloads the logger config"""
                 logger.info("Logger reloaded")
                 continue
 
+            if user_message.lower() == "env":
+                from dotenv import dotenv_values
+
+                env_vars = dotenv_values(".env")
+                for key, value in env_vars.items():
+                    print(f"{key}: {value}")
+
+                continue
+
             try:
 
                 logger.info(f"USER: {user_message}")
@@ -189,4 +201,7 @@ log      - reloads the logger config"""
 
 
 if __name__ == "__main__":
+    print("Starting Edwige")
+    load_dotenv()
+    freeze_support()
     main()

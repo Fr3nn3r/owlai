@@ -3,14 +3,7 @@
 # ():::()
 #  VV-VV
 
-import os
-import logging
-
-# Get logger
-logger = logging.getLogger("main")
-
-# Get environment
-ENV = os.getenv("ENVIRONMENT", "Athena")
+print("Loading db module")
 
 USER_DATABASE = {
     "user_id_4385972043572": {
@@ -93,8 +86,8 @@ def get_default_prompts_by_role(role: str) -> list[str]:
 
 CONFIG = {
     "system": {
-        "model_provider": "openai",
-        "model_name": "gpt-4o-mini",
+        "implementation": "openai",
+        "model_name": "gpt-3.5-turbo",
         "max_output_tokens": 200,
         "temperature": 0.1,
         "context_size": 4096,
@@ -147,7 +140,7 @@ CONFIG = {
         ],
     },
     "identification": {
-        "model_provider": "openai",
+        "implementation": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 200,
         "temperature": 0.1,
@@ -192,7 +185,7 @@ CONFIG = {
         "test_prompts": [],
     },
     "welcome": {
-        "model_provider": "openai",
+        "implementation": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,
@@ -237,7 +230,7 @@ CONFIG = {
         "test_prompts": [],
     },
     "qna": {
-        "model_provider": "openai",
+        "implementation": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,
@@ -250,10 +243,10 @@ CONFIG = {
         " - Avoid statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n"
         " - Just provide the answer, no follow up questions or statements.\n",
         "default_prompts": [
-            "Who is Naruto?",
-            "Provide details about Orochimaru",
-            "Who is the strongest ninja in the world?",
-            "How is sasuke's personality",
+            "Who is Tsunade?",
+            "Provide details about Orochimaru.",
+            "Who is the Hokage of Konoha?",
+            "Tell me about sasuke's personality",
             "Who is the sensei of naruto?",
             "What is a sharingan?",
             "What is the akatsuki?",
@@ -276,7 +269,7 @@ CONFIG = {
 }
 
 TOOLS_CONFIG = {
-    "python_interpreter": {
+    "owl_system_interpreter": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
@@ -308,7 +301,7 @@ TOOLS_CONFIG = {
     "rag_tool": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
-        "max_output_tokens": 2049,
+        "max_output_tokens": 4096,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
@@ -322,6 +315,9 @@ TOOLS_CONFIG = {
         "default_prompts": None,
         "test_prompts": [],
         "embeddings_model_name": "thenlper/gte-small",
+        "reranker_name": "colbert-ir/colbertv2.0",
+        "num_retrieved_docs": 30,
+        "num_docs_final": 5,
         "input_data_folders": [
             "data/dataset-0000",
             "data/dataset-0001",

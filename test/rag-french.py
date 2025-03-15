@@ -62,9 +62,7 @@ def main():
             filepath = os.path.join(input_folder, filename)
 
             if filename.endswith(".pdf"):
-                loader = PyPDFLoader(
-                    file_path=filepath, extract_images=False, extraction_mode="plain"
-                )
+                loader = PyPDFLoader(file_path=filepath, extract_images=False)
                 docs = loader.load()
             elif filename.endswith(".txt"):
                 loader = TextLoader(filepath)
@@ -72,13 +70,15 @@ def main():
             else:
                 continue
 
+            logger.info(f"Loading file: {filename} please wait...")
+
             documents.extend(
                 [
                     LangchainDocument(
                         page_content=doc.page_content,
                         metadata={"source": doc.metadata["source"]},
                     )
-                    for doc in tqdm(docs, desc="Loading documents")
+                    for doc in docs
                 ]
             )
 
@@ -437,7 +437,7 @@ Question: {question}""",
         return answer, relevant_docs
 
     # Start of the main function ######################################################
-    EMBEDDING_MODEL_NAME = "thenlper/gte-small"
+    EMBEDDING_MODEL_NAME = "camembert-base"
 
     embedding_model = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
@@ -488,9 +488,24 @@ Question: {question}""",
                 "How does Paul defeat the Emperor?",
             ],
         },
+        {
+            "input_data_folder": "data/dataset-0002",
+            "questions": [
+                "Quelles sont les principales sources du droit en France ?",
+                "Quelle est la différence entre le droit civil et la common law, et quel système utilise la France ?",
+                "Quelles sont les principales branches du droit français ?",
+                "Quel est le rôle de la Constitution française dans le système juridique ?",
+                "Comment fonctionne le système judiciaire en France et quels sont les principaux types de tribunaux ?",
+                "Quels sont les principes clés du droit des contrats en France ?",
+                "Quels sont les droits des employés en vertu du droit du travail français ?",
+                "Comment fonctionne le droit pénal en France et quels sont les principaux types d’infractions ?",
+                "Quelles sont les règles essentielles régissant la propriété en France ?",
+                "Comment le système juridique français protège-t-il les droits de l’homme et les libertés fondamentales ?",
+            ],
+        },
     ]
 
-    dataset = datasets[2]
+    dataset = datasets[3]
 
     input_data_folder = dataset["input_data_folder"]
 

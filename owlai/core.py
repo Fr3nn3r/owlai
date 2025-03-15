@@ -2,7 +2,7 @@
 # (O,O)
 # (   )
 # -"-"-
-
+print("Loading core module")
 from typing import List, Dict, Any, Optional
 from langchain_core.messages import (
     BaseMessage,
@@ -22,13 +22,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from rich.console import Console
 
-logger = logging.getLogger("main")
+logger = logging.getLogger("core")
 
 user_context: str = "CONTEXT: "
 
+
 class OwlAgent(BaseModel):
 
-    #JSON defined properties
+    # JSON defined properties
     implementation: str = "openai"
     model_name: str = "gpt-4o-mini"
     temperature: float = 0.1
@@ -39,28 +40,31 @@ class OwlAgent(BaseModel):
     default_prompts: Optional[List[str]] = None
     test_prompts: List[str] = []
 
-    #Runtime updated properties
+    # Runtime updated properties
     total_tokens: int = 0
     fifo_message_mode: bool = False
-    callable_tools : List[BaseTool] = []
+    callable_tools: List[BaseTool] = []
 
-    #Private attribute
-    _chat_model_cache: BaseChatModel = None  
+    # Private attribute
+    _chat_model_cache: BaseChatModel = None
     _tool_dict: Dict[str, BaseTool] = {}
     _message_history: List[BaseMessage] = []
 
     @property
     def chat_model(self) -> BaseChatModel:
+        logger.debug(
+            f"Chat model: {self.model_name} {self.implementation} {self.temperature} {self.max_tokens}"
+        )
         if self._chat_model_cache is None:
             self._chat_model_cache = init_chat_model(
-            model=self.model_name,
-            model_provider=self.implementation,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
+                model=self.model_name,
+                model_provider=self.implementation,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
         return self._chat_model_cache
 
-    def init_callable_tools(self, tools : List[BaseTool]) :
+    def init_callable_tools(self, tools: List[BaseTool]):
         self.callable_tools = tools
         self._chat_model_cache = self.chat_model.bind_tools(tools)
         for tool in tools:
@@ -69,7 +73,7 @@ class OwlAgent(BaseModel):
 
     def _token_count(self, message: AIMessage):
         metadata = message.response_metadata
-        #Should get rid of implementation dependend code ------------- should be a util function outside owlagent
+        # Should get rid of implementation dependend code ------------- should be a util function outside owlagent
         if self.implementation == "openai":
             return metadata["token_usage"]["total_tokens"]
         elif self.implementation == "anthropic":
@@ -99,7 +103,6 @@ class OwlAgent(BaseModel):
                 self._message_history[-1].type == "tool"
             ):  # Remove the tool message if any
                 self._message_history.pop(1)
-            self.print_message_history()
 
         self._message_history.append(message)
 
@@ -166,26 +169,30 @@ class OwlAgent(BaseModel):
                 continue
 
     def invoke(self, message: str) -> str:
-        # update system prompt with latestcontext
-        system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
-        if len(self._message_history) == 0:
-            self._message_history.append(system_message)
-        else:
-            self._message_history[0] = system_message
+        try:
+            # update system prompt with latestcontext
+            system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
+            if len(self._message_history) == 0:
+                self._message_history.append(system_message)
+            else:
+                self._message_history[0] = system_message
 
-        self.append_message(HumanMessage(message))  # Add user message to history
-        response = self.chat_model.invoke(self._message_history)
-        self.append_message(response)  # Add model response to history
-
-        self._process_tool_calls(response)
-
-        if response.tool_calls:  # If tools were called, invoke the model again
+            self.append_message(HumanMessage(message))  # Add user message to history
             response = self.chat_model.invoke(self._message_history)
             self.append_message(response)  # Add model response to history
-            # logger.debug(response.content)  # Log the model response
 
-        self._total_tokens = self._token_count(response)
-        return response.content  # Return the model response
+            self._process_tool_calls(response)
+
+            if response.tool_calls:  # If tools were called, invoke the model again
+                response = self.chat_model.invoke(self._message_history)
+                self.append_message(response)  # Add model response to history
+                # logger.debug(response.content)  # Log the model response
+
+            self._total_tokens = self._token_count(response)
+            return response.content  # Return the model response
+
+        except Exception as e:
+            logger.error(f"Error invoking model '{self.model_name}': '{e}'")
 
     def print_message_history(self):
         sprint(self._message_history)
@@ -220,6 +227,7 @@ def sprint(*args):
     console = Console()
     for arg in args:
         console.print(arg)  # Normal print with `rich`
+
 
 class OwlAIAgent:
 
@@ -310,9 +318,9 @@ class OwlAIAgent:
         logger.warning("Cleanup not supported (???)")
 
 
-def main() :
+def main():
     pass
+
 
 if __name__ == "__main__":
     main()
-
