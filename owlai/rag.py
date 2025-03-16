@@ -17,12 +17,16 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from transformers import AutoTokenizer
 
 from .core import OwlAgent
 from .db import TOOLS_CONFIG
 import warnings
+from tqdm import tqdm
 
-logging.getLogger("tqdm").setLevel(logging.WARNING)
 warnings.simplefilter("ignore", category=FutureWarning)
 import sentence_transformers
 
@@ -69,9 +73,175 @@ class LocalRAGTool(OwlAgent):
                 self._vector_stores.merge_from(current_store)
 
         if self._vector_stores is None:
-            raise ValueError("No vector stores found")
+            logger.warning(
+                "No vector stores found: you must set the vector store manually."
+            )
+        else:
+            logger.info(f"Loaded dataset stores: {input_data_folders}")
 
-        logger.info(f"Loaded dataset stores: {input_data_folders}")
+    def generate_test_report(
+        self, json_file_path: str, output_html_path: str = None
+    ) -> str:
+        """
+        Generate a professional HTML test report from JSON test results.
+
+        Args:
+            json_file_path: Path to the JSON file containing test results
+            output_html_path: Optional path to save the HTML report. If None, returns the HTML string.
+
+        Returns:
+            HTML string if output_html_path is None, otherwise None
+        """
+        import json
+        from datetime import datetime
+        import os
+
+        # Read JSON data
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            test_results = json.load(f)
+
+        # Generate HTML report
+        html = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>RAG System Test Report</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    line-height: 1.6;
+                    margin: 0;
+                    padding: 20px;
+                    background-color: #f5f5f5;
+                }}
+                .container {{
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    background-color: white;
+                    padding: 30px;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }}
+                .header {{
+                    text-align: center;
+                    margin-bottom: 40px;
+                    padding-bottom: 20px;
+                    border-bottom: 2px solid #eee;
+                }}
+                .header h1 {{
+                    color: #2c3e50;
+                    margin-bottom: 10px;
+                }}
+                .metadata {{
+                    color: #666;
+                    font-size: 0.9em;
+                }}
+                .test-case {{
+                    margin-bottom: 30px;
+                    padding: 20px;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 5px;
+                    background-color: #fff;
+                }}
+                .test-case:hover {{
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    transition: box-shadow 0.3s ease;
+                }}
+                .question {{
+                    color: #2c3e50;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                }}
+                .answer {{
+                    color: #34495e;
+                    white-space: pre-wrap;
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin-top: 10px;
+                }}
+                .stats {{
+                    display: flex;
+                    justify-content: space-around;
+                    margin: 20px 0;
+                    padding: 20px;
+                    background-color: #f8f9fa;
+                    border-radius: 5px;
+                }}
+                .stat-item {{
+                    text-align: center;
+                }}
+                .stat-value {{
+                    font-size: 1.5em;
+                    font-weight: bold;
+                    color: #2c3e50;
+                }}
+                .stat-label {{
+                    color: #666;
+                    font-size: 0.9em;
+                }}
+                @media (max-width: 768px) {{
+                    .container {{
+                        padding: 15px;
+                    }}
+                    .stats {{
+                        flex-direction: column;
+                        gap: 15px;
+                    }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>RAG System Test Report</h1>
+                    <div class="metadata">
+                        Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+                        Test File: {os.path.basename(json_file_path)}
+                    </div>
+                </div>
+
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value">{len(test_results)}</div>
+                        <div class="stat-label">Total Test Cases</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{sum(1 for result in test_results if result.get('answer', '').strip())}</div>
+                        <div class="stat-label">Answered Questions</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{sum(1 for result in test_results if not result.get('answer', '').strip())}</div>
+                        <div class="stat-label">Unanswered Questions</div>
+                    </div>
+                </div>
+
+                <div class="test-cases">
+        """
+
+        for i, result in enumerate(test_results, 1):
+            html += f"""
+                    <div class="test-case">
+                        <div class="question">Q{i}: {result['question']}</div>
+                        <div class="answer">{result.get('answer', 'No answer provided')}</div>
+                    </div>
+            """
+
+        html += """
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        if output_html_path:
+            with open(output_html_path, "w", encoding="utf-8") as f:
+                f.write(html)
+            logger.info(f"Test report generated and saved to: {output_html_path}")
+            return None
+        return html
 
     def visualize_embeddings(
         self,
@@ -155,13 +325,14 @@ class LocalRAGTool(OwlAgent):
         )
         return fig
 
-    def analyze_chunk_size_distribution(self, docs, model_name="thenlper/gte-small"):
+    def analyze_chunk_size_distribution(
+        self, input_data_folder, filename, docs, model_name="thenlper/gte-small"
+    ):
         """
-        Analyze and visualize document lengths before and after processing.
+        Analyze and visualize document lengths.
 
         Args:
-            raw_docs: Original documents before splitting
-            processed_docs: Documents after splitting
+            docs: to analyze
             model_name: Name of the embedding model to use
         """
         from sentence_transformers import SentenceTransformer
@@ -184,11 +355,59 @@ class LocalRAGTool(OwlAgent):
 
         fig = pd.Series(lengths).hist()
         plt.title("Distribution of document lengths (in count of tokens)")
-        plt.savefig(f"chunk_size_distribution-{id(docs)}.png")
+        plt.savefig(f"{input_data_folder}/chunk_size_distribution-{filename}.png")
         plt.close()
         logger.info(
-            f"Distribution of document lengths (in count of tokens) saved to chunk_size_distribution-{id(docs)}.png"
+            f"Distribution of document lengths (in count of tokens) saved to chunk_size_distribution-{filename}.png"
         )
+
+    def split_documents(
+        self,
+        chunk_size: int,  # The maximum number of tokens in a chunk
+        knowledge_base: List[LangchainDocument],
+        tokenizer_name: str,
+    ) -> List[LangchainDocument]:
+        """
+        Split documents into chunks of maximum size `chunk_size` tokens and return a list of documents.
+        """
+        text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+            AutoTokenizer.from_pretrained(tokenizer_name),
+            chunk_size=chunk_size,
+            chunk_overlap=int(
+                chunk_size / 10
+            ),  # The number of characters to overlap between chunks
+            add_start_index=True,  # If `True`, includes chunk's start index in metadata
+            strip_whitespace=True,  # If `True`, strips whitespace from the start and end of every document
+            separators=[
+                "\n\n",
+                "\n",
+                " ",
+                "",
+            ],
+        )
+        logger.debug(f"Splitting {len(knowledge_base)} documents")
+
+        docs_processed = []
+        for doc in tqdm(knowledge_base, desc="Splitting documents"):
+            result = text_splitter.split_documents([doc])
+            docs_processed += result
+
+        logger.info(
+            f"Splitted {len(knowledge_base)} documents into {len(docs_processed)} chunks"
+        )
+        # Remove duplicates
+        unique_texts = {}
+        docs_processed_unique = []
+        for doc in tqdm(docs_processed, desc="Removing duplicates"):
+            if doc.page_content not in unique_texts:
+                unique_texts[doc.page_content] = True
+                docs_processed_unique.append(doc)
+
+        logger.info(
+            f"Removed {len(docs_processed) - len(docs_processed_unique)} duplicates from {len(docs_processed)} chunks"
+        )
+
+        return docs_processed_unique
 
     def load_or_create_vector_store(
         self,
@@ -198,6 +417,7 @@ class LocalRAGTool(OwlAgent):
     ) -> FAISS:
         """
         Loads an existing vector store or creates a new one if it doesn't exist.
+        Processes documents one by one to manage memory usage.
 
         Args:
             input_data_folder: Path to the folder containing documents
@@ -212,40 +432,104 @@ class LocalRAGTool(OwlAgent):
         if os.path.exists(file_path):
             logger.info(f"Loading existing vector database from: {file_path}")
             return self.load_vector_store(input_data_folder, embedding_model)
-        else:
-            logger.info("Creating new vector database...")
-            # Load raw documents
-            start_time = time.time()
-            raw_documents = self.load_documents(input_data_folder)
+
+        logger.info("Creating new vector database...")
+        vector_store = None
+
+        # Get list of PDF and text files
+        files = [
+            f for f in os.listdir(input_data_folder) if f.endswith((".pdf", ".txt"))
+        ]
+        logger.info(f"Found {len(files)} documents to process in {input_data_folder}")
+
+        start_time = time.time()
+
+        # Process each file individually
+        for filename in tqdm(files, desc="Processing documents"):
+            filepath = os.path.join(input_data_folder, filename)
             logger.info(
-                f"{len(raw_documents)} documents loaded in {time.time() - start_time:.2f} seconds"
+                f"Processing file: {filename} size: {os.path.getsize(filepath)}"
             )
 
-            # Analyze and split documents
-            self.analyze_chunk_size_distribution(
-                raw_documents, embedding_model.model_name
-            )
-            split_docs = self.split_documents(
-                chunk_size, raw_documents, tokenizer_name=embedding_model.model_name
-            )
+            try:
+                # Load document
+                if filename.endswith(".pdf"):
+                    loader = PyPDFLoader(
+                        file_path=filepath,
+                        extract_images=False,
+                        extraction_mode="plain",
+                    )
+                    docs = loader.load()
+                else:  # .txt files
+                    loader = TextLoader(filepath)
+                    docs = loader.load()
 
-            # Create and save vector store
-            start_time = time.time()
-            vector_store = FAISS.from_documents(
-                split_docs,
-                embedding_model,
-                distance_strategy=DistanceStrategy.COSINE,
-            )
-            logger.info(
-                f"Vector database created in {time.time() - start_time:.2f} seconds"
-            )
+                # Convert to LangchainDocuments
+                current_docs = [
+                    LangchainDocument(
+                        page_content=doc.page_content,
+                        metadata={
+                            "source": doc.metadata["source"],
+                        },
+                    )
+                    for doc in docs
+                ]
 
-            # Save to disk
-            vector_store.save_local(file_path)
+                # Analyze document chunks before splitting
+                self.analyze_chunk_size_distribution(
+                    input_data_folder,
+                    "pre-split-" + filename,
+                    current_docs,
+                    embedding_model.model_name,
+                )
 
-            return vector_store
+                # Split documents
+                split_docs = self.split_documents(
+                    chunk_size,
+                    current_docs,
+                    tokenizer_name=embedding_model.model_name,
+                )
 
-    def rag_question(self, question: str) -> str:
+                self.analyze_chunk_size_distribution(
+                    input_data_folder,
+                    "post-split-" + filename,
+                    split_docs,
+                    embedding_model.model_name,
+                )
+
+                # Create or update vector store
+                if vector_store is None:
+                    vector_store = FAISS.from_documents(
+                        split_docs,
+                        embedding_model,
+                        distance_strategy=DistanceStrategy.COSINE,
+                    )
+                else:
+                    batch_store = FAISS.from_documents(
+                        split_docs,
+                        embedding_model,
+                        distance_strategy=DistanceStrategy.COSINE,
+                    )
+                    vector_store.merge_from(batch_store)
+
+                logger.info(
+                    f"Processed {filename} in {time.time() - start_time:.2f} seconds"
+                )
+
+            except Exception as e:
+                logger.error(f"Error processing {filename}: {str(e)}")
+                continue
+
+        total_time = time.time() - start_time
+        logger.info(f"Vector database created in {total_time:.2f} seconds")
+
+        # Save to disk
+        vector_store.save_local(file_path)
+        logger.info(f"Vector database saved to {file_path}")
+
+        return vector_store
+
+    def rag_question(self, question: str, no_context: bool = False) -> str:
         """
         Runs the RAG query against the vector store and returns an answer to the question.
         Args:
@@ -255,13 +539,24 @@ class LocalRAGTool(OwlAgent):
         k = TOOLS_CONFIG["owl_memory_tool"]["num_retrieved_docs"]
         k_final = TOOLS_CONFIG["owl_memory_tool"]["num_docs_final"]
 
-        retrieved_docs, reranked_docs = self.retrieve_relevant_chunks(
-            query=question,
-            knowledge_base=self._vector_stores,
-            reranker=self._reranker,
-            num_retrieved_docs=k,
-            num_docs_final=k_final,
-        )
+        # If no_context is True, the question is answered without context (for testing purposes)
+        if no_context:
+            message_with_question_no_context = self._prompt.format(
+                question=question, context=""
+            )
+            messages = [SystemMessage(message_with_question_no_context)]
+            messages = self.chat_model.invoke(messages)
+
+            return messages.content
+
+        else:
+            retrieved_docs, reranked_docs = self.retrieve_relevant_chunks(
+                query=question,
+                knowledge_base=self._vector_stores,
+                reranker=self._reranker,
+                num_retrieved_docs=k,
+                num_docs_final=k_final,
+            )
 
         def _encode_text(text: str) -> str:
             return text.encode("ascii", errors="replace").decode("utf-8")

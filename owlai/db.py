@@ -172,6 +172,14 @@ PROMPT_CONFIG = {
     "Question:\n"
     "{question}\n"
     "Answer:\n",
+    "rag-fr-v0": "Contexte : {context} \n"
+    "Question : {question} \n"
+    "Instructions : \n"
+    "1. Utilisez uniquement les informations fournies dans le contexte ci-dessus pour répondre à la question. \n"
+    "2. Si l'information n'est pas disponible dans le contexte, indiquez que vous ne pouvez pas répondre avec certitude. \n"
+    "3. Fournissez une réponse claire, concise et bien structurée. \n"
+    "4. Si pertinent, expliquez brièvement votre raisonnement en vous appuyant sur le contexte. \n"
+    "Réponse : \n",
 }
 
 
@@ -179,7 +187,7 @@ TOOLS_CONFIG = {
     "owl_system_interpreter": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
-        "max_output_tokens": 2049,
+        "max_output_tokens": 4096,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
@@ -194,7 +202,7 @@ TOOLS_CONFIG = {
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
-        "system_prompt": PROMPT_CONFIG["rag-v0-from-tutorial"],
+        "system_prompt": PROMPT_CONFIG["rag-fr-v0"],
         "default_queries": None,
         "test_queries": [],
         "embeddings_model_name": "thenlper/gte-small",
@@ -202,9 +210,9 @@ TOOLS_CONFIG = {
         "num_retrieved_docs": 30,
         "num_docs_final": 5,
         "input_data_folders": [
-            "data/dataset-0000",
-            "data/dataset-0001",
-            "data/dataset-0003",
+            "data/dataset-0002",
+            # "data/dataset-0001",
+            # "data/dataset-0003",
         ],
     },
     "tavily_search_results_json": {
