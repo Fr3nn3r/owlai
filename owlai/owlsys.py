@@ -44,8 +44,4 @@ def get_system_info():
     except Exception as e:
         system_info["GPU"].append({"Error": str(e)})
 
-    return json.dumps(system_info, indent=4)
-
-
-# Run and print the JSON output
-print(get_system_info())
+    return system_info

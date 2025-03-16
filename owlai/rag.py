@@ -42,6 +42,8 @@ class LocalRAGTool(OwlAgent):
 
     _prompt = None
     _vector_stores = None
+    _embeddings = None
+    _reranker = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -60,7 +62,7 @@ class LocalRAGTool(OwlAgent):
 
         self._vector_stores = None
         for ifolder in input_data_folders:
-            current_store = self.load_vector_store(ifolder, self._embeddings)
+            current_store = self.load_or_create_vector_store(ifolder, self._embeddings)
             if self._vector_stores is None:
                 self._vector_stores = current_store
             else:
@@ -70,6 +72,178 @@ class LocalRAGTool(OwlAgent):
             raise ValueError("No vector stores found")
 
         logger.info(f"Loaded dataset stores: {input_data_folders}")
+
+    def visualize_embeddings(
+        self,
+        knowledge_base: FAISS,
+        docs_processed: List[LangchainDocument],
+        user_query: str,
+        query_vector: List[float],
+    ):
+        """
+        Visualize document embeddings and query vector in 2D space using PaCMAP.
+
+        Args:
+            knowledge_base: The FAISS vector store
+            docs_processed: List of processed documents
+            user_query: The query string
+            query_vector: The query's embedding vector
+        """
+        import pacmap
+        import numpy as np
+        import pandas as pd
+        import plotly.express as px
+
+        embedding_projector = pacmap.PaCMAP(
+            n_components=2, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, random_state=1
+        )
+
+        embeddings_2d = [
+            list(knowledge_base.index.reconstruct_n(idx, 1)[0])
+            for idx in range(len(docs_processed))
+        ] + [query_vector]
+
+        # Fit the data
+        documents_projected = embedding_projector.fit_transform(
+            np.array(embeddings_2d), init="pca"
+        )
+
+        df = pd.DataFrame.from_dict(
+            [
+                {
+                    "x": documents_projected[i, 0],
+                    "y": documents_projected[i, 1],
+                    "source": docs_processed[i].metadata["source"].split("/")[1],
+                    "extract": docs_processed[i].page_content[:100] + "...",
+                    "symbol": "circle",
+                    "size_col": 4,
+                }
+                for i in range(len(docs_processed))
+            ]
+            + [
+                {
+                    "x": documents_projected[-1, 0],
+                    "y": documents_projected[-1, 1],
+                    "source": "User query",
+                    "extract": user_query,
+                    "size_col": 100,
+                    "symbol": "star",
+                }
+            ]
+        )
+
+        # Visualize the embedding
+        fig = px.scatter(
+            df,
+            x="x",
+            y="y",
+            color="source",
+            hover_data="extract",
+            size="size_col",
+            symbol="symbol",
+            color_discrete_map={"User query": "black"},
+            width=1000,
+            height=700,
+        )
+        fig.update_traces(
+            marker=dict(opacity=1, line=dict(width=0, color="DarkSlateGrey")),
+            selector=dict(mode="markers"),
+        )
+        fig.update_layout(
+            legend_title_text="<b>Chunk source</b>",
+            title="<b>2D Projection of Chunk Embeddings via PaCMAP</b>",
+        )
+        return fig
+
+    def analyze_chunk_size_distribution(self, docs, model_name="thenlper/gte-small"):
+        """
+        Analyze and visualize document lengths before and after processing.
+
+        Args:
+            raw_docs: Original documents before splitting
+            processed_docs: Documents after splitting
+            model_name: Name of the embedding model to use
+        """
+        from sentence_transformers import SentenceTransformer
+        from transformers import AutoTokenizer
+
+        # Get max sequence length from SentenceTransformer
+        max_seq_len = SentenceTransformer(model_name).max_seq_length
+        info_message = (
+            f"Model's max sequence size: '{max_seq_len}' Document count: '{len(docs)}'"
+        )
+        logger.info(info_message)
+
+        # Analyze token lengths
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        lengths = [len(tokenizer.encode(doc.page_content)) for doc in docs]
+
+        # Plot distribution
+        import matplotlib.pyplot as plt
+        import pandas as pd
+
+        fig = pd.Series(lengths).hist()
+        plt.title("Distribution of document lengths (in count of tokens)")
+        plt.savefig(f"chunk_size_distribution-{id(docs)}.png")
+        plt.close()
+        logger.info(
+            f"Distribution of document lengths (in count of tokens) saved to chunk_size_distribution-{id(docs)}.png"
+        )
+
+    def load_or_create_vector_store(
+        self,
+        input_data_folder: str,
+        embedding_model: HuggingFaceEmbeddings,
+        chunk_size: int = 512,
+    ) -> FAISS:
+        """
+        Loads an existing vector store or creates a new one if it doesn't exist.
+
+        Args:
+            input_data_folder: Path to the folder containing documents
+            embedding_model: The embedding model to use
+            chunk_size: Size of text chunks for splitting documents
+
+        Returns:
+            FAISS vector store
+        """
+        file_path = f"{input_data_folder}/vector_db"
+
+        if os.path.exists(file_path):
+            logger.info(f"Loading existing vector database from: {file_path}")
+            return self.load_vector_store(input_data_folder, embedding_model)
+        else:
+            logger.info("Creating new vector database...")
+            # Load raw documents
+            start_time = time.time()
+            raw_documents = self.load_documents(input_data_folder)
+            logger.info(
+                f"{len(raw_documents)} documents loaded in {time.time() - start_time:.2f} seconds"
+            )
+
+            # Analyze and split documents
+            self.analyze_chunk_size_distribution(
+                raw_documents, embedding_model.model_name
+            )
+            split_docs = self.split_documents(
+                chunk_size, raw_documents, tokenizer_name=embedding_model.model_name
+            )
+
+            # Create and save vector store
+            start_time = time.time()
+            vector_store = FAISS.from_documents(
+                split_docs,
+                embedding_model,
+                distance_strategy=DistanceStrategy.COSINE,
+            )
+            logger.info(
+                f"Vector database created in {time.time() - start_time:.2f} seconds"
+            )
+
+            # Save to disk
+            vector_store.save_local(file_path)
+
+            return vector_store
 
     def rag_question(self, question: str) -> str:
         """
@@ -113,10 +287,12 @@ class LocalRAGTool(OwlAgent):
                 "utf-8"
             )
         )
+
+        # logger.debug(f"Final prompt: {currated_message_with_question_and_context}")
         messages = [SystemMessage(currated_message_with_question_and_context)]
         messages = self.chat_model.invoke(messages)
 
-        logger.debug(f"Raw RAG answer: {messages.content}")
+        # logger.debug(f"Raw RAG answer: {messages.content}")
         return messages.content
 
     def load_vector_store(

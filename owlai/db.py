@@ -188,8 +188,8 @@ TOOLS_CONFIG = {
         "test_queries": [],
     },
     "owl_memory_tool": {
-        "model_provider": "openai",
-        "model_name": "gpt-4o-mini",
+        "model_provider": "mistralai",
+        "model_name": "mistral-large-latest",
         "max_output_tokens": 4096,
         "temperature": 0.1,
         "context_size": 4096,
@@ -199,7 +199,7 @@ TOOLS_CONFIG = {
         "test_queries": [],
         "embeddings_model_name": "thenlper/gte-small",
         "reranker_name": "colbert-ir/colbertv2.0",
-        "num_retrieved_docs": 10,
+        "num_retrieved_docs": 30,
         "num_docs_final": 5,
         "input_data_folders": [
             "data/dataset-0000",
@@ -214,7 +214,7 @@ TOOLS_CONFIG = {
 
 CONFIG = {
     "system": {
-        "implementation": "openai",
+        "model_provider": "openai",
         "model_name": "gpt-3.5-turbo",
         "max_output_tokens": 200,
         "temperature": 0.1,
@@ -258,7 +258,7 @@ CONFIG = {
         ],
     },
     "identification": {
-        "implementation": "openai",
+        "model_provider": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 200,
         "temperature": 0.1,
@@ -282,7 +282,7 @@ CONFIG = {
         "test_queries": [],
     },
     "welcome": {
-        "implementation": "openai",
+        "model_provider": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,
@@ -306,7 +306,7 @@ CONFIG = {
         "test_queries": [],
     },
     "qna": {
-        "implementation": "openai",
+        "model_provider": "openai",
         "model_name": "gpt-4o-mini",
         "max_output_tokens": 2049,
         "temperature": 0.1,

@@ -31,7 +31,7 @@ user_context: str = "CONTEXT: "
 class OwlAgent(BaseModel):
 
     # JSON defined properties
-    implementation: str = "openai"
+    model_provider: str = "openai"
     model_name: str = "gpt-4o-mini"
     temperature: float = 0.1
     max_tokens: int = 2048
@@ -56,9 +56,12 @@ class OwlAgent(BaseModel):
         if self._chat_model_cache is None:
             self._chat_model_cache = init_chat_model(
                 model=self.model_name,
-                model_provider=self.implementation,
+                model_provider=self.model_provider,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
+            )
+            logger.info(
+                f"Chat model initialized: {self.model_name} {self.model_provider} {self.temperature} {self.max_tokens}"
             )
         return self._chat_model_cache
 
@@ -71,17 +74,17 @@ class OwlAgent(BaseModel):
 
     def _token_count(self, message: AIMessage):
         metadata = message.response_metadata
-        # Should get rid of implementation dependend code ------------- should be a util function outside owlagent
-        if self.implementation == "openai":
+        # Should get rid of model_provider dependend code ------------- should be a util function outside owlagent
+        if self.model_provider == "openai":
             return metadata["token_usage"]["total_tokens"]
-        elif self.implementation == "anthropic":
+        elif self.model_provider == "anthropic":
             anthropic_total_tokens = (
                 metadata["usage"]["input_tokens"] + metadata["usage"]["output_tokens"]
             )
             return anthropic_total_tokens
         else:
             logger.warning(
-                f"Token count unsupported for model provider: '{self.implementation}'"
+                f"Token count unsupported for model provider: '{self.model_provider}'"
             )
             return -1
 
@@ -218,7 +221,7 @@ class OwlAgent(BaseModel):
 
     def print_model_info(self):
         logger.debug(
-            f"Chat model: {self.model_name} {self.implementation} {self.temperature} {self.max_tokens}"
+            f"Chat model: {self.model_name} {self.model_provider} {self.temperature} {self.max_tokens}"
         )
         sprint(self.chat_model)
 
@@ -234,7 +237,7 @@ class OwlAIAgent:
 
     def __init__(
         self,
-        implementation: str = "openai",
+        model_provider: str = "openai",
         model_name: str = "gpt-4o-mini",
         temperature: float = 0.9,
         max_tokens: int = 2048,
@@ -242,7 +245,7 @@ class OwlAIAgent:
         tools: List[BaseTool] = [],
         system_prompt: str = None,
     ):
-        self.implementation = implementation
+        self.model_provider = model_provider
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -251,7 +254,7 @@ class OwlAIAgent:
         self.system_prompt = system_prompt
         self.chat_model = init_chat_model(
             model=model_name,
-            model_provider=implementation,
+            model_provider=model_provider,
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -307,7 +310,7 @@ class OwlAIAgent:
 
     def print_info(self):
         logger.info(
-            f"model-provider='{self.implementation}', model-name='{self.model_name}', tools='{', '.join([t.name for t in self.tools])}'"
+            f"model-provider='{self.model_provider}', model-name='{self.model_name}', tools='{', '.join([t.name for t in self.tools])}'"
         )
 
     # NOT SURE WHAT THIS IS...
