@@ -1,51 +1,48 @@
-import platform
-import psutil
-import json
-import GPUtil
+import fitz  # PyMuPDF
+import re
 
 
-def get_system_info():
-    system_info = {
-        "OS": platform.system(),
-        "OS Version": platform.version(),
-        "OS Release": platform.release(),
-        "CPU": {
-            "Model": platform.processor(),
-            "Cores": psutil.cpu_count(logical=False),
-            "Threads": psutil.cpu_count(logical=True),
-            "Max Frequency (MHz)": (
-                psutil.cpu_freq().max if psutil.cpu_freq() else "Unknown"
-            ),
-        },
-        "Memory": {
-            "Total (GB)": round(psutil.virtual_memory().total / (1024**3), 2),
-            "Available (GB)": round(psutil.virtual_memory().available / (1024**3), 2),
-        },
-        "Disk": {
-            "Total (GB)": round(psutil.disk_usage("/").total / (1024**3), 2),
-            "Used (GB)": round(psutil.disk_usage("/").used / (1024**3), 2),
-            "Free (GB)": round(psutil.disk_usage("/").free / (1024**3), 2),
-        },
-        "GPU": [],
+def extract_footer(pdf_path):
+    doc = fitz.open(pdf_path)
+    footers = []
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+
+        # Extract text and split into lines
+        text = page.get_text("text")
+        lines = text.split("\n")
+
+        if len(lines) > 1:
+            footer = lines[-2:]  # Assume footer is in the last two lines
+            footers.append((page_num + 1, " | ".join(footer)))
+
+    return footers
+
+
+# Path to your PDF
+pdf_path = "data/dataset-0004/LEGITEXT000006069576.pdf"
+
+# Run the extraction
+footers = extract_footer(pdf_path)
+
+# Display results
+for page, footer in footers[:10]:  # Show first 10 pages
+    print(f"Page {page}: {footer}")
+
+footer = footers[0][1]
+
+# Regular Expression to Extract Components
+match = re.match(r"^(.*?)\s*-\s*(.*?)\s*-\s*(.*?)$", footer)
+if match:
+    title = match.group(1).strip()
+    last_modification = match.group(2).strip()
+    doc_generated_on = match.group(3).strip()
+
+print(
+    {
+        "title": title,
+        "last_modification": last_modification,
+        "doc_generated_on": doc_generated_on,
     }
-
-    try:
-        gpus = GPUtil.getGPUs()
-        for gpu in gpus:
-            system_info["GPU"].append(
-                {
-                    "Name": gpu.name,
-                    "Memory Total (GB)": round(gpu.memoryTotal, 2),
-                    "Memory Free (GB)": round(gpu.memoryFree, 2),
-                    "Memory Used (GB)": round(gpu.memoryUsed, 2),
-                    "Load (%)": gpu.load * 100,
-                }
-            )
-    except Exception as e:
-        system_info["GPU"].append({"Error": str(e)})
-
-    return json.dumps(system_info, indent=4)
-
-
-# Run and print the JSON output
-print(get_system_info())
+)

@@ -79,170 +79,6 @@ class LocalRAGTool(OwlAgent):
         else:
             logger.info(f"Loaded dataset stores: {input_data_folders}")
 
-    def generate_test_report(
-        self, json_file_path: str, output_html_path: str = None
-    ) -> str:
-        """
-        Generate a professional HTML test report from JSON test results.
-
-        Args:
-            json_file_path: Path to the JSON file containing test results
-            output_html_path: Optional path to save the HTML report. If None, returns the HTML string.
-
-        Returns:
-            HTML string if output_html_path is None, otherwise None
-        """
-        import json
-        from datetime import datetime
-        import os
-
-        # Read JSON data
-        with open(json_file_path, "r", encoding="utf-8") as f:
-            test_results = json.load(f)
-
-        # Generate HTML report
-        html = f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>RAG System Test Report</title>
-            <style>
-                body {{
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    line-height: 1.6;
-                    margin: 0;
-                    padding: 20px;
-                    background-color: #f5f5f5;
-                }}
-                .container {{
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    background-color: white;
-                    padding: 30px;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                }}
-                .header {{
-                    text-align: center;
-                    margin-bottom: 40px;
-                    padding-bottom: 20px;
-                    border-bottom: 2px solid #eee;
-                }}
-                .header h1 {{
-                    color: #2c3e50;
-                    margin-bottom: 10px;
-                }}
-                .metadata {{
-                    color: #666;
-                    font-size: 0.9em;
-                }}
-                .test-case {{
-                    margin-bottom: 30px;
-                    padding: 20px;
-                    border: 1px solid #e0e0e0;
-                    border-radius: 5px;
-                    background-color: #fff;
-                }}
-                .test-case:hover {{
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                    transition: box-shadow 0.3s ease;
-                }}
-                .question {{
-                    color: #2c3e50;
-                    font-weight: bold;
-                    margin-bottom: 10px;
-                }}
-                .answer {{
-                    color: #34495e;
-                    white-space: pre-wrap;
-                    background-color: #f8f9fa;
-                    padding: 15px;
-                    border-radius: 5px;
-                    margin-top: 10px;
-                }}
-                .stats {{
-                    display: flex;
-                    justify-content: space-around;
-                    margin: 20px 0;
-                    padding: 20px;
-                    background-color: #f8f9fa;
-                    border-radius: 5px;
-                }}
-                .stat-item {{
-                    text-align: center;
-                }}
-                .stat-value {{
-                    font-size: 1.5em;
-                    font-weight: bold;
-                    color: #2c3e50;
-                }}
-                .stat-label {{
-                    color: #666;
-                    font-size: 0.9em;
-                }}
-                @media (max-width: 768px) {{
-                    .container {{
-                        padding: 15px;
-                    }}
-                    .stats {{
-                        flex-direction: column;
-                        gap: 15px;
-                    }}
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>RAG System Test Report</h1>
-                    <div class="metadata">
-                        Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
-                        Test File: {os.path.basename(json_file_path)}
-                    </div>
-                </div>
-
-                <div class="stats">
-                    <div class="stat-item">
-                        <div class="stat-value">{len(test_results)}</div>
-                        <div class="stat-label">Total Test Cases</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">{sum(1 for result in test_results if result.get('answer', '').strip())}</div>
-                        <div class="stat-label">Answered Questions</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">{sum(1 for result in test_results if not result.get('answer', '').strip())}</div>
-                        <div class="stat-label">Unanswered Questions</div>
-                    </div>
-                </div>
-
-                <div class="test-cases">
-        """
-
-        for i, result in enumerate(test_results, 1):
-            html += f"""
-                    <div class="test-case">
-                        <div class="question">Q{i}: {result['question']}</div>
-                        <div class="answer">{result.get('answer', 'No answer provided')}</div>
-                    </div>
-            """
-
-        html += """
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-        if output_html_path:
-            with open(output_html_path, "w", encoding="utf-8") as f:
-                f.write(html)
-            logger.info(f"Test report generated and saved to: {output_html_path}")
-            return None
-        return html
-
     def visualize_embeddings(
         self,
         knowledge_base: FAISS,
@@ -550,7 +386,7 @@ class LocalRAGTool(OwlAgent):
             return messages.content
 
         else:
-            retrieved_docs, reranked_docs = self.retrieve_relevant_chunks(
+            reranked_docs = self.retrieve_relevant_chunks(
                 query=question,
                 knowledge_base=self._vector_stores,
                 reranker=self._reranker,
@@ -561,18 +397,9 @@ class LocalRAGTool(OwlAgent):
         def _encode_text(text: str) -> str:
             return text.encode("ascii", errors="replace").decode("utf-8")
 
-        if reranked_docs is not None:
-            for doc in reranked_docs:
-                logger.debug(
-                    f"Reranked document: {doc['rank']} {doc['score']} {_encode_text(doc['content'][:100])}"
-                )
-            docs_content = "\n\n".join(
-                _encode_text(doc["content"]) for doc in reranked_docs
-            )
-        else:
-            docs_content = "\n\n".join(
-                _encode_text(doc.page_content) for doc in retrieved_docs
-            )
+        docs_content = "\n\n".join(
+            _encode_text(doc.page_content) for doc in reranked_docs
+        )
 
         message_with_question_and_context = self._prompt.format(
             question=question, context=docs_content
@@ -583,11 +410,11 @@ class LocalRAGTool(OwlAgent):
             )
         )
 
-        # logger.debug(f"Final prompt: {currated_message_with_question_and_context}")
+        logger.debug(f"Final prompt: {currated_message_with_question_and_context}")
         messages = [SystemMessage(currated_message_with_question_and_context)]
         messages = self.chat_model.invoke(messages)
 
-        # logger.debug(f"Raw RAG answer: {messages.content}")
+        logger.debug(f"Raw RAG answer: {messages.content}")
         return messages.content
 
     def load_vector_store(
@@ -613,7 +440,7 @@ class LocalRAGTool(OwlAgent):
 
         return KNOWLEDGE_VECTOR_DATABASE
 
-    def retrieve_relevant_chunks(
+    def _retrieve_relevant_chunks(
         self,
         query: str,
         knowledge_base: FAISS,
@@ -666,6 +493,70 @@ class LocalRAGTool(OwlAgent):
         retrieved_docs = retrieved_docs[:num_docs_final]
 
         return retrieved_docs, reranked_docs
+
+    def retrieve_relevant_chunks(
+        self,
+        query: str,
+        knowledge_base: FAISS,
+        reranker: Optional[RAGPretrainedModel] = None,
+        num_retrieved_docs: int = 30,
+        num_docs_final: int = 5,
+    ) -> List[LangchainDocument]:
+        """
+        Retrieve the k most relevant document chunks for a given query.
+
+        Args:
+            query: The user query to find relevant documents for
+            knowledge_base: The vector database containing indexed documents
+            reranker: Optional reranker model to rerank results
+            num_retrieved_docs: Number of initial documents to retrieve
+            num_docs_final: Number of documents to return after reranking
+
+        Returns:
+            List of retrieved and reranked LangchainDocument objects with scores
+        """
+        logger.info(
+            f"Starting retrieval for query: {query} with k={num_retrieved_docs}"
+        )
+        start_time = time.time()
+        retrieved_docs = knowledge_base.similarity_search(
+            query=query, k=num_retrieved_docs
+        )
+        end_time = time.time()
+
+        logger.info(
+            f"{len(retrieved_docs)} documents retrieved in {end_time - start_time:.2f} seconds"
+        )
+
+        # If no reranker, just return top k docs
+        if not reranker:
+            return retrieved_docs[:num_docs_final]
+
+        # Rerank results
+        logger.info("Reranking documents chunks please wait...")
+        start_time = time.time()
+
+        # Create mapping of content to original doc for later matching
+        content_to_doc = {doc.page_content: doc for doc in retrieved_docs}
+
+        # Get reranked results
+        reranked_results = reranker.rerank(
+            query, [doc.page_content for doc in retrieved_docs], k=num_docs_final
+        )
+        end_time = time.time()
+        logger.info(f"Documents reranked in {end_time - start_time:.2f} seconds")
+
+        # Match reranked results back to original docs and add scores
+        reranked_docs = []
+        for rank, result in enumerate(reranked_results):
+            doc = content_to_doc[result["content"]]
+            doc.metadata["rerank_score"] = result["score"]
+            doc.metadata["rerank_position"] = result["rank"]
+            reranked_docs.append(doc)
+
+        logger.debug(f"Top document metadata: {reranked_docs[0].metadata}")
+
+        return reranked_docs
 
 
 class OwlMemoryTool(BaseTool, LocalRAGTool):

@@ -22,6 +22,7 @@ from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from rich.console import Console
+import traceback
 
 logger = logging.getLogger("core")
 
@@ -158,6 +159,7 @@ class OwlAgent(BaseModel):
 
             except Exception as e:
                 logger.error(f"Error invoking tool '{tool_name}': '{e}' ({tool_call})")
+                logger.error(f"Stack trace: '{traceback.format_exc()}'")
 
                 # Create error message
                 error_content = f"Error executing '{tool_name}': '{str(e)}'"

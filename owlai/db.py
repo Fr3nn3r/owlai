@@ -144,6 +144,7 @@ PROMPT_CONFIG = {
     "Your goals is to answer questions from your memory.\n"
     "Use your tool to remember information.\n"
     " - Attempt only one tool executions per query.\n"
+    " - Provide as much details as possible based on the tool response.\n"
     " - Avoid statement like 'how can I help you?', 'how can I assist you?', 'if you need help, let me know'.\n"
     " - Just provide the answer, neither follow up questions nor statements.\n",
     "python-interpreter-v1": "You are a python assistant.\n"
@@ -187,7 +188,7 @@ TOOLS_CONFIG = {
     "owl_system_interpreter": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
-        "max_output_tokens": 4096,
+        "max_tokens": 4096,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
@@ -198,7 +199,7 @@ TOOLS_CONFIG = {
     "owl_memory_tool": {
         "model_provider": "mistralai",
         "model_name": "mistral-large-latest",
-        "max_output_tokens": 4096,
+        "max_tokens": 4096,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
@@ -224,7 +225,7 @@ CONFIG = {
     "system": {
         "model_provider": "openai",
         "model_name": "gpt-3.5-turbo",
-        "max_output_tokens": 200,
+        "max_tokens": 200,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": ["activate_mode", "owl_system_interpreter", "play_song"],
@@ -268,7 +269,7 @@ CONFIG = {
     "identification": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
-        "max_output_tokens": 200,
+        "max_tokens": 200,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": ["activate_mode", "identify_user_with_password"],
@@ -292,7 +293,7 @@ CONFIG = {
     "welcome": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
-        "max_output_tokens": 2049,
+        "max_tokens": 2048,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": ["activate_mode"],
@@ -316,7 +317,7 @@ CONFIG = {
     "qna": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
-        "max_output_tokens": 2049,
+        "max_tokens": 2048,
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": ["owl_memory_tool"],
