@@ -18,7 +18,7 @@ from langchain_core.callbacks import (
     CallbackManagerForToolRun,
 )
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-
+import traceback
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
 
@@ -191,11 +191,13 @@ class LocalRAGTool(OwlAgent):
 
         fig = pd.Series(lengths).hist()
         plt.title("Distribution of document lengths (in count of tokens)")
-        plt.savefig(f"{input_data_folder}/chunk_size_distribution-{filename}.png")
+        file_path = f"{input_data_folder}/chunk_size_distribution-{filename}.png"
+        plt.savefig(file_path)
         plt.close()
         logger.info(
             f"Distribution of document lengths (in count of tokens) saved to chunk_size_distribution-{filename}.png"
         )
+        return file_path
 
     def split_documents(
         self,
@@ -250,6 +252,7 @@ class LocalRAGTool(OwlAgent):
         input_data_folder: str,
         embedding_model: HuggingFaceEmbeddings,
         chunk_size: int = 512,
+        metadata_extractor: Optional[callable] = None,
     ) -> FAISS:
         """
         Loads an existing vector store or creates a new one if it doesn't exist.
@@ -259,6 +262,7 @@ class LocalRAGTool(OwlAgent):
             input_data_folder: Path to the folder containing documents
             embedding_model: The embedding model to use
             chunk_size: Size of text chunks for splitting documents
+            metadata_extractor: Optional callback function for extracting metadata
 
         Returns:
             FAISS vector store
@@ -288,49 +292,13 @@ class LocalRAGTool(OwlAgent):
             )
 
             try:
-                # Load document
-                if filename.endswith(".pdf"):
-                    loader = PyPDFLoader(
-                        file_path=filepath,
-                        extract_images=False,
-                        extraction_mode="plain",
-                    )
-                    docs = loader.load()
-                else:  # .txt files
-                    loader = TextLoader(filepath)
-                    docs = loader.load()
-
-                # Convert to LangchainDocuments
-                current_docs = [
-                    LangchainDocument(
-                        page_content=doc.page_content,
-                        metadata={
-                            "source": doc.metadata["source"],
-                        },
-                    )
-                    for doc in docs
-                ]
-
-                # Analyze document chunks before splitting
-                self.analyze_chunk_size_distribution(
+                split_docs = self.load_and_split_documents(
+                    filepath,
                     input_data_folder,
-                    "pre-split-" + filename,
-                    current_docs,
-                    embedding_model.model_name,
-                )
-
-                # Split documents
-                split_docs = self.split_documents(
+                    filename,
                     chunk_size,
-                    current_docs,
-                    tokenizer_name=embedding_model.model_name,
-                )
-
-                self.analyze_chunk_size_distribution(
-                    input_data_folder,
-                    "post-split-" + filename,
-                    split_docs,
                     embedding_model.model_name,
+                    metadata_extractor,
                 )
 
                 # Create or update vector store
@@ -354,6 +322,7 @@ class LocalRAGTool(OwlAgent):
 
             except Exception as e:
                 logger.error(f"Error processing {filename}: {str(e)}")
+                logger.error(f"Error details: {traceback.format_exc()}")
                 continue
 
         total_time = time.time() - start_time
@@ -364,6 +333,100 @@ class LocalRAGTool(OwlAgent):
         logger.info(f"Vector database saved to {file_path}")
 
         return vector_store
+
+    def load_and_split_documents(
+        self,
+        filepath: str,
+        input_data_folder: str,
+        filename: str,
+        chunk_size: int,
+        model_name: str,
+        metadata_extractor: Optional[callable] = None,
+    ) -> List[LangchainDocument]:
+        """
+        Loads a document file and splits it into chunks.
+
+        Args:
+            filepath: Path to the document file
+            input_data_folder: Folder containing the documents
+            filename: Name of the document file
+            chunk_size: Size of text chunks for splitting
+            model_name: Name of the embedding model for tokenization
+            metadata_extractor: Optional callback function that takes a document and returns
+                                additional metadata as a dictionary to be added to the document
+
+        Returns:
+            List of split LangchainDocument objects
+        """
+        # Load document
+        if filename.endswith(".pdf"):
+            loader = PyPDFLoader(
+                file_path=filepath,
+                extract_images=False,
+                extraction_mode="plain",
+            )
+            docs = loader.load()
+        else:  # .txt files
+            loader = TextLoader(filepath)
+            docs = loader.load()
+
+        # Convert to LangchainDocuments
+        current_docs: List[LangchainDocument] = []
+        for doc in docs:
+            metadata = {
+                "source": doc.metadata["source"],
+            }
+
+            # Call metadata extractor if provided
+            if metadata_extractor:
+                try:
+                    additional_metadata = metadata_extractor(filepath)
+                    if additional_metadata and isinstance(additional_metadata, dict):
+                        metadata.update(additional_metadata)
+                except Exception as e:
+                    logger.error(
+                        f"Error in metadata extractor for {filename}: {str(e)}"
+                    )
+                    logger.error(f"Error details: {traceback.format_exc()}")
+
+            current_docs.append(
+                LangchainDocument(
+                    page_content=doc.page_content,
+                    metadata=metadata,
+                )
+            )
+
+        # Analyze document chunks before splitting
+        pre_split_file = self.analyze_chunk_size_distribution(
+            input_data_folder,
+            "pre-split-" + filename,
+            current_docs,
+            model_name,
+        )
+
+        # Add pre-split distribution file path to metadata
+        for doc in current_docs:
+            doc.metadata["pre_split_distribution"] = pre_split_file
+
+        # Split documents
+        split_docs = self.split_documents(
+            chunk_size,
+            current_docs,
+            tokenizer_name=model_name,
+        )
+
+        # Analyze post-split chunks and add to metadata
+        post_split_file = self.analyze_chunk_size_distribution(
+            input_data_folder,
+            "post-split-" + filename,
+            split_docs,
+            model_name,
+        )
+
+        for i in range(min(5, len(split_docs))):
+            logger.debug(f"Split doc {i}: {split_docs[i].metadata}")
+
+        return split_docs
 
     def rag_question(self, question: str, no_context: bool = False) -> str:
         """
@@ -439,60 +502,6 @@ class LocalRAGTool(OwlAgent):
             logger.error(f"Vector database not found in {file_path}")
 
         return KNOWLEDGE_VECTOR_DATABASE
-
-    def _retrieve_relevant_chunks(
-        self,
-        query: str,
-        knowledge_base: FAISS,
-        reranker: Optional[RAGPretrainedModel] = None,
-        num_retrieved_docs: int = 30,
-        num_docs_final: int = 5,
-    ) -> Tuple[List[LangchainDocument], List[dict[str, Any]]]:
-        """
-        Retrieve the k most relevant document chunks for a given query.
-
-        Args:
-            query: The user query to find relevant documents for
-            knowledge_base: The vector database containing indexed documents
-            k: Number of documents to retrieve (default 5)
-
-        Returns:
-            List of retrieved LangchainDocument objects
-        """
-        logger.info(
-            f"Starting retrieval for query: {query} with k={num_retrieved_docs}"
-        )
-        start_time = time.time()
-        retrieved_docs = knowledge_base.similarity_search(
-            query=query, k=num_retrieved_docs
-        )
-        end_time = time.time()
-
-        logger.info(
-            f"{len(retrieved_docs)} documents retrieved in {end_time - start_time:.2f} seconds"
-        )
-        # logger.debug(f"Top documents: {retrieved_docs[0].page_content}")
-        logger.debug(f"Top document metadata: {retrieved_docs[0].metadata}")
-
-        # Optionally rerank results
-        reranked_docs = None
-        if reranker:
-            logger.info("Reranking documents chunks please wait...")
-            start_time = time.time()
-            relevant_docs_content_only = [
-                doc.page_content for doc in retrieved_docs
-            ]  # Keep only the text
-            reranked_docs = reranker.rerank(
-                query, relevant_docs_content_only, k=num_docs_final
-            )
-            # reranked_docs = [doc["content"] for doc in reranked_docs]
-            end_time = time.time()
-            logger.info(f"Documents reranked in {end_time - start_time:.2f} seconds")
-            # Careful the docs encoding my be crap here
-
-        retrieved_docs = retrieved_docs[:num_docs_final]
-
-        return retrieved_docs, reranked_docs
 
     def retrieve_relevant_chunks(
         self,

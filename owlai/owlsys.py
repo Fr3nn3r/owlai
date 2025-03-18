@@ -2,6 +2,30 @@ import platform
 import psutil
 import json
 import GPUtil
+import time
+import logging
+from contextlib import contextmanager
+
+logging.basicConfig(level=logging.INFO)
+
+
+@contextmanager
+def track_time(event_name: str, execution_log: list):
+    start_time = time.time()
+    logging.debug(f"Started '{event_name}' please wait..")
+    try:
+        yield  # This is where the actual event execution happens
+    finally:
+        elapsed_time = time.time() - start_time
+        logging.info(f"'{event_name}' completed in {elapsed_time:.4f} [s].")
+        execution_log.append(
+            {f"{event_name}_execution_time": f"{elapsed_time:.4f} [s]."}
+        )
+
+
+# Usage
+# with track_time("Data Processing"):
+#    time.sleep(2)  # Simulating a long process
 
 
 def get_system_info():

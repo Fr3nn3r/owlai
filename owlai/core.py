@@ -196,6 +196,7 @@ class OwlAgent(BaseModel):
 
         except Exception as e:
             logger.error(f"Error invoking model '{self.model_name}': '{e}'")
+            logger.error(f"Stack trace: '{traceback.format_exc()}'")
 
     def print_message_history(self):
         sprint(self._message_history)

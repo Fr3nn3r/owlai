@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     from tqdm import tqdm
 
-    from owlai.owlsys import get_system_info
+    from owlai.owlsys import get_system_info, track_time
 
     import fitz  # PyMuPDF
     import re
@@ -96,36 +96,8 @@ if __name__ == "__main__":
 
         datasets = [
             {
-                "input_data_folder": "data/dataset-0000",
-                "questions": [
-                    "Who is Rich Draves?",
-                    "What happened to Paul Graham in the fall of 1992?",
-                    "What was the last result of the AC Milan soccer team?",
-                    "What did Paul Graham do growing up?",
-                    "What did Paul Graham do during his school days?",
-                    "What languages did Paul Graham use?",
-                    "How much exactly was allocated to a tax credit to promote investment in green technologies in the 2023 Canadian federal budget?",
-                    "How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
-                    "What is the color of henry the fourth white horse?",
-                ],
-            },
-            {
-                "input_data_folder": "data/dataset-0001",
-                "questions": [
-                    "Who is Naruto?",
-                    "Provide details about Orochimaru",
-                    "Who is the strongest ninja in the world?",
-                    "How is sasuke's personality",
-                    "Who is the sensei of naruto?",
-                    "What is a sharingan?",
-                    "What is the akatsuki?",
-                    "Who is the first Hokage?",
-                    "What was the last result of the AC Milan soccer team?",
-                    "What is the color of henry the fourth white horse?",
-                ],
-            },
-            {
                 "input_data_folder": "data/dataset-0002",
+                "input_vector_store": "data/dataset-0002/vector_db",
                 "questions": [
                     "Quelles sont les différences essentielles entre la responsabilité contractuelle et délictuelle ?",
                     "Expliquez les conditions de validité d'un contrat et les conséquences juridiques de leur non-respect.",
@@ -146,33 +118,40 @@ if __name__ == "__main__":
                 ],
             },
             {
-                "input_data_folder": "data/dataset-0003",
-                "questions": [
-                    "What is Arakis?",
-                    "Who is Duncan Idaho?",
-                    "Who is the traitor?",
-                    "What are the powers of the Bene Gesserit?",
-                    "How does Paul defeat the Emperor?",
-                ],
-            },
-            {
                 "input_data_folder": "data/dataset-0004",  # dataset 4 droit fiscal
+                "input_vector_store": "data/dataset-0004/vector_db",
                 "questions": [
-                    "Quelles sont les principales obligations fiscales d’une entreprise soumise à l’impôt sur les sociétés (IS) en France ?",
+                    "Quelles sont les principales obligations fiscales d'une entreprise soumise à l'impôt sur les sociétés (IS) en France ?",
                     "Quels sont les critères permettant de déterminer si une opération est soumise à la TVA en France ?",
-                    "Quelles sont les principales conventions fiscales internationales et comment permettent-elles d’éviter la double imposition ?",
-                    "Quels sont les principaux droits et obligations d’une entreprise lors d’un contrôle fiscal ?",
+                    "Quelles sont les principales conventions fiscales internationales et comment permettent-elles d'éviter la double imposition ?",
+                    "Quels sont les principaux droits et obligations d'une entreprise lors d'un contrôle fiscal ?",
                     "Quels sont les recours possibles pour une entreprise contestant un redressement fiscal ?",
                     "Quels sont les principaux impôts applicables aux transmissions de patrimoine en France ?",
                     "Quelles sont les obligations déclaratives en matière de prix de transfert pour les entreprises multinationales ?",
-                    "Comment la notion d’abus de droit fiscal est-elle définie en droit français et quelles en sont les conséquences ?",
+                    "Comment la notion d'abus de droit fiscal est-elle définie en droit français et quelles en sont les conséquences ?",
                     "Quels sont les principaux enjeux de la conformité fiscale pour une entreprise et comment un juriste fiscaliste peut-il y contribuer ?",
-                    "Pouvez-vous nous parler d’une récente réforme fiscale qui a eu un impact significatif sur les entreprises en France ?",
+                    "Pouvez-vous nous parler d'une récente réforme fiscale qui a eu un impact significatif sur les entreprises en France ?",
+                ],
+            },
+            {
+                "input_data_folder": "data/dataset-0005",
+                "input_vector_store": "data/dataset-0005/vector_db",
+                "questions": [
+                    "Quelles sont les principales obligations fiscales d'une entreprise soumise à l'impôt sur les sociétés (IS) en France ?",
+                    "Quels sont les critères permettant de déterminer si une opération est soumise à la TVA en France ?",
+                    "Quelles sont les principales conventions fiscales internationales et comment permettent-elles d'éviter la double imposition ?",
+                    "Quels sont les principaux droits et obligations d'une entreprise lors d'un contrôle fiscal ?",
+                    "Quels sont les recours possibles pour une entreprise contestant un redressement fiscal ?",
+                    "Quels sont les principaux impôts applicables aux transmissions de patrimoine en France ?",
+                    "Quelles sont les obligations déclaratives en matière de prix de transfert pour les entreprises multinationales ?",
+                    "Comment la notion d'abus de droit fiscal est-elle définie en droit français et quelles en sont les conséquences ?",
+                    "Quels sont les principaux enjeux de la conformité fiscale pour une entreprise et comment un juriste fiscaliste peut-il y contribuer ?",
+                    "Pouvez-vous nous parler d'une récente réforme fiscale qui a eu un impact significatif sur les entreprises en France ?",
                 ],
             },
         ]
 
-        dataset = datasets[4]
+        dataset = datasets[2]
 
         # Override the default configuration
         TOOLS_CONFIG["owl_memory_tool"]["input_data_folders"] = []
@@ -187,13 +166,15 @@ if __name__ == "__main__":
 
         input_data_folder = dataset["input_data_folder"]
 
-        KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_or_create_vector_store(
-            input_data_folder, embedding_model
-        )
-
-        now = datetime.now()
-        execution_log.append({"Vector store loaded": str(start_time - now)})
-        start_time = now
+        # Using the metadata extractor function with the vector store creation
+        # this is allowing the caller to specify how the metadata is extracted from the documents
+        # and stored in the vector store
+        with track_time("Vector store loading", execution_log):
+            KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_or_create_vector_store(
+                input_data_folder,
+                embedding_model,
+                metadata_extractor=extract_metadata_fr_law,
+            )
 
         rag_tool._vector_stores = KNOWLEDGE_VECTOR_DATABASE
 
@@ -212,19 +193,13 @@ if __name__ == "__main__":
 
         for i, question in enumerate(questions, 1):
 
-            answer = rag_tool.rag_question(question)
-            logger.info(f"USER QUERY : {question}")
-            logger.info(f"ANSWER : {answer}")
+            with track_time(f"RAG Question {i}", execution_log):
+                answer = rag_tool.rag_question(question)
+                logger.info(f"USER QUERY : {question}")
+                logger.info(f"ANSWER : {answer}")
 
-            now = datetime.now()
-            answer_time = now - start_time
-            start_time = now
-
-            answer_control_llm = gpt.invoke(question).content
-
-            now = datetime.now()
-            answer_time_control_llm = now - start_time
-            start_time = now
+            with track_time(f"Control LLM Question {i}", execution_log):
+                answer_control_llm = gpt.invoke(question).content
 
             qa_results.append(
                 {
@@ -232,15 +207,9 @@ if __name__ == "__main__":
                         "question": question,
                         "answer": answer,
                         "answer_control_llm": answer_control_llm,
-                        "answer_time": str(answer_time),
-                        "answer_time_control_llm": str(answer_time_control_llm),
                     }
                 }
             )
-
-        now = datetime.now()
-        execution_log.append({"Questions answered": str(start_time - now)})
-        execution_log.append({"Total time": str(now - main_start_time)})
 
         qa_results.append({"execution_log": execution_log})
 
