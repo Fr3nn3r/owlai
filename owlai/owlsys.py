@@ -10,18 +10,24 @@ logging.basicConfig(level=logging.INFO)
 
 
 @contextmanager
-def track_time(event_name: str, execution_log: list = None):
+def track_time(event_name: str, execution_log: dict = None):
     start_time = time.time()
     logging.debug(f"Started '{event_name}' please wait..")
     try:
         yield  # This is where the actual event execution happens
     finally:
         elapsed_time = time.time() - start_time
-        logging.info(f"'{event_name}' completed in {elapsed_time:.4f} [s].")
+        hours, rem = divmod(elapsed_time, 3600)
+        minutes, seconds = divmod(rem, 60)
+        human_readable_time = ""
+        if hours > 0:
+            human_readable_time += f"{int(hours)}h "
+        if minutes > 0:
+            human_readable_time += f"{int(minutes)}m "
+        human_readable_time += f"{seconds:.3f}s"
+        logging.info(f"'{event_name}' completed in {human_readable_time}.")
         if execution_log:
-            execution_log.append(
-                {f"{event_name}_execution_time": f"{elapsed_time:.4f} [s]."}
-            )
+            execution_log[event_name] = f"Execution time: {human_readable_time}."
 
 
 # Usage

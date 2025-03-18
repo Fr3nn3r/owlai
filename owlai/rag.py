@@ -67,7 +67,7 @@ class LocalRAGTool(OwlAgent):
 
         self._vector_stores = None
         for ifolder in input_data_folders:
-            current_store = self.load_or_create_vector_store(ifolder, self._embeddings)
+            current_store = self.load_dataset(ifolder, self._embeddings)
             if self._vector_stores is None:
                 self._vector_stores = current_store
             else:
@@ -437,59 +437,61 @@ class LocalRAGTool(OwlAgent):
 
         return split_docs
 
-    def rag_question(self, question: str, no_context: bool = False) -> str:
+    def rag_question(self, question: str) -> dict:
         """
         Runs the RAG query against the vector store and returns an answer to the question.
         Args:
             question: a string containing the question to answer.
+
+        Returns:
+            A dictionary containing the question, answer, and metadata.
         """
 
+        answer = {"question": question}
+
+        # TODO: think about passing parameters in a structure
         k = TOOLS_CONFIG["owl_memory_tool"]["num_retrieved_docs"]
         k_final = TOOLS_CONFIG["owl_memory_tool"]["num_docs_final"]
 
-        # If no_context is True, the question is answered without context (for testing purposes)
-        if no_context:
-            message_with_question_no_context = self._prompt.format(
-                question=question, context=""
+        reranked_docs, metadata = self.retrieve_relevant_chunks(
+            query=question,
+            knowledge_base=self._vector_stores,
+            reranker=self._reranker,
+            num_retrieved_docs=k,
+            num_docs_final=k_final,
+        )
+
+        with track_time("Model invocation with RAG context", metadata):
+
+            def _encode_text(text: str) -> str:
+                return text.encode("ascii", errors="replace").decode("utf-8")
+
+            docs_content = "\n\n".join(
+                _encode_text(doc.page_content) for doc in reranked_docs
             )
-            messages = [SystemMessage(message_with_question_no_context)]
+
+            docs_content = "\n\n".join(
+                [
+                    f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', 'Unknown Source')}] \"{doc.page_content}\""
+                    for idx, doc in enumerate(reranked_docs)
+                ]
+            )
+
+            rag_prompt = self._prompt.format(question=question, context=docs_content)
+            rag_prompt = rag_prompt.encode("ascii", errors="replace").decode("utf-8")
+
+            logger.debug(f"Final prompt: {rag_prompt}")
+            messages = [SystemMessage(rag_prompt)]
             messages = self.chat_model.invoke(messages)
 
-            return messages.content
-
-        else:
-            reranked_docs = self.retrieve_relevant_chunks(
-                query=question,
-                knowledge_base=self._vector_stores,
-                reranker=self._reranker,
-                num_retrieved_docs=k,
-                num_docs_final=k_final,
-            )
-
-        def _encode_text(text: str) -> str:
-            return text.encode("ascii", errors="replace").decode("utf-8")
-
-        docs_content = "\n\n".join(
-            _encode_text(doc.page_content) for doc in reranked_docs
-        )
-
-        message_with_question_and_context = self._prompt.format(
-            question=question, context=docs_content
-        )
-        currated_message_with_question_and_context = (
-            message_with_question_and_context.encode("ascii", errors="replace").decode(
-                "utf-8"
-            )
-        )
-
-        logger.debug(f"Final prompt: {currated_message_with_question_and_context}")
-        messages = [SystemMessage(currated_message_with_question_and_context)]
-        messages = self.chat_model.invoke(messages)
-
         logger.debug(f"Raw RAG answer: {messages.content}")
-        return messages.content
 
-    def _load_vector_store(
+        answer["answer"] = messages.content
+        answer["metadata"] = metadata
+
+        return answer
+
+    def load_vector_store(
         self, input_data_folder: str, embedding_model: HuggingFaceEmbeddings
     ):
         file_path = f"{input_data_folder}/vector_db"
@@ -519,7 +521,7 @@ class LocalRAGTool(OwlAgent):
         reranker: Optional[RAGPretrainedModel] = None,
         num_retrieved_docs: int = 30,
         num_docs_final: int = 5,
-    ) -> List[LangchainDocument]:
+    ) -> Tuple[List[LangchainDocument], dict]:
         """
         Retrieve the k most relevant document chunks for a given query.
 
@@ -531,50 +533,69 @@ class LocalRAGTool(OwlAgent):
             num_docs_final: Number of documents to return after reranking
 
         Returns:
-            List of retrieved and reranked LangchainDocument objects with scores
+            Tuple containing a list of retrieved and reranked LangchainDocument objects with scores and metadata
         """
-        logger.info(
+        logger.debug(
             f"Starting retrieval for query: {query} with k={num_retrieved_docs}"
         )
-        start_time = time.time()
-        retrieved_docs = knowledge_base.similarity_search(
-            query=query, k=num_retrieved_docs
-        )
-        end_time = time.time()
-
-        logger.info(
-            f"{len(retrieved_docs)} documents retrieved in {end_time - start_time:.2f} seconds"
-        )
+        metadata = {
+            "query": query,
+            "k": num_retrieved_docs,
+            "num_docs_final": num_docs_final,
+        }
+        with track_time(f"Documents search for {query}", metadata):
+            retrieved_docs = knowledge_base.similarity_search(
+                query=query, k=num_retrieved_docs
+            )
+            metadata["num_docs_retrieved"] = len(retrieved_docs)
+            metadata["retrieved_docs"] = [
+                (
+                    doc.metadata.get("title", "No title"),
+                    doc.metadata.get("source", "Unknown source"),
+                )
+                for doc in retrieved_docs
+            ]
+            logger.debug(f"{len(retrieved_docs)} documents retrieved")
 
         # If no reranker, just return top k docs
         if not reranker:
-            return retrieved_docs[:num_docs_final]
+            return retrieved_docs[:num_docs_final], metadata
 
         # Rerank results
-        logger.info("Reranking documents chunks please wait...")
-        start_time = time.time()
+        logger.debug("Reranking documents chunks please wait...")
 
-        # Create mapping of content to original doc for later matching
-        content_to_doc = {doc.page_content: doc for doc in retrieved_docs}
+        with track_time("Documents chunks reranking", metadata):
 
-        # Get reranked results
-        reranked_results = reranker.rerank(
-            query, [doc.page_content for doc in retrieved_docs], k=num_docs_final
-        )
-        end_time = time.time()
-        logger.info(f"Documents reranked in {end_time - start_time:.2f} seconds")
+            # Create mapping of content to original doc for later matching
+            content_to_doc = {doc.page_content: doc for doc in retrieved_docs}
 
-        # Match reranked results back to original docs and add scores
-        reranked_docs = []
-        for rank, result in enumerate(reranked_results):
-            doc = content_to_doc[result["content"]]
-            doc.metadata["rerank_score"] = result["score"]
-            doc.metadata["rerank_position"] = result["rank"]
-            reranked_docs.append(doc)
+            # Get reranked results
+            reranked_results = reranker.rerank(
+                query, [doc.page_content for doc in retrieved_docs], k=num_docs_final
+            )
+
+            # Match reranked results back to original docs and add scores to doc metadata
+            reranked_docs = []
+            for rank, result in enumerate(reranked_results):
+                doc = content_to_doc[result["content"]]
+                doc.metadata["rerank_score"] = result["score"]
+                doc.metadata["rerank_position"] = result["rank"]
+                reranked_docs.append(doc)
+
+            # Add reranked docs metadata to metadata (you can't have too much metadata)
+            metadata["reranked_docs"] = [
+                (
+                    doc.metadata.get("title", "No title"),
+                    doc.metadata.get("source", "Unknown source"),
+                    doc.metadata.get("rerank_score", 0.0),
+                    doc.metadata.get("rerank_position", -1),
+                )
+                for doc in reranked_docs
+            ]
 
         logger.debug(f"Top document metadata: {reranked_docs[0].metadata}")
 
-        return reranked_docs
+        return reranked_docs, metadata
 
 
 class OwlMemoryTool(BaseTool, LocalRAGTool):
@@ -590,7 +611,8 @@ class OwlMemoryTool(BaseTool, LocalRAGTool):
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> Tuple[Union[List[Dict[str, str]], str], Dict]:
         """Use the tool."""
-        return self.rag_question(query)
+        answer = self.rag_question(query)
+        return answer["answer"]
 
     async def _arun(
         self,
@@ -598,4 +620,5 @@ class OwlMemoryTool(BaseTool, LocalRAGTool):
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> Tuple[Union[List[Dict[str, str]], str], Dict]:
         """Use the tool asynchronously."""
-        return self.rag_question(query)
+        answer = self.rag_question(query)
+        return answer["answer"]

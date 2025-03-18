@@ -87,19 +87,12 @@ if __name__ == "__main__":
 
     def main():
 
-        execution_log = []
+        execution_log = {}
 
-        now = datetime.now()
-        start_time = main_start_time
-        start_date_time = now.strftime("%Y-%m-%d-%Hh%Mm%f")[:-3]
-        execution_log.append({"Start time": str(start_date_time)})
-        execution_log.append({"Application started": str(start_time - now)})
-        start_time = now
-
-        datasets = {
-            "first_try": {
-                "input_data_folder": "data/dataset-0002",
-                "questions": [
+        with track_time("Loading resources", execution_log):
+            # Define question sets
+            question_sets = {
+                "general_law_questions": [
                     "Quelles sont les différences essentielles entre la responsabilité contractuelle et délictuelle ?",
                     "Expliquez les conditions de validité d'un contrat et les conséquences juridiques de leur non-respect.",
                     "Comment s'articule le mécanisme de la prescription en matière civile ? Citez des exemples de délais spécifiques.",
@@ -117,10 +110,7 @@ if __name__ == "__main__":
                     "Face à un conflit d'intérêts potentiel, quelle démarche adopteriez-vous ?",
                     "Explique la gestion en france de la confusion des peines",
                 ],
-            },
-            "fiscal_law_only": {
-                "input_data_folder": "data/dataset-0004",  # dataset 4 droit fiscal
-                "questions": [
+                "fiscal_law_questions": [
                     "Quelles sont les principales obligations fiscales d'une entreprise soumise à l'impôt sur les sociétés (IS) en France ?",
                     "Quels sont les critères permettant de déterminer si une opération est soumise à la TVA en France ?",
                     "Quelles sont les principales conventions fiscales internationales et comment permettent-elles d'éviter la double imposition ?",
@@ -132,67 +122,72 @@ if __name__ == "__main__":
                     "Quels sont les principaux enjeux de la conformité fiscale pour une entreprise et comment un juriste fiscaliste peut-il y contribuer ?",
                     "Pouvez-vous nous parler d'une récente réforme fiscale qui a eu un impact significatif sur les entreprises en France ?",
                 ],
-            },
-            "larger_dataset": {
-                "input_data_folder": "data/dataset-0005",
-                "questions": [
-                    "Quelles sont les principales obligations fiscales d'une entreprise soumise à l'impôt sur les sociétés (IS) en France ?",
-                    "Quels sont les critères permettant de déterminer si une opération est soumise à la TVA en France ?",
-                    "Quelles sont les principales conventions fiscales internationales et comment permettent-elles d'éviter la double imposition ?",
-                    "Quels sont les principaux droits et obligations d'une entreprise lors d'un contrôle fiscal ?",
-                    "Quels sont les recours possibles pour une entreprise contestant un redressement fiscal ?",
-                    "Quels sont les principaux impôts applicables aux transmissions de patrimoine en France ?",
-                    "Quelles sont les obligations déclaratives en matière de prix de transfert pour les entreprises multinationales ?",
-                    "Comment la notion d'abus de droit fiscal est-elle définie en droit français et quelles en sont les conséquences ?",
-                    "Quels sont les principaux enjeux de la conformité fiscale pour une entreprise et comment un juriste fiscaliste peut-il y contribuer ?",
-                    "Pouvez-vous nous parler d'une récente réforme fiscale qui a eu un impact significatif sur les entreprises en France ?",
-                ],
-            },
-            "load_only": {
-                "input_data_folder": "data/dataset-0005",  # for loading only
-                "questions": [],
-            },
-        }
+            }
 
-        dataset = datasets["load_only"]
+            # Define datasets with references to question sets
+            datasets = {
+                "first_try": {
+                    "input_data_folder": "data/dataset-0002",
+                    "questions": question_sets["general_law_questions"],
+                },
+                "fiscal_law_only": {
+                    "input_data_folder": "data/dataset-0004",  # dataset 4 droit fiscal
+                    "questions": question_sets["fiscal_law_questions"],
+                },
+                "larger_dataset": {
+                    "input_data_folder": "data/dataset-0005",
+                    "questions": question_sets["general_law_questions"]
+                    + question_sets["fiscal_law_questions"],
+                },
+                "load_only": {
+                    "input_data_folder": "data/dataset-0005",  # for loading only
+                    "questions": [],
+                },
+            }
 
-        # Override the default configuration
-        TOOLS_CONFIG["owl_memory_tool"]["input_data_folders"] = []
-        TOOLS_CONFIG["owl_memory_tool"]["model_name"] = "gpt-4o"
-        TOOLS_CONFIG["owl_memory_tool"]["model_provider"] = "openai"
-        TOOLS_CONFIG["owl_memory_tool"]["system_prompt"] = PROMPT_CONFIG["rag-fr-v0"]
-        TOOLS_CONFIG["owl_memory_tool"]["control_llm"] = "gpt-4o"
+            dataset = datasets["load_only"]
 
-        rag_tool = LocalRAGTool(**TOOLS_CONFIG["owl_memory_tool"])
+            # Override the default configuration
+            TOOLS_CONFIG["owl_memory_tool"]["input_data_folders"] = []
+            TOOLS_CONFIG["owl_memory_tool"]["model_name"] = "gpt-4o"
+            TOOLS_CONFIG["owl_memory_tool"]["model_provider"] = "openai"
+            TOOLS_CONFIG["owl_memory_tool"]["system_prompt"] = PROMPT_CONFIG[
+                "rag-fr-v0"
+            ]
+            TOOLS_CONFIG["owl_memory_tool"]["control_llm"] = "gpt-4o"
 
-        embedding_model = rag_tool._embeddings
+            rag_tool = LocalRAGTool(**TOOLS_CONFIG["owl_memory_tool"])
 
-        input_data_folder = dataset["input_data_folder"]
+            embedding_model = rag_tool._embeddings
 
-        # Using the metadata extractor function with the vector store creation
-        # this is allowing the caller to specify how the metadata is extracted from the documents
-        # and stored in the vector store
-        with track_time("Vector store loading", execution_log):
-            KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_dataset(
-                input_data_folder,
-                embedding_model,
-                metadata_extractor=extract_metadata_fr_law,
-            )
+            input_data_folder = dataset["input_data_folder"]
 
-        rag_tool._vector_stores = KNOWLEDGE_VECTOR_DATABASE
+            # Using the metadata extractor function with the vector store creation
+            # this is allowing the caller to specify how the metadata is extracted from the documents
+            # and stored in the vector store
+            with track_time("Vector store loading", execution_log):
+                KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_dataset(
+                    input_data_folder,
+                    embedding_model,
+                    metadata_extractor=extract_metadata_fr_law,
+                )
 
-        questions = dataset["questions"]
+            rag_tool._vector_stores = KNOWLEDGE_VECTOR_DATABASE
 
-        qa_results = []
-        qa_results.append({"system_info": get_system_info()})
+            questions = dataset["questions"]
 
-        qa_results.append({"test_parameters": TOOLS_CONFIG["owl_memory_tool"]})
+            qa_results = {}
+            qa_results["system_info"] = get_system_info()
 
-        qa_results.append({"dataset": dataset})
+            qa_results["test_parameters"] = TOOLS_CONFIG["owl_memory_tool"]
 
-        test_report_filename = f"{start_date_time}-qa_results.json"
+            qa_results["dataset"] = dataset
 
-        gpt = init_chat_model("gpt-4o", temperature=0.1, max_tokens=4096)
+            # Generate a filename for the test report using the current date and time
+            start_date_time = time.strftime("%Y%m%d-%H%M%S")
+            test_report_filename = f"{start_date_time}-qa_results.json"
+
+            gpt = init_chat_model("gpt-4o", temperature=0.1, max_tokens=4096)
 
         for i, question in enumerate(questions, 1):
 
@@ -204,17 +199,14 @@ if __name__ == "__main__":
             with track_time(f"Control LLM Question {i}", execution_log):
                 answer_control_llm = gpt.invoke(question).content
 
-            qa_results.append(
-                {
-                    f"Test #{i}": {
-                        "question": question,
-                        "answer": answer,
-                        "answer_control_llm": answer_control_llm,
-                    }
-                }
-            )
+            qa_results[f"Test #{i}"] = {
+                "question": question,
+                "answer": answer["answer"],
+                "answer_control_llm": answer_control_llm,
+                "metadata": answer["metadata"],
+            }
 
-        qa_results.append({"execution_log": execution_log})
+        qa_results["execution_log"] = execution_log
 
         # Save results to JSON file
         output_file = os.path.join(input_data_folder, test_report_filename)
