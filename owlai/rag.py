@@ -26,6 +26,7 @@ from .core import OwlAgent
 from .db import TOOLS_CONFIG
 import warnings
 from tqdm import tqdm
+from owlai.owlsys import track_time
 
 warnings.simplefilter("ignore", category=FutureWarning)
 import sentence_transformers
@@ -162,7 +163,11 @@ class LocalRAGTool(OwlAgent):
         return fig
 
     def analyze_chunk_size_distribution(
-        self, input_data_folder, filename, docs, model_name="thenlper/gte-small"
+        self,
+        input_data_folder,
+        filename,
+        docs: List[LangchainDocument],
+        model_name="thenlper/gte-small",
     ):
         """
         Analyze and visualize document lengths.
@@ -179,9 +184,9 @@ class LocalRAGTool(OwlAgent):
         info_message = (
             f"Model's max sequence size: '{max_seq_len}' Document count: '{len(docs)}'"
         )
-        logger.info(info_message)
+        logger.debug(info_message)
 
-        # Analyze token lengths
+        # Analyze token lengths (should init tokenizer once... whatever)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         lengths = [len(tokenizer.encode(doc.page_content)) for doc in docs]
 
@@ -190,12 +195,14 @@ class LocalRAGTool(OwlAgent):
         import pandas as pd
 
         fig = pd.Series(lengths).hist()
-        plt.title("Distribution of document lengths (in count of tokens)")
-        file_path = f"{input_data_folder}/chunk_size_distribution-{filename}.png"
+        plt.title(f"Distribution of page lengths [tokens] for {filename}")
+        file_dir = f"{input_data_folder}/images"
+        file_path = f"{file_dir}/chunk_size_distribution-{filename}.png"
+        os.makedirs(file_dir, exist_ok=True)
         plt.savefig(file_path)
         plt.close()
-        logger.info(
-            f"Distribution of document lengths (in count of tokens) saved to chunk_size_distribution-{filename}.png"
+        logger.debug(
+            f"Distribution of document lengths (in count of tokens) saved to {file_path}"
         )
         return file_path
 
@@ -230,7 +237,7 @@ class LocalRAGTool(OwlAgent):
             result = text_splitter.split_documents([doc])
             docs_processed += result
 
-        logger.info(
+        logger.debug(
             f"Splitted {len(knowledge_base)} documents into {len(docs_processed)} chunks"
         )
         # Remove duplicates
@@ -241,13 +248,13 @@ class LocalRAGTool(OwlAgent):
                 unique_texts[doc.page_content] = True
                 docs_processed_unique.append(doc)
 
-        logger.info(
+        logger.debug(
             f"Removed {len(docs_processed) - len(docs_processed_unique)} duplicates from {len(docs_processed)} chunks"
         )
 
         return docs_processed_unique
 
-    def load_or_create_vector_store(
+    def load_dataset(
         self,
         input_data_folder: str,
         embedding_model: HuggingFaceEmbeddings,
@@ -255,8 +262,9 @@ class LocalRAGTool(OwlAgent):
         metadata_extractor: Optional[callable] = None,
     ) -> FAISS:
         """
-        Loads an existing vector store or creates a new one if it doesn't exist.
-        Processes documents one by one to manage memory usage.
+        Loads an existing vector store if exists in the input_data_folder.
+        Processes documents and adds them to the store.
+        Processed documents are moved to the 'in_store' folder
 
         Args:
             input_data_folder: Path to the folder containing documents
@@ -267,74 +275,72 @@ class LocalRAGTool(OwlAgent):
         Returns:
             FAISS vector store
         """
-        file_path = f"{input_data_folder}/vector_db"
-
-        if os.path.exists(file_path):
-            logger.info(f"Loading existing vector database from: {file_path}")
-            return self.load_vector_store(input_data_folder, embedding_model)
-
-        logger.info("Creating new vector database...")
+        vector_db_file_path = f"{input_data_folder}/vector_db"
+        in_store_folder = f"{input_data_folder}/in_store"
         vector_store = None
+
+        if os.path.exists(vector_db_file_path):
+            logger.info(f"Loading existing vector database from: {vector_db_file_path}")
+            vector_store = self.load_vector_store(input_data_folder, embedding_model)
 
         # Get list of PDF and text files
         files = [
             f for f in os.listdir(input_data_folder) if f.endswith((".pdf", ".txt"))
         ]
-        logger.info(f"Found {len(files)} documents to process in {input_data_folder}")
-
-        start_time = time.time()
+        logger.info(
+            f"Found {len(files)} new documents to process in {input_data_folder}"
+        )
 
         # Process each file individually
-        for filename in tqdm(files, desc="Processing documents"):
-            filepath = os.path.join(input_data_folder, filename)
-            logger.info(
-                f"Processing file: {filename} size: {os.path.getsize(filepath)}"
-            )
-
-            try:
-                split_docs = self.load_and_split_documents(
-                    filepath,
-                    input_data_folder,
-                    filename,
-                    chunk_size,
-                    embedding_model.model_name,
-                    metadata_extractor,
-                )
-
-                # Create or update vector store
-                if vector_store is None:
-                    vector_store = FAISS.from_documents(
-                        split_docs,
-                        embedding_model,
-                        distance_strategy=DistanceStrategy.COSINE,
-                    )
-                else:
-                    batch_store = FAISS.from_documents(
-                        split_docs,
-                        embedding_model,
-                        distance_strategy=DistanceStrategy.COSINE,
-                    )
-                    vector_store.merge_from(batch_store)
-
+        with track_time(f"{len(files)} document(s) loading into vector database"):
+            for filename in files:
+                filepath = os.path.join(input_data_folder, filename)
                 logger.info(
-                    f"Processed {filename} in {time.time() - start_time:.2f} seconds"
+                    f"Processing file: {filename} size: {os.path.getsize(filepath)}"
                 )
 
-            except Exception as e:
-                logger.error(f"Error processing {filename}: {str(e)}")
-                logger.error(f"Error details: {traceback.format_exc()}")
-                continue
+                try:
+                    split_docs = self.load_and_split_document(
+                        filepath,
+                        input_data_folder,
+                        filename,
+                        chunk_size,
+                        embedding_model.model_name,
+                        metadata_extractor,
+                    )
 
-        total_time = time.time() - start_time
-        logger.info(f"Vector database created in {total_time:.2f} seconds")
+                    # Create or update vector store
+                    if vector_store is None:
+                        vector_store = FAISS.from_documents(
+                            split_docs,
+                            embedding_model,
+                            distance_strategy=DistanceStrategy.COSINE,
+                        )
+                    else:
+                        batch_store = FAISS.from_documents(
+                            split_docs,
+                            embedding_model,
+                            distance_strategy=DistanceStrategy.COSINE,
+                        )
+                        vector_store.merge_from(batch_store)
+
+                    # Move processed file to 'in_store' folder
+                    in_store_folder = os.path.join(input_data_folder, "in_store")
+                    os.makedirs(in_store_folder, exist_ok=True)
+                    os.rename(filepath, os.path.join(in_store_folder, filename))
+
+                except Exception as e:
+                    logger.error(f"Error processing {filename}: {str(e)}")
+                    logger.error(f"Error details: {traceback.format_exc()}")
+                    continue
 
         # Save to disk
-        vector_store.save_local(file_path)
-        logger.info(f"Vector database saved to {file_path}")
+        vector_store.save_local(vector_db_file_path)
+        logger.info(f"Vector database saved to {vector_db_file_path}")
 
         return vector_store
 
-    def load_and_split_documents(
+    def load_and_split_document(
         self,
         filepath: str,
         input_data_folder: str,
@@ -358,6 +364,17 @@ class LocalRAGTool(OwlAgent):
         Returns:
             List of split LangchainDocument objects
         """
+        # Call metadata extractor if provided
+        metadata = {}
+        if metadata_extractor:
+            try:
+                additional_metadata = metadata_extractor(filepath)
+                if additional_metadata and isinstance(additional_metadata, dict):
+                    metadata.update(additional_metadata)
+            except Exception as e:
+                logger.error(f"Error in metadata extractor for {filename}: {str(e)}")
+                logger.error(f"Error details: {traceback.format_exc()}")
+
         # Load document
         if filename.endswith(".pdf"):
             loader = PyPDFLoader(
@@ -365,55 +382,46 @@ class LocalRAGTool(OwlAgent):
                 extract_images=False,
                 extraction_mode="plain",
             )
-            docs = loader.load()
+            docs = loader.lazy_load()
         else:  # .txt files
             loader = TextLoader(filepath)
-            docs = loader.load()
+            docs = loader.lazy_load()
 
         # Convert to LangchainDocuments
-        current_docs: List[LangchainDocument] = []
-        for doc in docs:
-            metadata = {
-                "source": doc.metadata["source"],
-            }
+        total_pages = metadata.get("num_pages", 0)
+        loaded_docs: List[LangchainDocument] = []
+        with track_time(f"Loading document: '{filename}'"):
+            for page_number, doc in tqdm(
+                enumerate(docs),
+                total=total_pages,
+                desc=f"Loading pages from {filename}",
+            ):
+                # logger.debug(f"Loading page {page_number} of {total_pages}")
+                metadata.update(doc.metadata)
+                metadata["source"] = f"{filename}:{page_number}"
 
-            # Call metadata extractor if provided
-            if metadata_extractor:
-                try:
-                    additional_metadata = metadata_extractor(filepath)
-                    if additional_metadata and isinstance(additional_metadata, dict):
-                        metadata.update(additional_metadata)
-                except Exception as e:
-                    logger.error(
-                        f"Error in metadata extractor for {filename}: {str(e)}"
+                loaded_docs.append(
+                    LangchainDocument(
+                        page_content=doc.page_content,
+                        metadata=metadata,
                     )
-                    logger.error(f"Error details: {traceback.format_exc()}")
-
-            current_docs.append(
-                LangchainDocument(
-                    page_content=doc.page_content,
-                    metadata=metadata,
                 )
-            )
+
+        # Split documents
+        split_docs = self.split_documents(
+            chunk_size,
+            loaded_docs,
+            tokenizer_name=model_name,
+        )
 
         # Analyze document chunks before splitting
         pre_split_file = self.analyze_chunk_size_distribution(
             input_data_folder,
             "pre-split-" + filename,
-            current_docs,
+            loaded_docs,
             model_name,
         )
-
-        # Add pre-split distribution file path to metadata
-        for doc in current_docs:
-            doc.metadata["pre_split_distribution"] = pre_split_file
-
-        # Split documents
-        split_docs = self.split_documents(
-            chunk_size,
-            current_docs,
-            tokenizer_name=model_name,
-        )
+        metadata["pre_split_file"] = pre_split_file
 
         # Analyze post-split chunks and add to metadata
         post_split_file = self.analyze_chunk_size_distribution(
@@ -422,6 +430,7 @@ class LocalRAGTool(OwlAgent):
             split_docs,
             model_name,
         )
+        metadata["post_split_file"] = post_split_file
 
         for i in range(min(5, len(split_docs))):
             logger.debug(f"Split doc {i}: {split_docs[i].metadata}")
@@ -480,7 +489,7 @@ class LocalRAGTool(OwlAgent):
         logger.debug(f"Raw RAG answer: {messages.content}")
         return messages.content
 
-    def load_vector_store(
+    def _load_vector_store(
         self, input_data_folder: str, embedding_model: HuggingFaceEmbeddings
     ):
         file_path = f"{input_data_folder}/vector_db"

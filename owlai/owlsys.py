@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 @contextmanager
-def track_time(event_name: str, execution_log: list):
+def track_time(event_name: str, execution_log: list = None):
     start_time = time.time()
     logging.debug(f"Started '{event_name}' please wait..")
     try:
@@ -18,9 +18,10 @@ def track_time(event_name: str, execution_log: list):
     finally:
         elapsed_time = time.time() - start_time
         logging.info(f"'{event_name}' completed in {elapsed_time:.4f} [s].")
-        execution_log.append(
-            {f"{event_name}_execution_time": f"{elapsed_time:.4f} [s]."}
-        )
+        if execution_log:
+            execution_log.append(
+                {f"{event_name}_execution_time": f"{elapsed_time:.4f} [s]."}
+            )
 
 
 # Usage

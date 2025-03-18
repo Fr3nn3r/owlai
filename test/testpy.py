@@ -1,9 +1,9 @@
 import fitz  # PyMuPDF
 import re
+from langchain_community.document_loaders import PyPDFLoader
 
 
-def extract_footer(pdf_path):
-    doc = fitz.open(pdf_path)
+def extract_footer(doc):
     footers = []
 
     for page_num in range(len(doc)):
@@ -30,10 +30,17 @@ def extract_metadata(pdf_path):
     Returns:
         dict: Dictionary containing title, last_modification, and doc_generated_on
     """
+    doc = fitz.open(pdf_path)
+
     # Get footer from the first page
-    footers = extract_footer(pdf_path)
+    footers = extract_footer(doc)
     if not footers:
-        return {"title": "", "last_modification": "", "doc_generated_on": ""}
+        return {
+            "title": "",
+            "last_modification": "",
+            "doc_generated_on": "",
+            "num_pages": 0,
+        }
 
     footer = footers[0][1]
 
@@ -48,16 +55,58 @@ def extract_metadata(pdf_path):
             "title": title,
             "last_modification": last_modification,
             "doc_generated_on": doc_generated_on,
+            "num_pages": len(doc),
         }
 
-    return {"title": "", "last_modification": "", "doc_generated_on": ""}
+    return {
+        "title": "",
+        "last_modification": "",
+        "doc_generated_on": "",
+        "num_pages": 0,
+    }
 
 
+import os
+import asyncio
+from typing import List
+
+
+async def process_file(pdf_path: str) -> List:
+    print(f"Processing {pdf_path}")
+    metadata = extract_metadata(pdf_path)
+    print(metadata)
+
+    loader = PyPDFLoader(
+        file_path=pdf_path, extract_images=False, extraction_mode="plain"
+    )
+    print(f"Starting PDF loading for {pdf_path}...")
+
+    docs = []
+    for page_number, doc in enumerate(loader.lazy_load()):
+        print(f"{pdf_path} loaded page {page_number + 1}")
+        docs.append(doc)
+
+    print(f"PDF loading complete for {pdf_path}")
+    return docs
+
+
+async def process_files_in_batches(files: List[str], batch_size: int = 5):
+    for i in range(0, len(files), batch_size):
+        batch = files[i : i + batch_size]
+        tasks = []
+        for f in batch:
+            if f.endswith((".pdf", ".txt")):
+                pdf_path = f"data/dataset-0005/{f}"
+                tasks.append(asyncio.create_task(process_file(pdf_path)))
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
+
+# Get list of files
+files = os.listdir("data/dataset-0005/")
+
+# Run the async processing
+asyncio.run(process_files_in_batches(files))
 # Path to your PDF
 # pdf_path = "data/dataset-0004/LEGITEXT000006069576.pdf"
-pdf_path = "data/dataset-0004/LEGITEXT000006069577 (1).pdf"
-
-# Example usage of extract_metadata function
-metadata = extract_metadata(pdf_path)
-print("\nExtracted metadata:")
-print(metadata)

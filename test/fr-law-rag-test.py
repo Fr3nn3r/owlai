@@ -34,8 +34,7 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("ragtool")
 
-    def extract_footer_fr_law(pdf_path):
-        doc = fitz.open(pdf_path)
+    def extract_footer(doc):
         footers = []
 
         for page_num in range(len(doc)):
@@ -53,7 +52,7 @@ if __name__ == "__main__":
 
     def extract_metadata_fr_law(pdf_path):
         """
-        Extract metadata from a PDF file footer (french law from legifrance.gouv.fr).
+        Extract metadata from a PDF file footer (file expected to follow french law convention).
 
         Args:
             pdf_path (str): Path to the PDF file
@@ -61,10 +60,12 @@ if __name__ == "__main__":
         Returns:
             dict: Dictionary containing title, last_modification, and doc_generated_on
         """
+        doc = fitz.open(pdf_path)
+
         # Get footer from the first page
-        footers = extract_footer_fr_law(pdf_path)
+        footers = extract_footer(doc)
         if not footers:
-            return {"title": "", "last_modification": "", "doc_generated_on": ""}
+            raise ValueError(f"No footer found in the document '{pdf_path}'")
 
         footer = footers[0][1]
 
@@ -79,9 +80,10 @@ if __name__ == "__main__":
                 "title": title,
                 "last_modification": last_modification,
                 "doc_generated_on": doc_generated_on,
+                "num_pages": len(doc),
             }
 
-        return {"title": "", "last_modification": "", "doc_generated_on": ""}
+        raise ValueError(f"footer '{footer}' not matching french law convention.")
 
     def main():
 
@@ -94,10 +96,9 @@ if __name__ == "__main__":
         execution_log.append({"Application started": str(start_time - now)})
         start_time = now
 
-        datasets = [
-            {
+        datasets = {
+            "first_try": {
                 "input_data_folder": "data/dataset-0002",
-                "input_vector_store": "data/dataset-0002/vector_db",
                 "questions": [
                     "Quelles sont les différences essentielles entre la responsabilité contractuelle et délictuelle ?",
                     "Expliquez les conditions de validité d'un contrat et les conséquences juridiques de leur non-respect.",
@@ -117,9 +118,8 @@ if __name__ == "__main__":
                     "Explique la gestion en france de la confusion des peines",
                 ],
             },
-            {
+            "fiscal_law_only": {
                 "input_data_folder": "data/dataset-0004",  # dataset 4 droit fiscal
-                "input_vector_store": "data/dataset-0004/vector_db",
                 "questions": [
                     "Quelles sont les principales obligations fiscales d'une entreprise soumise à l'impôt sur les sociétés (IS) en France ?",
                     "Quels sont les critères permettant de déterminer si une opération est soumise à la TVA en France ?",
@@ -133,9 +133,8 @@ if __name__ == "__main__":
                     "Pouvez-vous nous parler d'une récente réforme fiscale qui a eu un impact significatif sur les entreprises en France ?",
                 ],
             },
-            {
+            "larger_dataset": {
                 "input_data_folder": "data/dataset-0005",
-                "input_vector_store": "data/dataset-0005/vector_db",
                 "questions": [
                     "Quelles sont les principales obligations fiscales d'une entreprise soumise à l'impôt sur les sociétés (IS) en France ?",
                     "Quels sont les critères permettant de déterminer si une opération est soumise à la TVA en France ?",
@@ -149,14 +148,18 @@ if __name__ == "__main__":
                     "Pouvez-vous nous parler d'une récente réforme fiscale qui a eu un impact significatif sur les entreprises en France ?",
                 ],
             },
-        ]
+            "load_only": {
+                "input_data_folder": "data/dataset-0005",  # for loading only
+                "questions": [],
+            },
+        }
 
-        dataset = datasets[2]
+        dataset = datasets["load_only"]
 
         # Override the default configuration
         TOOLS_CONFIG["owl_memory_tool"]["input_data_folders"] = []
-        TOOLS_CONFIG["owl_memory_tool"]["model_name"] = "mistral-large-latest"
-        TOOLS_CONFIG["owl_memory_tool"]["model_provider"] = "mistralai"
+        TOOLS_CONFIG["owl_memory_tool"]["model_name"] = "gpt-4o"
+        TOOLS_CONFIG["owl_memory_tool"]["model_provider"] = "openai"
         TOOLS_CONFIG["owl_memory_tool"]["system_prompt"] = PROMPT_CONFIG["rag-fr-v0"]
         TOOLS_CONFIG["owl_memory_tool"]["control_llm"] = "gpt-4o"
 
@@ -170,7 +173,7 @@ if __name__ == "__main__":
         # this is allowing the caller to specify how the metadata is extracted from the documents
         # and stored in the vector store
         with track_time("Vector store loading", execution_log):
-            KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_or_create_vector_store(
+            KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_dataset(
                 input_data_folder,
                 embedding_model,
                 metadata_extractor=extract_metadata_fr_law,
