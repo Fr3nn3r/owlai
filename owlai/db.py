@@ -213,6 +213,15 @@ PROMPT_CONFIG = {
     "4. Fournissez une réponse claire, concise et bien structurée. \n"
     "5. Si pertinent, expliquez brièvement votre raisonnement en vous appuyant sur le contexte. \n"
     "Réponse : \n",
+    ##################################
+    "rag-fr-control-llm-v1": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur votre mémoire.\n"
+    "### Requête : \n"
+    "{question}\n"
+    "### Instructions : \n"
+    "1. Ne générez pas d'informations inexactes.\n"
+    "2. Fournissez une réponse claire, concise et bien structurée. \n"
+    "3. Si pertinent, expliquez brièvement votre raisonnement en vous appuyant sur votre mémoire. \n"
+    "Réponse : \n",
 }
 
 

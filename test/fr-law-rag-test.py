@@ -141,22 +141,44 @@ if __name__ == "__main__":
                 },
                 "load_only": {
                     "input_data_folder": "data/dataset-0005",  # for loading only
-                    "questions": [],
+                    "questions": [
+                        "Explique la gestion en france de la confusion des peines"
+                    ],
                 },
             }
 
-            dataset = datasets["load_only"]
+            dataset = datasets["larger_dataset"]
 
-            # Override the default configuration
-            TOOLS_CONFIG["owl_memory_tool"]["input_data_folders"] = []
-            TOOLS_CONFIG["owl_memory_tool"]["model_name"] = "gpt-4o"
-            TOOLS_CONFIG["owl_memory_tool"]["model_provider"] = "openai"
-            TOOLS_CONFIG["owl_memory_tool"]["system_prompt"] = PROMPT_CONFIG[
-                "rag-fr-v0"
-            ]
-            TOOLS_CONFIG["owl_memory_tool"]["control_llm"] = "gpt-4o"
+            test_parameters = {
+                "reader_llm": {
+                    "model_provider": "mistralai",
+                    "model_name": "mistral-large-latest",
+                    "max_tokens": 4096,
+                    "temperature": 0.1,
+                    "context_size": 4096,
+                    "system_prompt": PROMPT_CONFIG["rag-fr-v1"],
+                },
+                "retriever": {
+                    "num_retrieved_docs": 30,
+                    "num_docs_final": 5,
+                    "embeddings_model_name": "thenlper/gte-small",
+                    "reranker_name": "colbert-ir/colbertv2.0",
+                },
+                "control_llm": {
+                    "model_provider": "openai",
+                    "model_name": "gpt-4o",
+                    "max_tokens": 4096,
+                    "temperature": 0.1,
+                    "context_size": 4096,
+                    "system_prompt": PROMPT_CONFIG["rag-fr-v1"],
+                },
+            }
 
-            rag_tool = LocalRAGTool(**TOOLS_CONFIG["owl_memory_tool"])
+            # Override the default configuration (should be done in the test parameters)
+            TOOLS_CONFIG["owl_memory_tool"]["num_retrieved_docs"] = 30
+            TOOLS_CONFIG["owl_memory_tool"]["num_docs_final"] = 5
+
+            rag_tool = LocalRAGTool(**test_parameters["reader_llm"])
 
             embedding_model = rag_tool._embeddings
 
@@ -179,7 +201,7 @@ if __name__ == "__main__":
             qa_results = {}
             qa_results["system_info"] = get_system_info()
 
-            qa_results["test_parameters"] = TOOLS_CONFIG["owl_memory_tool"]
+            qa_results["test_parameters"] = test_parameters
 
             qa_results["dataset"] = dataset
 
@@ -194,10 +216,16 @@ if __name__ == "__main__":
             with track_time(f"RAG Question {i}", execution_log):
                 answer = rag_tool.rag_question(question)
                 logger.info(f"USER QUERY : {question}")
-                logger.info(f"ANSWER : {answer}")
+                logger.info(f"ANSWER : {answer['answer']}")
 
             with track_time(f"Control LLM Question {i}", execution_log):
-                answer_control_llm = gpt.invoke(question).content
+                # Build the prompt from the template and the question
+                control_prompt = PROMPT_CONFIG["rag-fr-control-llm-v1"].format(
+                    question=question
+                )
+                # Invoke the model with the formatted prompt
+                answer_control_llm = gpt.invoke(control_prompt).content
+                logger.info(f"CONTROL LLM ANSWER : {answer_control_llm}")
 
             qa_results[f"Test #{i}"] = {
                 "question": question,

@@ -543,18 +543,18 @@ class LocalRAGTool(OwlAgent):
             "k": num_retrieved_docs,
             "num_docs_final": num_docs_final,
         }
-        with track_time(f"Documents search for {query}", metadata):
+        with track_time(f"Documents search", metadata):
             retrieved_docs = knowledge_base.similarity_search(
                 query=query, k=num_retrieved_docs
             )
             metadata["num_docs_retrieved"] = len(retrieved_docs)
-            metadata["retrieved_docs"] = [
-                (
-                    doc.metadata.get("title", "No title"),
-                    doc.metadata.get("source", "Unknown source"),
-                )
-                for doc in retrieved_docs
-            ]
+            metadata["retrieved_docs"] = {
+                i: {
+                    "title": doc.metadata.get("title", "No title"),
+                    "source": doc.metadata.get("source", "Unknown source"),
+                }
+                for i, doc in enumerate(retrieved_docs)
+            }
             logger.debug(f"{len(retrieved_docs)} documents retrieved")
 
         # If no reranker, just return top k docs
@@ -583,15 +583,15 @@ class LocalRAGTool(OwlAgent):
                 reranked_docs.append(doc)
 
             # Add reranked docs metadata to metadata (you can't have too much metadata)
-            metadata["reranked_docs"] = [
-                (
-                    doc.metadata.get("title", "No title"),
-                    doc.metadata.get("source", "Unknown source"),
-                    doc.metadata.get("rerank_score", 0.0),
-                    doc.metadata.get("rerank_position", -1),
-                )
-                for doc in reranked_docs
-            ]
+            metadata["reranked_docs"] = {
+                i: {
+                    "title": doc.metadata.get("title", "No title"),
+                    "source": doc.metadata.get("source", "Unknown source"),
+                    "rerank_score": doc.metadata.get("rerank_score", 0.0),
+                    "rerank_position": doc.metadata.get("rerank_position", -1),
+                }
+                for i, doc in enumerate(reranked_docs)
+            }
 
         logger.debug(f"Top document metadata: {reranked_docs[0].metadata}")
 

@@ -25,14 +25,9 @@ def track_time(event_name: str, execution_log: dict = None):
         if minutes > 0:
             human_readable_time += f"{int(minutes)}m "
         human_readable_time += f"{seconds:.3f}s"
-        logging.info(f"'{event_name}' completed in {human_readable_time}.")
+        logging.info(f"'{event_name}' - completed in {human_readable_time}.")
         if execution_log:
-            execution_log[event_name] = f"Execution time: {human_readable_time}."
-
-
-# Usage
-# with track_time("Data Processing"):
-#    time.sleep(2)  # Simulating a long process
+            execution_log[f"{event_name} - execution time"] = human_readable_time
 
 
 def get_system_info():
