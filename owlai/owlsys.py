@@ -6,7 +6,7 @@ import time
 import logging
 from contextlib import contextmanager
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("owlsys")
 
 
 @contextmanager

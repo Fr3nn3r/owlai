@@ -231,7 +231,6 @@ if __name__ == "__main__":
                 "question": question,
                 "answer": answer["answer"],
                 "answer_control_llm": answer_control_llm,
-                "metadata": answer["metadata"],
             }
 
         qa_results["execution_log"] = execution_log

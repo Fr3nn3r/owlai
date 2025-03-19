@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "owlai"
+version = "0.1.0"
+description = "OwlAI: AI agent with RAG capabilities"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "OwlAI Team"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "langchain",
+    "langchain-anthropic",
+    "langchain-openai",
+    "langchain-core",
+    "langchain-text-splitters",
+    "langgraph",
+    "langchain-huggingface",
+    "langchain-chroma",
+    "pydantic",
+    "openai",
+    "anthropic",
+    "numpy",
+    "torch",
+    "torchaudio",
+    "rich",
+    "python-dotenv",
+    "PyYAML",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+]
+tts = [
+    "coqui-tts",
+    "pyttsx3",
+    "edge-tts",
+    "elevenlabs",
+    "gTTS",
+]
+spotify = [
+    "spotipy",
+]
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["owlai"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py" 

@@ -1,0 +1,21 @@
+# Project Structure
+
+Root
+  - owlai: main python package source folder. The code in this folder is meant to be modular, resuable, and unit tested
+  - test: source folder containing experiements and code to test and try things out until it gets moved to the owlai package
+  - scripts: contains generated scripts that are used to run the tests and experiments
+  - data: contains data files for the tests and experiments
+  - docs: contains documentation for the project
+  - .gitignore: git ignore file
+  - .vscode: vscode config folder
+  - .env: environment variables file
+  - logs: contains logs for the project
+  - tests: contains tests for the project
+  - requirements.txt: requirements file
+  - setup.py: setup file
+  - pyproject.toml: pyproject file
+  - README.md: readme file
+
+# Python
+
+
