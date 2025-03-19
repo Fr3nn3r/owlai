@@ -4,7 +4,7 @@
 # -"-"-
 print("Loading core module")
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union, cast
 from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
@@ -13,6 +13,8 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.language_models import LanguageModelInput
 import logging.config
 import logging
 from langchain_core.tools import BaseTool
@@ -48,7 +50,7 @@ class OwlAgent(BaseModel):
     callable_tools: List[BaseTool] = []
 
     # Private attribute
-    _chat_model_cache: BaseChatModel = None
+    _chat_model_cache: Any = None
     _tool_dict: Dict[str, BaseTool] = {}
     _message_history: List[BaseMessage] = []
 
@@ -61,19 +63,28 @@ class OwlAgent(BaseModel):
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
-            logger.info(
+            logger.debug(
                 f"Chat model initialized: {self.model_name} {self.model_provider} {self.temperature} {self.max_tokens}"
             )
         return self._chat_model_cache
 
-    def init_callable_tools(self, tools: List[BaseTool]):
+    def init_callable_tools(self, tools: List[Any]):
+        """Initialize callable tools with the provided tools list."""
         self.callable_tools = tools
         self._chat_model_cache = self.chat_model.bind_tools(tools)
         for tool in tools:
             self._tool_dict[tool.name] = tool
         return self._chat_model_cache
 
-    def _token_count(self, message: AIMessage):
+    def _token_count(self, message: Union[AIMessage, BaseMessage]):
+        if not isinstance(message, AIMessage) or not hasattr(
+            message, "response_metadata"
+        ):
+            logger.warning(
+                "Cannot count tokens: message is not an AIMessage or lacks response_metadata"
+            )
+            return 0
+
         metadata = message.response_metadata
         # Should get rid of model_provider dependend code ------------- should be a util function outside owlagent
         if self.model_provider == "openai":
@@ -184,19 +195,25 @@ class OwlAgent(BaseModel):
             response = self.chat_model.invoke(self._message_history)
             self.append_message(response)  # Add model response to history
 
-            self._process_tool_calls(response)
+            # Only process tool calls if response is AIMessage
+            if isinstance(response, AIMessage):
+                self._process_tool_calls(response)
 
-            if response.tool_calls:  # If tools were called, invoke the model again
-                response = self.chat_model.invoke(self._message_history)
-                self.append_message(response)  # Add model response to history
-                # logger.debug(response.content)  # Log the model response
+                if (
+                    hasattr(response, "tool_calls") and response.tool_calls
+                ):  # If tools were called, invoke the model again
+                    response = self.chat_model.invoke(self._message_history)
+                    self.append_message(response)  # Add model response to history
+                    # logger.debug(response.content)  # Log the model response
 
-            self._total_tokens = self._token_count(response)
-            return response.content  # Return the model response
+                self._total_tokens = self._token_count(response)
+
+            return str(response.content)  # Return the model response as string
 
         except Exception as e:
             logger.error(f"Error invoking model '{self.model_name}': '{e}'")
             logger.error(f"Stack trace: '{traceback.format_exc()}'")
+            return f"Error: {str(e)}"
 
     def print_message_history(self):
         sprint(self._message_history)
@@ -246,7 +263,7 @@ class OwlAIAgent:
         max_tokens: int = 2048,
         context_size: int = 4096,
         tools: List[BaseTool] = [],
-        system_prompt: str = None,
+        system_prompt: Optional[str] = None,
     ):
         self.model_provider = model_provider
         self.model_name = model_name
@@ -263,12 +280,18 @@ class OwlAIAgent:
         )
 
         self.state_memory = MemorySaver()
-        self.state_config = {"configurable": {"thread_id": str(id(self))}}
+        self.state_config = cast(
+            RunnableConfig, {"configurable": {"thread_id": str(id(self))}}
+        )
 
         self.agent_graph = create_react_agent(
             self.chat_model,
             self.tools,
-            prompt=SystemMessage(self.system_prompt),
+            prompt=(
+                SystemMessage(content="")
+                if self.system_prompt is None
+                else SystemMessage(content=self.system_prompt)
+            ),
             checkpointer=self.state_memory,
         )
 

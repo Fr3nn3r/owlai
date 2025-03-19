@@ -1,5 +1,5 @@
 print("Loading rag module")
-from typing import Optional, List, Tuple, Any
+from typing import Optional, List, Tuple, Any, Callable
 import os
 import time
 import logging
@@ -9,9 +9,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage
+from langchain_core.runnables import RunnableConfig
 from ragatouille import RAGPretrainedModel
 from pydantic import BaseModel, Field
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, ArgsSchema
 from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
@@ -30,13 +31,18 @@ from owlai.owlsys import track_time
 
 warnings.simplefilter("ignore", category=FutureWarning)
 import sentence_transformers
+from sentence_transformers import util
 
-sentence_transformers.util.tqdm = lambda x, *args, **kwargs: x
+# Replace tqdm with a no-op function to avoid progress bars
+sentence_transformers.SentenceTransformer.encode = lambda *args, **kwargs: args[
+    0
+].encode(*args, **kwargs)
 
 logger = logging.getLogger("ragtool")
 
 
 class OwlMemoryInput(BaseModel):
+    """Input schema for OwlMemoryTool."""
 
     query: str = Field(
         description="a natural language question to answer from the knowledge base"
@@ -68,10 +74,11 @@ class LocalRAGTool(OwlAgent):
         self._vector_stores = None
         for ifolder in input_data_folders:
             current_store = self.load_dataset(ifolder, self._embeddings)
-            if self._vector_stores is None:
-                self._vector_stores = current_store
-            else:
-                self._vector_stores.merge_from(current_store)
+            if current_store is not None:
+                if self._vector_stores is None:
+                    self._vector_stores = current_store
+                else:
+                    self._vector_stores.merge_from(current_store)
 
         if self._vector_stores is None:
             logger.warning(
@@ -79,88 +86,6 @@ class LocalRAGTool(OwlAgent):
             )
         else:
             logger.info(f"Loaded dataset stores: {input_data_folders}")
-
-    def visualize_embeddings(
-        self,
-        knowledge_base: FAISS,
-        docs_processed: List[LangchainDocument],
-        user_query: str,
-        query_vector: List[float],
-    ):
-        """
-        Visualize document embeddings and query vector in 2D space using PaCMAP.
-
-        Args:
-            knowledge_base: The FAISS vector store
-            docs_processed: List of processed documents
-            user_query: The query string
-            query_vector: The query's embedding vector
-        """
-        import pacmap
-        import numpy as np
-        import pandas as pd
-        import plotly.express as px
-
-        embedding_projector = pacmap.PaCMAP(
-            n_components=2, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, random_state=1
-        )
-
-        embeddings_2d = [
-            list(knowledge_base.index.reconstruct_n(idx, 1)[0])
-            for idx in range(len(docs_processed))
-        ] + [query_vector]
-
-        # Fit the data
-        documents_projected = embedding_projector.fit_transform(
-            np.array(embeddings_2d), init="pca"
-        )
-
-        df = pd.DataFrame.from_dict(
-            [
-                {
-                    "x": documents_projected[i, 0],
-                    "y": documents_projected[i, 1],
-                    "source": docs_processed[i].metadata["source"].split("/")[1],
-                    "extract": docs_processed[i].page_content[:100] + "...",
-                    "symbol": "circle",
-                    "size_col": 4,
-                }
-                for i in range(len(docs_processed))
-            ]
-            + [
-                {
-                    "x": documents_projected[-1, 0],
-                    "y": documents_projected[-1, 1],
-                    "source": "User query",
-                    "extract": user_query,
-                    "size_col": 100,
-                    "symbol": "star",
-                }
-            ]
-        )
-
-        # Visualize the embedding
-        fig = px.scatter(
-            df,
-            x="x",
-            y="y",
-            color="source",
-            hover_data="extract",
-            size="size_col",
-            symbol="symbol",
-            color_discrete_map={"User query": "black"},
-            width=1000,
-            height=700,
-        )
-        fig.update_traces(
-            marker=dict(opacity=1, line=dict(width=0, color="DarkSlateGrey")),
-            selector=dict(mode="markers"),
-        )
-        fig.update_layout(
-            legend_title_text="<b>Chunk source</b>",
-            title="<b>2D Projection of Chunk Embeddings via PaCMAP</b>",
-        )
-        return fig
 
     def analyze_chunk_size_distribution(
         self,
@@ -259,8 +184,8 @@ class LocalRAGTool(OwlAgent):
         input_data_folder: str,
         embedding_model: HuggingFaceEmbeddings,
         chunk_size: int = 512,
-        metadata_extractor: Optional[callable] = None,
-    ) -> FAISS:
+        metadata_extractor: Optional[Callable] = None,
+    ) -> Optional[FAISS]:
         """
         Loads an existing vector store if exists in the input_data_folder.
         Processes documents and adds them to the store.
@@ -273,7 +198,7 @@ class LocalRAGTool(OwlAgent):
             metadata_extractor: Optional callback function for extracting metadata
 
         Returns:
-            FAISS vector store
+            FAISS vector store or None if no documents were processed
         """
         vector_db_file_path = f"{input_data_folder}/vector_db"
         in_store_folder = f"{input_data_folder}/in_store"
@@ -335,8 +260,11 @@ class LocalRAGTool(OwlAgent):
                     continue
 
         # Save to disk
-        vector_store.save_local(vector_db_file_path)
-        logger.info(f"Vector database saved to {vector_db_file_path}")
+        if vector_store is not None:
+            vector_store.save_local(vector_db_file_path)
+            logger.info(f"Vector database saved to {vector_db_file_path}")
+        else:
+            logger.warning("No vector store to save")
 
         return vector_store
 
@@ -347,7 +275,7 @@ class LocalRAGTool(OwlAgent):
         filename: str,
         chunk_size: int,
         model_name: str,
-        metadata_extractor: Optional[callable] = None,
+        metadata_extractor: Optional[Callable] = None,
     ) -> List[LangchainDocument]:
         """
         Loads a document file and splits it into chunks.
@@ -437,7 +365,7 @@ class LocalRAGTool(OwlAgent):
 
         return split_docs
 
-    def rag_question(self, question: str) -> dict:
+    def rag_question(self, question: str) -> Dict[str, Any]:
         """
         Runs the RAG query against the vector store and returns an answer to the question.
         Args:
@@ -447,7 +375,7 @@ class LocalRAGTool(OwlAgent):
             A dictionary containing the question, answer, and metadata.
         """
 
-        answer = {"question": question}
+        answer: Dict[str, Any] = {"question": question}
 
         # TODO: think about passing parameters in a structure
         k = TOOLS_CONFIG["owl_memory_tool"]["num_retrieved_docs"]
@@ -486,15 +414,16 @@ class LocalRAGTool(OwlAgent):
 
         logger.debug(f"Raw RAG answer: {messages.content}")
 
-        answer["answer"] = messages.content
+        answer["answer"] = str(messages.content) if messages.content is not None else ""
         answer["metadata"] = metadata
 
         return answer
 
     def load_vector_store(
         self, input_data_folder: str, embedding_model: HuggingFaceEmbeddings
-    ):
+    ) -> Optional[FAISS]:
         file_path = f"{input_data_folder}/vector_db"
+        KNOWLEDGE_VECTOR_DATABASE = None
 
         if os.path.exists(file_path):
             logger.info(f"Loading the vector database from disk: {file_path}")
@@ -517,7 +446,7 @@ class LocalRAGTool(OwlAgent):
     def retrieve_relevant_chunks(
         self,
         query: str,
-        knowledge_base: FAISS,
+        knowledge_base: Optional[FAISS],
         reranker: Optional[RAGPretrainedModel] = None,
         num_retrieved_docs: int = 30,
         num_docs_final: int = 5,
@@ -543,6 +472,11 @@ class LocalRAGTool(OwlAgent):
             "k": num_retrieved_docs,
             "num_docs_final": num_docs_final,
         }
+
+        if knowledge_base is None:
+            logger.warning("Knowledge base is None, returning empty results")
+            return [], metadata
+
         with track_time(f"Documents search", metadata):
             retrieved_docs = knowledge_base.similarity_search(
                 query=query, k=num_retrieved_docs
@@ -598,27 +532,53 @@ class LocalRAGTool(OwlAgent):
         return reranked_docs, metadata
 
 
-class OwlMemoryTool(BaseTool, LocalRAGTool):
+class OwlMemoryTool(BaseTool):
     """Tool that retrieves information from the owl memory base"""
 
     name: str = "owl_memory_tool"
     description: str = "Gets answers from the knowledge base"
     args_schema: Type[BaseModel] = OwlMemoryInput
+    _rag_tool = None
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Create the RAG tool component instead of inheriting from it
+        self._rag_tool = LocalRAGTool(**kwargs)
+
+    def invoke(
+        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
+        """Process tool inputs according to BaseTool pattern."""
+        if isinstance(input, dict) and "query" in input:
+            return self._run(input["query"])
+        elif isinstance(input, str):
+            return self._run(input)
+        else:
+            return self._run(str(input))
+
+    # For OwlAgent compatibility
+    def message_invoke(self, message: str) -> str:
+        """Handle invoke calls from OwlAgent pattern."""
+        return self._run(message)
 
     def _run(
         self,
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> Tuple[Union[List[Dict[str, str]], str], Dict]:
+    ) -> str:
         """Use the tool."""
-        answer = self.rag_question(query)
+        if self._rag_tool is None:
+            return "Error: RAG tool is not initialized"
+        answer = self._rag_tool.rag_question(query)
         return answer["answer"]
 
     async def _arun(
         self,
         query: str,
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> Tuple[Union[List[Dict[str, str]], str], Dict]:
+    ) -> str:
         """Use the tool asynchronously."""
-        answer = self.rag_question(query)
+        if self._rag_tool is None:
+            return "Error: RAG tool is not initialized"
+        answer = self._rag_tool.rag_question(query)
         return answer["answer"]

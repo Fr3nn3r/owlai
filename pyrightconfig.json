@@ -1,0 +1,30 @@
+{
+  "include": ["src"],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    "temp",
+    "tmp",
+    "logs"
+  ],
+  "ignore": ["src/tmp"],
+  "defineConstant": {
+    "DEBUG": true
+  },
+  "typeCheckingMode": "off",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "reportPrivateImportUsage": false,
+  "pythonVersion": "3.12",
+  "pythonPlatform": "All",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["src"],
+  "reportGeneralTypeIssues": "information",
+  "reportOptionalMemberAccess": "information",
+  "reportOptionalCall": "information",
+  "reportOptionalIterable": "information",
+  "reportOptionalOperand": "information"
+}

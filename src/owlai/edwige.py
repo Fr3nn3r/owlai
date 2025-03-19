@@ -87,13 +87,25 @@ if __name__ == "__main__":
             logger = logging.getLogger("main")
             logger.info(f"Application started in {time.time() - start_time} seconds")
             speak = False
+            last_agent = None
+            history = None
 
             edwige = AgentManager()
             while True:
 
                 focus_agent = edwige.get_focus_owl()
-                default_prompts = edwige.get_default_prompts()
-                history = InMemoryHistory(reversed(default_prompts + ["exit"]))
+                if last_agent is None:
+                    last_agent = focus_agent
+                    default_prompts = edwige.get_default_prompts()
+                    history = InMemoryHistory(
+                        list(reversed(default_prompts + ["exit"]))
+                    )
+                elif last_agent != focus_agent:
+                    default_prompts = edwige.get_default_prompts()
+                    history = InMemoryHistory(
+                        list(reversed(default_prompts + ["exit"]))
+                    )
+                    last_agent = focus_agent
 
                 help_message = """quit     - Quit the program
     exit     - Exit the program
@@ -140,13 +152,13 @@ if __name__ == "__main__":
 
                 if user_message.lower() == "reload":
                     # Updated imports to match new structure
-                    importlib.reload(owlai.memory.config.db)
-                    importlib.reload(owlai.system.tools)
-                    importlib.reload(owlai.core.agent)
+                    # importlib.reload(owlai.memory.config.db)
+                    # importlib.reload(owlai.system.tools)
+                    # importlib.reload(owlai.core.agent)
                     # importlib.reload(owlai.spotify)
                     # importlib.reload(owlai.ttsengine)
-                    edwige = AgentManager()
-                    logger.info("Reloaded owlai package")
+                    # edwige = AgentManager()
+                    logger.warning("Not Implemented")
                     continue
 
                 if user_message.lower() == "focus":

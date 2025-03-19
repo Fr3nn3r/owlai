@@ -5,12 +5,13 @@ import GPUtil
 import time
 import logging
 from contextlib import contextmanager
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger("owlsys")
 
 
 @contextmanager
-def track_time(event_name: str, execution_log: dict = None):
+def track_time(event_name: str, execution_log: Optional[Dict[str, Any]] = None):
     start_time = time.time()
     logging.debug(f"Started '{event_name}' please wait..")
     try:

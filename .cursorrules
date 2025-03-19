@@ -11,13 +11,13 @@ At the moment, and in the short term, OwlAI is a python based framework for buil
 - The core of the application must be independent from model implementations (i.e. underlying model provider). This is currently achieved by using the langchain framework whenever possible.
 - The application must be modular and reusable.
 - Configuration must be externalized from the codebase as much as possible. Currently, the configuration is done using a db.py file that contains the configuration. This is a temporary solution and will be replaced with a more robust configuration management system in the future.
-- The owlai.system package is responsible for controlling the local machine and all systems controlled by the OwlAI framework.
-- The owlai.core package is responsible for abstracting away any implementation specific code (i.e. model provider specific code, memory provider specific code, etc.), and providing the base owlai agent implementation. It should be possible for the user to depend only on the owlai.core package and not on any other package. However it should be possible to override any implementation with a custom implementation.
-- The owlai.memory package is responsible for providing a memory system that can be used by the OwlAI framework i.e. for storing and retrieving information whether it is from a database, a file, or from a web search, a rag system, etc.
-- The owlai.memory.config package is responsible for providing the overall system configuration. For now is is done in the db.py file in this package.
-- The owlai.memory package is responsible for providing a set of tools that can be used by the OwlAI framework.
-- The owlai.system package is responsible for providing a set of tools that can be used by the OwlAI framework.
-- For now it is ok to have implementation specific code in the owlai.memory and owlai.system packages as long as it is properly documented.
+#- The owlai.system package is responsible for controlling the local machine and all systems controlled by the OwlAI framework.
+#- The owlai.core package is responsible for abstracting away any implementation specific code (i.e. model provider specific code, memory provider specific code, etc.), and providing the base owlai agent implementation. It should be possible for the user to depend only on the owlai.core package and not on any other package. However it should be possible to override any implementation with a custom implementation.
+#- The owlai.memory package is responsible for providing a memory system that can be used by the OwlAI framework i.e. for storing and retrieving information whether it is from a database, a file, or from a web search, a rag system, etc.
+#- The owlai.memory.config package is responsible for providing the overall system configuration. For now is is done in the db.py file in this package.
+#- The owlai.memory package is responsible for providing a set of tools that can be used by the OwlAI framework.
+#- The owlai.system package is responsible for providing a set of tools that can be used by the OwlAI framework.
+#- For now it is ok to have implementation specific code in the owlai.memory and owlai.system packages as long as it is properly documented.
 
 - edwige.py is meant to be the main entry point of the application. It should depend only on the owlai.core package. But for it is ok if it has a few more dependencies.
 

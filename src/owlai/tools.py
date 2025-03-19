@@ -22,8 +22,6 @@ focus_role: str = "qna"
 
 class ToolBox:
 
-    toolbox_hook: Callable = None
-    toolbox_hook_rag_engine: Callable = None
     user_context: str = "CONTEXT: "
 
     _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
@@ -49,7 +47,7 @@ class ToolBox:
         return self.mapping[key]
 
     @tool
-    def identify_user_with_password(user_password: str) -> str:
+    def identify_user_with_password(self, user_password: str) -> str:
         """
         Checks wether the password is valid.
         A valid password is required and sufficient to identify the user.
@@ -75,7 +73,7 @@ class ToolBox:
             return "Invalid password"
 
     @tool
-    def activate_mode(mode: str):
+    def activate_mode(self, mode: str):
         """
         Activates a different owlai mode.
         Args:
@@ -91,7 +89,9 @@ class ToolBox:
         return message
 
     @tool
-    def play_song(song_name: str = "Fly Away", artist_name: str = "Lenny Kravitz"):
+    def play_song(
+        self, song_name: str = "Fly Away", artist_name: str = "Lenny Kravitz"
+    ):
         """
         Plays a song.
         Args:
