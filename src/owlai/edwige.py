@@ -8,29 +8,27 @@ if __name__ == "__main__":
     import time
 
     start_time = time.time()
-    print(f"Application loading please wait...")
+    print(f"Application loading please wait    ...")
 
     import logging
     import logging.config
     import yaml
 
     from .ttsengine import hoot
-    from .db import CONFIG
     import importlib
     from dotenv import load_dotenv
 
     from typing import Dict, Any
     from logging import Logger
+
+    # Updated imports using the new structure
     from .db import CONFIG
-    from .core import (
-        OwlAgent,
-        OwlAIAgent,
-    )
+    from .core import OwlAgent, OwlAIAgent
+    from .db import get_default_queries_by_role
+    from .tools import ToolBox
 
     from pydantic import ValidationError
 
-    from .db import get_default_queries_by_role
-    from .tools import ToolBox
     import owlai
     from prompt_toolkit import prompt
     from prompt_toolkit.history import InMemoryHistory
@@ -141,9 +139,10 @@ if __name__ == "__main__":
                     continue
 
                 if user_message.lower() == "reload":
-                    importlib.reload(owlai.db)
-                    importlib.reload(owlai.tools)
-                    importlib.reload(owlai.core)
+                    # Updated imports to match new structure
+                    importlib.reload(owlai.memory.config.db)
+                    importlib.reload(owlai.system.tools)
+                    importlib.reload(owlai.core.agent)
                     # importlib.reload(owlai.spotify)
                     # importlib.reload(owlai.ttsengine)
                     edwige = AgentManager()

@@ -18,11 +18,11 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "langchain",
-    "langchain-anthropic",
-    "langchain-openai",
     "langchain-core",
     "langchain-text-splitters",
+    "langchain-community",
+    "langchain-openai",
+    "langchain-anthropic",
     "langgraph",
     "langchain-huggingface",
     "langchain-chroma",
@@ -35,6 +35,8 @@ dependencies = [
     "rich",
     "python-dotenv",
     "PyYAML",
+    "transformers",
+    "sentence-transformers",
 ]
 
 [project.optional-dependencies]

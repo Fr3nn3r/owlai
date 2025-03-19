@@ -56,6 +56,10 @@ loggers:
     level: DEBUG
     handlers: [console, file]
     propagate: no
+  rag:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: no
     
 root:
   level: DEBUG

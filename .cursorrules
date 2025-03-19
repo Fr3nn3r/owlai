@@ -1,21 +1,32 @@
+# Project Name
+OwlAI
+
+# Project Vision
+OwlAI is a framework that aims at enabling computer programs to become sentient people. This is the long term vision. This will be achieved by building a framework that allows for the creation of AI agents that can learn, reason, remember, make decisions, cooperate and be aware of their own existence.
+
+# Project Overview
+At the moment, and in the short term, OwlAI is a python based framework for building, running and testing AI agents.
+
+# Core design principles
+- The core of the application must be independent from model implementations (i.e. underlying model provider). This is currently achieved by using the langchain framework whenever possible.
+- The application must be modular and reusable.
+- Configuration must be externalized from the codebase as much as possible. Currently, the configuration is done using a db.py file that contains the configuration. This is a temporary solution and will be replaced with a more robust configuration management system in the future.
+- The owlai.system package is responsible for controlling the local machine and all systems controlled by the OwlAI framework.
+- The owlai.core package is responsible for abstracting away any implementation specific code (i.e. model provider specific code, memory provider specific code, etc.), and providing the base owlai agent implementation. It should be possible for the user to depend only on the owlai.core package and not on any other package. However it should be possible to override any implementation with a custom implementation.
+- The owlai.memory package is responsible for providing a memory system that can be used by the OwlAI framework i.e. for storing and retrieving information whether it is from a database, a file, or from a web search, a rag system, etc.
+- The owlai.memory.config package is responsible for providing the overall system configuration. For now is is done in the db.py file in this package.
+- The owlai.memory package is responsible for providing a set of tools that can be used by the OwlAI framework.
+- The owlai.system package is responsible for providing a set of tools that can be used by the OwlAI framework.
+- For now it is ok to have implementation specific code in the owlai.memory and owlai.system packages as long as it is properly documented.
+
+- edwige.py is meant to be the main entry point of the application. It should depend only on the owlai.core package. But for it is ok if it has a few more dependencies.
+
 # Project Structure
+Still TBD
 
-Root
-  - owlai: main python package source folder. The code in this folder is meant to be modular, resuable, and unit tested
-  - test: source folder containing experiements and code to test and try things out until it gets moved to the owlai package
-  - scripts: contains generated scripts that are used to run the tests and experiments
-  - data: contains data files for the tests and experiments
-  - docs: contains documentation for the project
-  - .gitignore: git ignore file
-  - .vscode: vscode config folder
-  - .env: environment variables file
-  - logs: contains logs for the project
-  - tests: contains tests for the project
-  - requirements.txt: requirements file
-  - setup.py: setup file
-  - pyproject.toml: pyproject file
-  - README.md: readme file
+# Development
+Use windows powershell command line for development
 
-# Python
-
+# Personality
+OwlAI code source files must have a unique ascii owl on the top left corner of the file.
 
