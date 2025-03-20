@@ -428,6 +428,12 @@ RAG_AGENTS_CONFIG = [
     {
         "name": "rag-naruto-v1",
         "description": "Agent that knows everything about the anime series Naruto",
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "Any question about the anime series Naruto expressed in english",
+            }
+        },
         "model_provider": "mistralai",
         "model_name": "mistral-large-latest",
         "max_tokens": 4096,
@@ -452,6 +458,43 @@ RAG_AGENTS_CONFIG = [
             "reranker_name": "colbert-ir/colbertv2.0",
             "input_data_folders": [
                 "data/dataset-0001",  # Naruto
+            ],
+            "model_kwargs": {"device": "cuda"},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": True,
+        },
+    },
+    {
+        "name": "rag-fr-law-v1",
+        "description": "Agent expecting a french law question",
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "Any question about french law expressed in french",
+            }
+        },
+        "model_provider": "mistralai",
+        "model_name": "mistral-large-latest",
+        "max_tokens": 4096,
+        "temperature": 0.1,
+        "context_size": 4096,
+        "tools_names": [],
+        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "default_queries": [
+            "Expliquez les différentes servitudes et leurs modes d'établissement.",
+            "Comment s'opère la vente en l'état futur d'achèvement (VEFA) et quelles garanties offre-t-elle ?",
+            "Un client vous consulte pour un litige avec son fournisseur. Quelles informations collecteriez-vous et quelle serait votre méthodologie d'analyse ?",
+            "Comment rédigeriez-vous une clause de non-concurrence qui soit à la fois protectrice pour l'entreprise et juridiquement valable ?",
+            "Face à un conflit d'intérêts potentiel, quelle démarche adopteriez-vous ?",
+            "Explique la gestion en france de la confusion des peines",
+        ],
+        "retriever": {
+            "num_retrieved_docs": 30,
+            "num_docs_final": 10,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "colbert-ir/colbertv2.0",
+            "input_data_folders": [
+                "data/dataset-0005",  # Larger dataset
             ],
             "model_kwargs": {"device": "cuda"},
             "encode_kwargs": {"normalize_embeddings": True},

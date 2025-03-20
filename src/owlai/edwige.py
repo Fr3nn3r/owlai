@@ -126,12 +126,12 @@ if __name__ == "__main__":
                     last_agent = focus_agent
                     default_queries = edwige.get_default_queries()
                     history = InMemoryHistory(
-                        list(reversed(default_queries + ["exit"]))
+                        list(reversed(default_queries + edwige.get_agents_names()))
                     )
                 elif last_agent != focus_agent:
                     default_queries = edwige.get_default_queries()
                     history = InMemoryHistory(
-                        list(reversed(default_queries + ["exit"]))
+                        list(reversed(default_queries + edwige.get_agents_names()))
                     )
                     last_agent = focus_agent
 
@@ -238,7 +238,7 @@ if __name__ == "__main__":
                 try:
 
                     logger.info(f"USER: {user_message}")
-                    response = focus_agent.invoke(user_message)
+                    response = focus_agent.message_invoke(user_message)
                     logger.info(f"AI: {response}")
                     if speak:
                         hoot(response)

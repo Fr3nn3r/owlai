@@ -103,7 +103,7 @@ class OwlAgent(BaseTool, BaseModel):
 
         metadata = message.response_metadata
         # Should get rid of model_provider dependend code ------------- should be a util function outside owlagent
-        if self.model_provider == "openai":
+        if self.model_provider == "openai" or self.model_provider == "mistralai":
             return metadata["token_usage"]["total_tokens"]
         elif self.model_provider == "anthropic":
             anthropic_total_tokens = (
@@ -204,7 +204,7 @@ class OwlAgent(BaseTool, BaseModel):
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool. This is called by BaseTool.invoke()"""
-        logger.debug(f"[BASE OwlAgent._run] Called with query: {query}")
+        # logger.debug(f"[BASE OwlAgent._run] Called with query: {query}")
         return self.message_invoke(query)
 
     async def _arun(
@@ -219,9 +219,9 @@ class OwlAgent(BaseTool, BaseModel):
         """
         Base implementation of message_invoke that can be overridden by subclasses.
         """
-        logger.debug(
-            f"[BASE OwlAgent.message_invoke] Called from {self.name} with message: {message}"
-        )
+        # logger.debug(
+        #    f"[BASE OwlAgent.message_invoke] Called from {self.name} with message: {message}"
+        # )
         try:
             # update system prompt with latestcontext
             system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")

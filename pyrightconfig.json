@@ -8,7 +8,7 @@
     "tmp",
     "logs"
   ],
-  "ignore": ["src/tmp"],
+  "ignore": ["src/test"],
   "defineConstant": {
     "DEBUG": true
   },

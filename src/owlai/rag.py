@@ -402,8 +402,8 @@ class RAGOwlAgent(OwlAgent):
         answer: Dict[str, Any] = {"question": question}
 
         # TODO: think about passing parameters in a structure
-        k = TOOLS_CONFIG["owl_memory_tool"]["num_retrieved_docs"]
-        k_final = TOOLS_CONFIG["owl_memory_tool"]["num_docs_final"]
+        k = self.retriever.num_retrieved_docs
+        k_final = self.retriever.num_docs_final
 
         reranked_docs, metadata = self.retrieve_relevant_chunks(
             query=question,
@@ -437,11 +437,8 @@ class RAGOwlAgent(OwlAgent):
 
             # logger.debug(f"Final prompt: {rag_prompt}")
             message = SystemMessage(rag_prompt)
-            self.append_message(message)
             messages = self.chat_model.invoke([message])
-            self.append_message(messages)
-
-        logger.debug(f"Raw RAG answer: {messages.content}")
+        # logger.debug(f"Raw RAG answer: {messages.content}")
 
         answer["answer"] = str(messages.content) if messages.content is not None else ""
         answer["metadata"] = metadata
@@ -526,7 +523,9 @@ class RAGOwlAgent(OwlAgent):
             return retrieved_docs[:num_docs_final], metadata
 
         # Rerank results
-        logger.debug("Reranking documents chunks please wait...")
+        logger.debug(
+            f"Reranking {len(retrieved_docs)} documents chunks to {num_docs_final} please wait..."
+        )
 
         with track_time("Documents chunks reranking", metadata):
 
@@ -588,6 +587,7 @@ class RAGOwlAgent(OwlAgent):
         logger.debug(
             f"[RAGOwlAgent.message_invoke] Called from {self.name} with message: {message}"
         )
+        logger.warning(f"RAG engine not keeping context for now")
         answer = self.rag_question(message)
         if "answer" not in answer or answer["answer"] == "":
             raise Exception("No answer found")
