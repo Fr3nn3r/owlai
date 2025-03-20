@@ -10,12 +10,12 @@ from typing import Callable
 from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-from .db import TOOLS_CONFIG
+from owlai.db import TOOLS_CONFIG
 
-from .interpreter import OwlSystemInterpreter
-from .rag import OwlMemoryTool
+# from .interpreter import OwlSystemInterpreter
+# from .rag import OwlMemoryTool
 
-logger = logging.getLogger("tools")
+logger = logging.getLogger("main")
 
 focus_role: str = "qna"
 
@@ -25,18 +25,18 @@ class ToolBox:
     user_context: str = "CONTEXT: "
 
     _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
-    _owl_system_interpreter = OwlSystemInterpreter(
-        **TOOLS_CONFIG["owl_system_interpreter"]
-    )
-    _owl_memory_tool = OwlMemoryTool(**TOOLS_CONFIG["owl_memory_tool"])
+    # _owl_system_interpreter = OwlSystemInterpreter(
+    #    **TOOLS_CONFIG["owl_system_interpreter"]
+    # )
+    # _owl_memory_tool = OwlMemoryTool(**TOOLS_CONFIG["owl_memory_tool"])
 
     def __init__(self):
         self.mapping = {
             "activate_mode": self.activate_mode,
             "identify_user_with_password": self.identify_user_with_password,
-            "owl_system_interpreter": self._owl_system_interpreter,
+            # "owl_system_interpreter": self._owl_system_interpreter,
             "play_song": self.play_song,
-            "owl_memory_tool": self._owl_memory_tool,
+            # "owl_memory_tool": self._owl_memory_tool,
             "tavily_search_results_json": self._tavily_tool,
         }
 

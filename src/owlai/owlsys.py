@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any
 from rich.console import Console
 import yaml
 
-logger = logging.getLogger("owlsys")
+logger = logging.getLogger("main")
 
 
 def load_logger_config():

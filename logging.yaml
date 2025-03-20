@@ -6,7 +6,7 @@ formatters:
     format: "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
   stdout:
     (): colorlog.ColoredFormatter
-    format: "%(log_color)s%(name)5s %(levelname)5s | %(message)s"
+    format: "%(log_color)s[%(filename)s:%(lineno)d] %(levelname)s | %(message)s"
     log_colors:
       DEBUG: "cyan"
       INFO: "green"
@@ -28,39 +28,7 @@ handlers:
     filename: logs/edwige.log
 
 loggers:
-  db:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
-  core:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
-  manager:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
-  tools:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
   main:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
-  spotify:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
-  ragtool:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
-  rag:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: no
-  owlsys:
     level: DEBUG
     handlers: [console, file]
     propagate: no

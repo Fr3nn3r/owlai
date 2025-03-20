@@ -3,6 +3,7 @@
 # { `" `}
 #  " - "
 
+
 if __name__ == "__main__":
     # this prevents reloading when multi processing is used
     import time
@@ -21,6 +22,10 @@ if __name__ == "__main__":
 
     load_logger_config()
 
+    from typing import List
+
+    from owlai.rag import RAGOwlAgent
+
     from .ttsengine import hoot
     import importlib
     from dotenv import load_dotenv
@@ -29,10 +34,10 @@ if __name__ == "__main__":
     from logging import Logger
 
     # Updated imports using the new structure
-    from .db import CONFIG
-    from .core import OwlAgent
-    from .db import get_default_queries_by_role
-    from .tools import ToolBox
+    from owlai.db import CONFIG, RAG_AGENTS_CONFIG
+    from owlai.core import OwlAgent
+    from owlai.db import get_default_queries_by_role
+    from owlai.tools import ToolBox
 
     from pydantic import ValidationError
 
@@ -46,41 +51,62 @@ if __name__ == "__main__":
     class AgentManager:
         """OwlAI agent manager"""
 
+        focus_agent: OwlAgent
+
         def __init__(self):
 
-            self.owls: Dict[str, Any] = {}
+            self.owls: Dict[str, OwlAgent] = {}
+            self.names: List[str] = []
             self.toolbox = ToolBox()
 
-            for irole in list(CONFIG.keys()):
+            for iagent_config in RAG_AGENTS_CONFIG:
                 try:
-                    agent = OwlAgent(**CONFIG[irole])
+                    agent = RAGOwlAgent(**iagent_config)
                     agent.init_callable_tools(self.toolbox.get_tools(agent.tools_names))
-                    self.owls[irole] = agent
+                    self.owls[agent.name] = agent
+                    self.names.append(agent.name)
                 except ValidationError as e:
-                    logger.error(
-                        f"Configuration validation failed for role {irole}: {e}"
-                    )
+                    logger.error(f"Validation failed for {iagent_config}: {e}")
 
-        def get_focus_owl(self):
+            self.focus_agent = self.owls[self.names[0]]
 
-            logger.debug(f"Active mode: {self.toolbox.get_focus_role()}")
-            return self.owls[self.toolbox.get_focus_role()]
+        def get_focus_owl(self) -> OwlAgent:
 
-        def get_default_prompts(self):
+            logger.debug(f"Focus agent: {self.focus_agent.name}")
+            return self.focus_agent
 
-            return get_default_queries_by_role(self.toolbox.get_focus_role())
+        def get_default_queries(self) -> List[str]:
 
-        def run_tests(self):
+            if self.focus_agent.default_queries is None:
+                logger.warning(
+                    f"No default queries defined for {self.focus_agent.name}"
+                )
+                return []
 
-            if len(CONFIG[self.toolbox.get_focus_role()]["test_prompts"]) > 0:
-                logger.info(f"Running tests for mode '{self.toolbox.get_focus_role()}'")
-                for test in CONFIG[self.toolbox.get_focus_role()]["test_prompts"]:
+            return self.focus_agent.default_queries
+
+        def run_default_queries(self):
+
+            default_queries = self.get_default_queries()
+
+            if len(default_queries) > 0:
+                logger.info(f"Running default queries for {self.focus_agent.name}")
+                for test in default_queries:
                     logger.info(f"USER: {test}")
-                    self.owls[self.toolbox.get_focus_role()].invoke(test)
+                    self.focus_agent.invoke(test)
             else:
                 logger.warning(
-                    f"No test prompts defined for owl role '{self.toolbox.get_focus_role()}'"
+                    f"No default queries defined for {self.focus_agent.name}"
                 )
+
+        def get_agents_names(self) -> List[str]:
+            return self.names
+
+        def set_focus_agent(self, agent_name: str):
+            if agent_name not in self.names:
+                logger.warning(f"Agent {agent_name} not found")
+                return
+            self.focus_agent = self.owls[agent_name]
 
     def main():
         try:
@@ -98,14 +124,14 @@ if __name__ == "__main__":
                 focus_agent = edwige.get_focus_owl()
                 if last_agent is None:
                     last_agent = focus_agent
-                    default_prompts = edwige.get_default_prompts()
+                    default_queries = edwige.get_default_queries()
                     history = InMemoryHistory(
-                        list(reversed(default_prompts + ["exit"]))
+                        list(reversed(default_queries + ["exit"]))
                     )
                 elif last_agent != focus_agent:
-                    default_prompts = edwige.get_default_prompts()
+                    default_queries = edwige.get_default_queries()
                     history = InMemoryHistory(
-                        list(reversed(default_prompts + ["exit"]))
+                        list(reversed(default_queries + ["exit"]))
                     )
                     last_agent = focus_agent
 
@@ -120,7 +146,9 @@ if __name__ == "__main__":
     reload   - Reloads owlai package source code
     test     - Runs test instructions (active mode)
     metadata - Print the conversation metadata
-    log      - reloads the logger config"""
+    log      - reloads the logger config
+    list     - list all agents
+    [agent]  - set the focus agent"""
 
                 user_message = prompt(
                     "Enter your message ('exit' or 'help'): ", history=history
@@ -182,7 +210,7 @@ if __name__ == "__main__":
                     continue
 
                 if user_message.lower() == "test":
-                    edwige.run_tests()
+                    edwige.run_default_queries()
                     continue
 
                 if user_message.lower() == "log":
@@ -195,8 +223,16 @@ if __name__ == "__main__":
 
                     env_vars = dotenv_values(".env")
                     for key, value in env_vars.items():
-                        print(f"{key}: {value}")
+                        logger.info(f"{key}: {value}")
 
+                    continue
+
+                if user_message.lower() == "list":
+                    logger.info(f"Agents: {edwige.get_agents_names()}")
+                    continue
+
+                if user_message.lower() in edwige.get_agents_names():
+                    edwige.set_focus_agent(user_message.lower())
                     continue
 
                 try:

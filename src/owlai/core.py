@@ -34,7 +34,7 @@ import traceback
 from owlai.owlsys import sprint
 from langchain_core.tools import BaseTool, ArgsSchema
 
-logger = logging.getLogger("core")
+logger = logging.getLogger("main")
 
 user_context: str = "CONTEXT: "
 
@@ -198,16 +198,30 @@ class OwlAgent(BaseTool, BaseModel):
                 self.append_message(tool_msg)
                 continue
 
-    def invoke(
+    def _run(
         self,
-        input: Union[str, Dict[str, Any], ToolCall],
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Any,
+        query: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
-        logger.debug(f"Invoking agent with input: {input}")
-        return self.message_invoke(str(input))
+        """Use the tool. This is called by BaseTool.invoke()"""
+        logger.debug(f"[BASE OwlAgent._run] Called with query: {query}")
+        return self.message_invoke(query)
+
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool asynchronously."""
+        return self.message_invoke(query)
 
     def message_invoke(self, message: str) -> str:
+        """
+        Base implementation of message_invoke that can be overridden by subclasses.
+        """
+        logger.debug(
+            f"[BASE OwlAgent.message_invoke] Called from {self.name} with message: {message}"
+        )
         try:
             # update system prompt with latestcontext
             system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
@@ -269,23 +283,6 @@ class OwlAgent(BaseTool, BaseModel):
             f"Chat model: {self.model_name} {self.model_provider} {self.temperature} {self.max_tokens}"
         )
         sprint(self.chat_model)
-
-    def _run(
-        self,
-        query: str,
-        run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool."""
-        logger.debug(f"Running tool with query: {query}")
-        return self.message_invoke(query)
-
-    async def _arun(
-        self,
-        query: str,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool asynchronously."""
-        return self.message_invoke(query)
 
 
 def main():

@@ -40,7 +40,7 @@ warnings.simplefilter("ignore", category=FutureWarning)
 from owlai.owlsys import load_logger_config, sprint
 
 
-logger = logging.getLogger("ragtool")
+logger = logging.getLogger("main")
 
 
 class OwlMemoryInput(BaseModel):
@@ -435,9 +435,11 @@ class RAGOwlAgent(OwlAgent):
             rag_prompt = self._prompt.format(question=question, context=docs_content)
             rag_prompt = rag_prompt.encode("ascii", errors="replace").decode("utf-8")
 
-            logger.debug(f"Final prompt: {rag_prompt}")
-            messages = [SystemMessage(rag_prompt)]
-            messages = self.chat_model.invoke(messages)
+            # logger.debug(f"Final prompt: {rag_prompt}")
+            message = SystemMessage(rag_prompt)
+            self.append_message(message)
+            messages = self.chat_model.invoke([message])
+            self.append_message(messages)
 
         logger.debug(f"Raw RAG answer: {messages.content}")
 
@@ -508,7 +510,6 @@ class RAGOwlAgent(OwlAgent):
             retrieved_docs = knowledge_base.similarity_search(
                 query=query, k=num_retrieved_docs
             )
-            print([doc.metadata for doc in retrieved_docs])
             metadata["num_docs_retrieved"] = len(retrieved_docs)
             metadata["retrieved_docs"] = {
                 i: {
@@ -564,6 +565,33 @@ class RAGOwlAgent(OwlAgent):
                 )
 
         return reranked_docs, metadata
+
+    def _run(
+        self,
+        query: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Override BaseTool._run to ensure we use our implementation"""
+        logger.debug(f"[RAGOwlAgent._run] Called with query: {query}")
+        return self.message_invoke(query)
+
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        """Override BaseTool._arun to ensure we use our implementation"""
+        return self.message_invoke(query)
+
+    def message_invoke(self, message: str) -> str:
+        """Override OwlAgent.message_invoke with RAG specific implementation"""
+        logger.debug(
+            f"[RAGOwlAgent.message_invoke] Called from {self.name} with message: {message}"
+        )
+        answer = self.rag_question(message)
+        if "answer" not in answer or answer["answer"] == "":
+            raise Exception("No answer found")
+        return answer.get("answer", "?????")
 
 
 def main():
