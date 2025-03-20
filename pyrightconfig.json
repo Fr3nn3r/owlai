@@ -6,9 +6,10 @@
     ".venv",
     "temp",
     "tmp",
-    "logs"
+    "logs",
+    ".cursorrules"
   ],
-  "ignore": ["src/test"],
+  "ignore": ["tests"],
   "defineConstant": {
     "DEBUG": true
   },
