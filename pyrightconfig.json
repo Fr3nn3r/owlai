@@ -12,7 +12,7 @@
   "defineConstant": {
     "DEBUG": true
   },
-  "typeCheckingMode": "off",
+  "typeCheckingMode": "standard",
   "useLibraryCodeForTypes": true,
   "reportMissingImports": "warning",
   "reportMissingTypeStubs": false,
@@ -26,5 +26,12 @@
   "reportOptionalMemberAccess": "information",
   "reportOptionalCall": "information",
   "reportOptionalIterable": "information",
-  "reportOptionalOperand": "information"
+  "reportOptionalOperand": "information",
+  "stubPath": "src/owlai/stubs",
+  "executionEnvironments": [
+    {
+      "root": "src",
+      "extraPaths": ["src"]
+    }
+  ]
 }

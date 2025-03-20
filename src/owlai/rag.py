@@ -22,6 +22,7 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader
 import traceback
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
+from langchain_core.tools.base import ArgsSchema
 
 from .core import OwlAgent
 from .db import TOOLS_CONFIG
@@ -536,7 +537,7 @@ class OwlMemoryTool(BaseTool):
 
     name: str = "owl_memory_tool"
     description: str = "Gets answers from the knowledge base"
-    args_schema: Type[BaseModel] = OwlMemoryInput
+    args_schema: Optional[ArgsSchema] = OwlMemoryInput
     _rag_tool = None
 
     def __init__(self, **kwargs):

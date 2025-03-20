@@ -6,6 +6,7 @@ import time
 import logging
 from contextlib import contextmanager
 from typing import Optional, Dict, Any
+from rich.console import Console
 
 logger = logging.getLogger("owlsys")
 
@@ -29,6 +30,13 @@ def track_time(event_name: str, execution_log: Optional[Dict[str, Any]] = None):
         logging.info(f"'{event_name}' - completed in {human_readable_time}.")
         if execution_log:
             execution_log[f"{event_name} - execution time"] = human_readable_time
+
+
+def sprint(*args):
+    """A smart print function for JSON-like structures"""
+    console = Console()
+    for arg in args:
+        console.print(arg)  # Normal print with `rich`
 
 
 def get_system_info():

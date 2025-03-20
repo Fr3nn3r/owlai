@@ -25,6 +25,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from rich.console import Console
 import traceback
+from owlai.owlsys import sprint
 
 logger = logging.getLogger("core")
 
@@ -244,13 +245,6 @@ class OwlAgent(BaseModel):
             f"Chat model: {self.model_name} {self.model_provider} {self.temperature} {self.max_tokens}"
         )
         sprint(self.chat_model)
-
-
-def sprint(*args):
-    """A smart print function for JSON-like structures"""
-    console = Console()
-    for arg in args:
-        console.print(arg)  # Normal print with `rich`
 
 
 class OwlAIAgent:
