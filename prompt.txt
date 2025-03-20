@@ -1,6 +1,0 @@
-I want to create a new generate_fancy_report.py python script based on generate report in test with a function to generate reports from JSON files like the qa_report file in the context. Based on this structure create a function that reads this file and produces an awesome looking OwlAI Test report in HTML/JS format. The look and feel must be slick an dense, super IT professional looking, and pink colors. Use animations, make it fancy and supported on mobile and desktop browsers. Make sure that the content of the answers is displayed in a user friendly format, not all in a line. Focus on readability of the questions and answers. Include the little owl in owl.jpg
-
-
-I want to create an awesome looking OwlAI Test report in HTML/JS format from the JSON file provided in context. The look and feel must be slick an dense, super IT professional looking, and pink colors. Use animations, make it fancy and supported on mobile and desktop browsers. Make sure that the content of the answers is displayed in a user friendly format, not all in a line. Focus on readability of the questions and answers. Include the little owl in owl.jpg. display the OwlAI response and the control LLM response side by side
-
-env:PYTHONPATH = "$env:PYTHONPATH;C:\Users\fbrun\Documents\GitHub\owlai\src"

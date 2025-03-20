@@ -60,6 +60,10 @@ loggers:
     level: DEBUG
     handlers: [console, file]
     propagate: no
+  owlsys:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: no
     
 root:
   level: DEBUG

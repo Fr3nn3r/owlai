@@ -136,7 +136,7 @@ class OwlAgent(BaseModel):
 
             # Get tool name and arguments
             tool_name = tool_call["name"].lower()
-            tool_args = tool_call.get("arguments", {})
+            tool_args = tool_call.get("args", {})
 
             # Check if tool exists
             if tool_name not in self.tools_names:
@@ -156,7 +156,7 @@ class OwlAgent(BaseModel):
             try:
                 logger.debug(f"Invoking tool '{tool_name}' with arguments: {tool_args}")
                 # Invoke the tool
-                tool_result = selected_tool.invoke(tool_call)
+                tool_result = selected_tool.invoke(tool_args)
 
                 # Create tool message
                 tool_msg = ToolMessage(

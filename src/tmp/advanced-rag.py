@@ -34,6 +34,9 @@ import json
 
 from tqdm import tqdm
 
+from owlai.tools import OwlMemoryTool
+from owlai.db import TOOLS_CONFIG
+
 
 def load_logger_config():
     with open("logging.yaml", "r") as logger_config:
@@ -45,7 +48,7 @@ transformers.logging.set_verbosity_error()
 
 load_logger_config()
 
-logger = logging.getLogger("ragtool")
+logger = logging.getLogger("rag")
 
 
 def main():
@@ -322,6 +325,7 @@ def main():
         logger.info(f"\nStarting retrieval for query: {query} with k={k}")
         start_time = time.time()
         retrieved_docs = knowledge_base.similarity_search(query=query, k=k)
+        # print([doc.metadata for doc in retrieved_docs])
         end_time = time.time()
 
         logger.info(
@@ -426,7 +430,19 @@ Question: {question}""",
             [f"Document {str(i)}:::\n" + doc for i, doc in enumerate(relevant_docs)]
         )
 
+        # Track execution time for prompt formatting
+        start_format_time = time.time()
+        if prompt_template is None:
+            # Use default prompt if none provided
+            prompt_template = "Context:\n{context}\n\nQuestion: {question}\n\nAnswer:"
+        end_format_time = time.time()
+        logger.debug(
+            f"Prompt formatting completed in {end_format_time - start_format_time:.2f} seconds"
+        )
+
         final_prompt = prompt_template.format(question=question, context=context)
+
+        # logger.debug(f"Final prompt: {final_prompt}")
 
         # Redact an answer
         start_time = time.time()
@@ -466,16 +482,16 @@ Question: {question}""",
         {
             "input_data_folder": "data/dataset-0001",
             "questions": [
-                "Who is Naruto?",
-                "Provide details about Orochimaru",
-                "Who is the strongest ninja in the world?",
-                "How is sasuke's personality",
-                "Who is the sensei of naruto?",
-                "What is a sharingan?",
-                "What is the akatsuki?",
-                "Who is the first Hokage?",
-                "What was the last result of the AC Milan soccer team?",
-                "What is the color of henry the fourth white horse?",
+                # "Who is Tsunade?",
+                # "Provide details about Orochimaru",
+                "Orochimaru character details from Naruto",
+                # "How is sasuke's personality",
+                # "Who is the sensei of naruto?",
+                # "What is a sharingan?",
+                # "What is the akatsuki?",
+                # "Who is the first Hokage?",
+                # "What was the last result of the AC Milan soccer team?",
+                # "What is the color of henry the fourth white horse?",
             ],
         },
         {
@@ -490,7 +506,7 @@ Question: {question}""",
         },
     ]
 
-    dataset = datasets[2]
+    dataset = datasets[1]
 
     input_data_folder = dataset["input_data_folder"]
 
@@ -515,6 +531,8 @@ Question: {question}""",
 
     questions = dataset["questions"]
 
+    # _owl_memory_tool = OwlMemoryTool(**TOOLS_CONFIG["owl_memory_tool"])
+
     qa_results = []
     for question in questions:
         answer, relevant_docs = answer_with_rag(
@@ -525,8 +543,10 @@ Question: {question}""",
             reranker=RERANKER,
             prompt_template=prompt_template,
         )
+        # OMTANSWER = _owl_memory_tool.invoke(question)
         logger.info(f"USER QUERY : {question}")
         logger.info(f"ANSWER : {answer}")
+        # logger.info(f"OMTANSWER : {OMTANSWER}")
 
         qa_results.append({"question": question, "answer": answer})
 

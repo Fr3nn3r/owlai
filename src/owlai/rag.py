@@ -30,13 +30,6 @@ from tqdm import tqdm
 from owlai.owlsys import track_time
 
 warnings.simplefilter("ignore", category=FutureWarning)
-import sentence_transformers
-from sentence_transformers import util
-
-# Replace tqdm with a no-op function to avoid progress bars
-sentence_transformers.SentenceTransformer.encode = lambda *args, **kwargs: args[
-    0
-].encode(*args, **kwargs)
 
 logger = logging.getLogger("ragtool")
 
@@ -73,11 +66,13 @@ class LocalRAGTool(OwlAgent):
 
         self._vector_stores = None
         for ifolder in input_data_folders:
+            print(f"Loading dataset from {ifolder}")
             current_store = self.load_dataset(ifolder, self._embeddings)
             if current_store is not None:
                 if self._vector_stores is None:
                     self._vector_stores = current_store
                 else:
+                    print(f"Merging dataset from {ifolder}")
                     self._vector_stores.merge_from(current_store)
 
         if self._vector_stores is None:
@@ -260,11 +255,9 @@ class LocalRAGTool(OwlAgent):
                     continue
 
         # Save to disk
-        if vector_store is not None:
+        if vector_store is not None and len(files) > 0:
             vector_store.save_local(vector_db_file_path)
             logger.info(f"Vector database saved to {vector_db_file_path}")
-        else:
-            logger.warning("No vector store to save")
 
         return vector_store
 
@@ -405,6 +398,9 @@ class LocalRAGTool(OwlAgent):
                 ]
             )
 
+            if self._prompt is None:
+                raise Exception("Prompt is not set")
+
             rag_prompt = self._prompt.format(question=question, context=docs_content)
             rag_prompt = rag_prompt.encode("ascii", errors="replace").decode("utf-8")
 
@@ -454,7 +450,7 @@ class LocalRAGTool(OwlAgent):
         """
         Retrieve the k most relevant document chunks for a given query.
 
-        Args:
+        Args:0
             query: The user query to find relevant documents for
             knowledge_base: The vector database containing indexed documents
             reranker: Optional reranker model to rerank results
@@ -465,7 +461,7 @@ class LocalRAGTool(OwlAgent):
             Tuple containing a list of retrieved and reranked LangchainDocument objects with scores and metadata
         """
         logger.debug(
-            f"Starting retrieval for query: {query} with k={num_retrieved_docs}"
+            f"Starting retrieval for query: '{query}' with k={num_retrieved_docs}"
         )
         metadata = {
             "query": query,
@@ -481,6 +477,7 @@ class LocalRAGTool(OwlAgent):
             retrieved_docs = knowledge_base.similarity_search(
                 query=query, k=num_retrieved_docs
             )
+            print([doc.metadata for doc in retrieved_docs])
             metadata["num_docs_retrieved"] = len(retrieved_docs)
             metadata["retrieved_docs"] = {
                 i: {
@@ -490,6 +487,7 @@ class LocalRAGTool(OwlAgent):
                 for i, doc in enumerate(retrieved_docs)
             }
             logger.debug(f"{len(retrieved_docs)} documents retrieved")
+        # print([doc.metadata for doc in retrieved_docs])
 
         # If no reranker, just return top k docs
         if not reranker:
@@ -527,7 +525,8 @@ class LocalRAGTool(OwlAgent):
                 for i, doc in enumerate(reranked_docs)
             }
 
-        logger.debug(f"Top document metadata: {reranked_docs[0].metadata}")
+        for i in range(min(5, len(reranked_docs))):
+            logger.debug(f"Reranked doc {i}: {reranked_docs[i].metadata}")
 
         return reranked_docs, metadata
 
@@ -543,12 +542,14 @@ class OwlMemoryTool(BaseTool):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Create the RAG tool component instead of inheriting from it
+        logger.info("Initializing RAG tool")
         self._rag_tool = LocalRAGTool(**kwargs)
 
     def invoke(
         self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Any:
         """Process tool inputs according to BaseTool pattern."""
+        logger.debug(f"Tool invoked with input: {input}")
         if isinstance(input, dict) and "query" in input:
             return self._run(input["query"])
         elif isinstance(input, str):
@@ -567,6 +568,7 @@ class OwlMemoryTool(BaseTool):
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool."""
+        logger.debug(f"Running tool with query: {query}")
         if self._rag_tool is None:
             return "Error: RAG tool is not initialized"
         answer = self._rag_tool.rag_question(query)

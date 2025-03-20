@@ -147,7 +147,7 @@ if __name__ == "__main__":
                 },
             }
 
-            dataset = datasets["larger_dataset"]
+            dataset = datasets["fiscal_law_only"]
 
             test_parameters = {
                 "reader_llm": {

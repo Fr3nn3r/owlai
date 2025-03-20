@@ -8,11 +8,18 @@ if __name__ == "__main__":
     import time
 
     start_time = time.time()
-    print(f"Application loading please wait    ...")
+    print(f"Application loading please wait...")
 
     import logging
     import logging.config
     import yaml
+
+    def load_logger_config():
+        with open("logging.yaml", "r") as logger_config:
+            config = yaml.safe_load(logger_config)
+            logging.config.dictConfig(config)
+
+    load_logger_config()
 
     from .ttsengine import hoot
     import importlib
@@ -74,11 +81,6 @@ if __name__ == "__main__":
                 logger.warning(
                     f"No test prompts defined for owl role '{self.toolbox.get_focus_role()}'"
                 )
-
-    def load_logger_config():
-        with open("logging.yaml", "r") as logger_config:
-            config = yaml.safe_load(logger_config)
-            logging.config.dictConfig(config)
 
     def main():
         try:

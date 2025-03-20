@@ -169,7 +169,7 @@ PROMPT_CONFIG = {
     " - Always use a 'temp' folder in the current directory to save files\n"
     " - You only have permission to write in the 'temp' folder.\n"
     " - You can create the 'temp' folder if it does not exist.\n",
-    "rag-v0-from-tutorial": "You must answer questions based on the context provided below and NEVER use prior knowledge.\n"
+    "rag-en-v0-from-tutorial": "You must answer questions based on the context provided below and NEVER use prior knowledge.\n"
     "Provide as much details as possible based on the context provided.\n"
     "Context:\n"
     "{context}\n"
@@ -199,6 +199,19 @@ PROMPT_CONFIG = {
     "- Do not hallucinate information not found in the sources.\n"
     "Answer:\n",
     ##################################
+    "rag-en-v2": "You are an AI assistant answering user queries based on the provided sources.\n"
+    "Use the retrieved documents below to generate an answer.\n"
+    "If provided cite sources explicitly in square brackets like [Source: XYZ].\n"
+    "### Query:\n"
+    "{question}\n"
+    "### Retrieved Documents:\n"
+    "{context}\n"
+    "### Instructions:\n"
+    "- If multiple sources contribute, cite them as [Source: A, B].\n"
+    "- If uncertain, respond with 'I don’t know based on the provided sources.'\n"
+    "- Do not hallucinate information not found in the sources.\n"
+    "Answer:\n",
+    ##################################
     "rag-fr-v1": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur les sources fournies.\n"
     "Utilisez UNIQUEMENT les extraits de documents récupérés ci-dessous pour générer une réponse.\n"
     "Si disponible, citez les sources explicitement entre crochets comme [Source : XYZ] puis mentionnez les articles et alinéas pertinents.\n"
@@ -207,12 +220,29 @@ PROMPT_CONFIG = {
     "### Extraits de documents récupérés : \n"
     "{context}\n"
     "### Instructions : \n"
-    "0. Citez les articles présents dans les sources..\n"
+    "0. Citez les articles présents dans les sources.\n"
     "1. Si plusieurs sources contribuent, citez-les distinctement.\n"
     "2. Si l'information est incertaine, répondez par 'Je ne dispose pas d'informations spécifiques relatives à cette requête.'\n"
     "3. Ne générez pas d'informations qui ne figurent pas dans les sources.\n"
     "4. Fournissez une réponse claire, concise et bien structurée. \n"
     "5. Si pertinent, expliquez brièvement votre raisonnement en vous appuyant sur le contexte. \n"
+    "Réponse : \n",
+    ##################################
+    "rag-fr-v2": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur les sources fournies.\n"
+    "Utilisez les extraits de documents récupérés ci-dessous pour appuyer votre réponse.\n"
+    "Citez les sources explicitement entre crochets comme [Source : XYZ] puis mentionnez les articles et alinéas pertinents.\n"
+    "### Requête : \n"
+    "{question}\n"
+    "### Extraits de documents récupérés : \n"
+    "{context}\n"
+    "### Instructions : \n"
+    "0. Citez les articles présents dans les sources.\n"
+    "1. Si plusieurs sources contribuent, citez-les distinctement.\n"
+    "2. Si l'information est incertaine, répondez par 'Je ne dispose pas d'informations spécifiques relatives à cette requête.'\n"
+    "3. Fournissez une réponse claire, complète et bien structurée en vous appuyant sur les sources. \n"
+    "4. Mentionnez si des éléments complémentaires vous seraient éventuellement nécessaires. \n"
+    "5. Fournissez autant de détails que possible sur la demande initiale. \n"
+    "6. Veillez à bien répondre à la question initiale. \n"
     "Réponse : \n",
     ##################################
     "rag-fr-control-llm-v1": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur votre mémoire.\n"
@@ -245,17 +275,21 @@ TOOLS_CONFIG = {
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
-        "system_prompt": PROMPT_CONFIG["rag-en-v1"],
+        "system_prompt": PROMPT_CONFIG["rag-en-v2"],
         "default_queries": None,
         "test_queries": [],
         "embeddings_model_name": "thenlper/gte-small",
         "reranker_name": "colbert-ir/colbertv2.0",
-        "num_retrieved_docs": 30,
+        "num_retrieved_docs": 5,
         "num_docs_final": 5,
         "input_data_folders": [
-            # "data/dataset-0002",
-            # "data/dataset-0001",
-            "data/dataset-0003",
+            # "data/dataset-0000",  # Paul Graham
+            "data/dataset-0001",  # Naruto
+            # "data/dataset-0002", # 2 and 4 are included in 0005
+            # "data/dataset-0003",  # Dune
+            # "data/dataset-0004",
+            # "data/dataset-0005",
+            # "data/dataset-0006",
         ],
     },
     "tavily_search_results_json": {
