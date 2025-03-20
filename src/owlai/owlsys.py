@@ -4,11 +4,19 @@ import json
 import GPUtil
 import time
 import logging
+import logging.config
 from contextlib import contextmanager
 from typing import Optional, Dict, Any
 from rich.console import Console
+import yaml
 
 logger = logging.getLogger("owlsys")
+
+
+def load_logger_config():
+    with open("logging.yaml", "r") as logger_config:
+        config = yaml.safe_load(logger_config)
+        logging.config.dictConfig(config)
 
 
 @contextmanager

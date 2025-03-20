@@ -15,35 +15,50 @@ from langchain_core.messages import (
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.language_models import LanguageModelInput
+from langchain_core.tools import BaseTool
+from langchain_core.messages.tool import ToolCall
 import logging.config
 import logging
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
-from rich.console import Console
+
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
+
 import traceback
 from owlai.owlsys import sprint
+from langchain_core.tools import BaseTool, ArgsSchema
 
 logger = logging.getLogger("core")
 
 user_context: str = "CONTEXT: "
 
 
-class OwlAgent(BaseModel):
+class DefaultOwlAgentInput(BaseModel):
+    """Input schema for DefaultOwlAgent."""
+
+    query: str = Field(description="some natural language input to the agent")
+
+
+class OwlAgent(BaseTool, BaseModel):
 
     # JSON defined properties
-    model_provider: str = "openai"
-    model_name: str = "gpt-4o-mini"
+    name: str = "sad_unamed_owl_agent"
+    description: str
+    args_schema: Optional[ArgsSchema] = DefaultOwlAgentInput
+    system_prompt: str
+    model_provider: str
+    model_name: str
     temperature: float = 0.1
     max_tokens: int = 2048
     context_size: int = 4096
-    tools_names: List[str] = []
-    system_prompt: str
-    default_prompts: Optional[List[str]] = None
-    test_prompts: List[str] = []
+    tools_names: List[str] = []  # list of tools this agent can use
+    default_queries: Optional[List[str]] = None
 
     # Runtime updated properties
     total_tokens: int = 0
@@ -183,7 +198,16 @@ class OwlAgent(BaseModel):
                 self.append_message(tool_msg)
                 continue
 
-    def invoke(self, message: str) -> str:
+    def invoke(
+        self,
+        input: Union[str, Dict[str, Any], ToolCall],
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Any,
+    ) -> str:
+        logger.debug(f"Invoking agent with input: {input}")
+        return self.message_invoke(str(input))
+
+    def message_invoke(self, message: str) -> str:
         try:
             # update system prompt with latestcontext
             system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
@@ -246,100 +270,22 @@ class OwlAgent(BaseModel):
         )
         sprint(self.chat_model)
 
-
-class OwlAIAgent:
-
-    def __init__(
+    def _run(
         self,
-        model_provider: str = "openai",
-        model_name: str = "gpt-4o-mini",
-        temperature: float = 0.9,
-        max_tokens: int = 2048,
-        context_size: int = 4096,
-        tools: List[BaseTool] = [],
-        system_prompt: Optional[str] = None,
-    ):
-        self.model_provider = model_provider
-        self.model_name = model_name
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.context_size = context_size
-        self.tools = tools
-        self.system_prompt = system_prompt
-        self.chat_model = init_chat_model(
-            model=model_name,
-            model_provider=model_provider,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        query: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool."""
+        logger.debug(f"Running tool with query: {query}")
+        return self.message_invoke(query)
 
-        self.state_memory = MemorySaver()
-        self.state_config = cast(
-            RunnableConfig, {"configurable": {"thread_id": str(id(self))}}
-        )
-
-        self.agent_graph = create_react_agent(
-            self.chat_model,
-            self.tools,
-            prompt=(
-                SystemMessage(content="")
-                if self.system_prompt is None
-                else SystemMessage(content=self.system_prompt)
-            ),
-            checkpointer=self.state_memory,
-        )
-
-    def invoke(self, message: str) -> str:
-        graph_response = self.agent_graph.invoke(
-            {"messages": [HumanMessage(message)]}, self.state_config
-        )
-
-        if logger.isEnabledFor(logging.DEBUG):
-            sprint(graph_response)
-
-        return self._return_last_message_content(graph_response)
-
-    def _return_last_message_content(self, response: Dict[str, Any]) -> str:
-        return response["messages"][-1].content
-
-    def print__message_history(self):
-        state = self.agent_graph.get_state(self.state_config)
-        for index, message in enumerate(state.values["messages"]):
-            logger.info(
-                f"Message #{index} type: '{message.type}' content: '{ (message.content[:100] + '...' if len(message.content) > 100 else message.content)}'"
-            )
-            if logger.isEnabledFor(logging.DEBUG):
-                sprint(message)
-
-    def print_message_metadata(self):
-        state = self.agent_graph.get_state(self.state_config)
-        for index, message in enumerate(state.values["messages"]):
-            if message.response_metadata:
-                logger.info(
-                    f"Message #{index} type: '{message.type}' metadata: '{message.response_metadata}'"
-                )
-
-    def print_system_prompt(self):
-        logger.info(f"System prompt: '{self.system_prompt}'")
-
-    def reset__message_history(self):
-        logger.warning("Resetting message history not supported")
-
-    def run_tests(self):
-        logger.warning("Running tests not supported (NOT TO BE MANAGED HERE)")
-
-    def print_info(self):
-        logger.info(
-            f"model-provider='{self.model_provider}', model-name='{self.model_name}', tools='{', '.join([t.name for t in self.tools])}'"
-        )
-
-    # NOT SURE WHAT THIS IS...
-    # Add proper resource cleanup (???):
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        logger.warning("Cleanup not supported (???)")
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool asynchronously."""
+        return self.message_invoke(query)
 
 
 def main():

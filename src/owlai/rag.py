@@ -24,13 +24,21 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
 from langchain_core.tools.base import ArgsSchema
 
-from .core import OwlAgent
-from .db import TOOLS_CONFIG
+import sys
+from pathlib import Path
+
+# sys.path.append(str(Path(__file__).parent.parent))
+
+from owlai.core import OwlAgent
+from owlai.db import TOOLS_CONFIG, RAG_AGENTS_CONFIG
+from owlai.owlsys import track_time, load_logger_config
 import warnings
 from tqdm import tqdm
-from owlai.owlsys import track_time
 
 warnings.simplefilter("ignore", category=FutureWarning)
+
+from owlai.owlsys import load_logger_config, sprint
+
 
 logger = logging.getLogger("ragtool")
 
@@ -43,8 +51,30 @@ class OwlMemoryInput(BaseModel):
     )
 
 
-class LocalRAGTool(OwlAgent):
+""" Class config for HuggingFace embeddings, and FAISS vector store """
 
+
+class RAGConfig(BaseModel):
+    num_retrieved_docs: int
+    num_docs_final: int
+    embeddings_model_name: str
+    reranker_name: str
+    input_data_folders: List[str]
+    model_kwargs: Dict[str, Any]
+    encode_kwargs: Dict[str, Any]
+    multi_process: bool = True
+
+
+""" Class based on HuggingFace embeddings, and FAISS vector store """
+
+
+class RAGOwlAgent(OwlAgent):
+
+    # JSON defined properties
+    retriever: RAGConfig
+
+    # Runtime updated properties
+    _init_completed = False
     _prompt = None
     _vector_stores = None
     _embeddings = None
@@ -52,28 +82,27 @@ class LocalRAGTool(OwlAgent):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        embeddings_model_name = TOOLS_CONFIG["owl_memory_tool"]["embeddings_model_name"]
         self._embeddings = HuggingFaceEmbeddings(
-            model_name=embeddings_model_name,
-            multi_process=True,
-            model_kwargs={"device": "cuda"},
-            encode_kwargs={"normalize_embeddings": True},
+            model_name=self.retriever.embeddings_model_name,
+            multi_process=self.retriever.multi_process,
+            model_kwargs=self.retriever.model_kwargs,
+            encode_kwargs=self.retriever.encode_kwargs,
         )
-        reranker_name = TOOLS_CONFIG["owl_memory_tool"]["reranker_name"]
+        reranker_name = self.retriever.reranker_name
         self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
         self._prompt = PromptTemplate.from_template(self.system_prompt)
 
-        input_data_folders = TOOLS_CONFIG["owl_memory_tool"]["input_data_folders"]
+        input_data_folders = self.retriever.input_data_folders
 
         self._vector_stores = None
         for ifolder in input_data_folders:
-            print(f"Loading dataset from {ifolder}")
+            logger.debug(f"Loading dataset from {ifolder}")
             current_store = self.load_dataset(ifolder, self._embeddings)
             if current_store is not None:
                 if self._vector_stores is None:
                     self._vector_stores = current_store
                 else:
-                    print(f"Merging dataset from {ifolder}")
+                    logger.debug(f"Merging dataset from {ifolder}")
                     self._vector_stores.merge_from(current_store)
 
         if self._vector_stores is None:
@@ -81,7 +110,7 @@ class LocalRAGTool(OwlAgent):
                 "No vector stores found: you must set the vector store manually."
             )
         else:
-            logger.info(f"Loaded dataset stores: {input_data_folders}")
+            logger.info(f"Loaded data stores: {input_data_folders}")
 
     def analyze_chunk_size_distribution(
         self,
@@ -368,6 +397,7 @@ class LocalRAGTool(OwlAgent):
         Returns:
             A dictionary containing the question, answer, and metadata.
         """
+        logger.debug(f"Running RAG query: '{question}'")
 
         answer: Dict[str, Any] = {"question": question}
 
@@ -461,7 +491,7 @@ class LocalRAGTool(OwlAgent):
         Returns:
             Tuple containing a list of retrieved and reranked LangchainDocument objects with scores and metadata
         """
-        logger.debug(
+        logger.info(
             f"Starting retrieval for query: '{query}' with k={num_retrieved_docs}"
         )
         metadata = {
@@ -528,60 +558,30 @@ class LocalRAGTool(OwlAgent):
 
         for i in range(min(5, len(reranked_docs))):
             logger.debug(f"Reranked doc {i}: {reranked_docs[i].metadata}")
+            if reranked_docs[i].metadata.get("rerank_score", 0.0) < 15:
+                logger.warning(
+                    f"Reranked doc {i} has a score of {reranked_docs[i].metadata.get('rerank_score', 0.0)}"
+                )
 
         return reranked_docs, metadata
 
 
-class OwlMemoryTool(BaseTool):
-    """Tool that retrieves information from the owl memory base"""
+def main():
 
-    name: str = "owl_memory_tool"
-    description: str = "Gets answers from the knowledge base"
-    args_schema: Optional[ArgsSchema] = OwlMemoryInput
-    _rag_tool = None
+    config = RAG_AGENTS_CONFIG[0]
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Create the RAG tool component instead of inheriting from it
-        logger.info("Initializing RAG tool")
-        self._rag_tool = LocalRAGTool(**kwargs)
+    load_logger_config()
 
-    def invoke(
-        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        """Process tool inputs according to BaseTool pattern."""
-        logger.debug(f"Tool invoked with input: {input}")
-        if isinstance(input, dict) and "query" in input:
-            return self._run(input["query"])
-        elif isinstance(input, str):
-            return self._run(input)
-        else:
-            return self._run(str(input))
+    # sprint(config)
 
-    # For OwlAgent compatibility
-    def message_invoke(self, message: str) -> str:
-        """Handle invoke calls from OwlAgent pattern."""
-        return self._run(message)
+    rag_tool = RAGOwlAgent(**config)
 
-    def _run(
-        self,
-        query: str,
-        run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool."""
-        logger.debug(f"Running tool with query: {query}")
-        if self._rag_tool is None:
-            return "Error: RAG tool is not initialized"
-        answer = self._rag_tool.rag_question(query)
-        return answer["answer"]
+    if hasattr(rag_tool, "default_queries") and rag_tool.default_queries:
+        for iq in rag_tool.default_queries:
+            logger.info(iq)
+            logger.info(rag_tool.rag_question(iq).get("answer"))
+            logger.info("-" * 100)
 
-    async def _arun(
-        self,
-        query: str,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool asynchronously."""
-        if self._rag_tool is None:
-            return "Error: RAG tool is not initialized"
-        answer = self._rag_tool.rag_question(query)
-        return answer["answer"]
+
+if __name__ == "__main__":
+    main()

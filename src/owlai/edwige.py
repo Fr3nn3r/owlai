@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     # Updated imports using the new structure
     from .db import CONFIG
-    from .core import OwlAgent, OwlAIAgent
+    from .core import OwlAgent
     from .db import get_default_queries_by_role
     from .tools import ToolBox
 

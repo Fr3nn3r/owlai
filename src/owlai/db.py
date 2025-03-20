@@ -423,3 +423,39 @@ CONFIG = {
         "test_queries": [],
     },
 }
+
+RAG_AGENTS_CONFIG = [
+    {
+        "name": "rag-naruto-v1",
+        "description": "Agent that knows everything about the anime series Naruto",
+        "model_provider": "mistralai",
+        "model_name": "mistral-large-latest",
+        "max_tokens": 4096,
+        "temperature": 0.1,
+        "context_size": 4096,
+        "tools_names": [],
+        "system_prompt": PROMPT_CONFIG["rag-en-v2"],
+        "default_queries": [
+            "Who is Tsunade?",
+            "Provide details about Orochimaru.",
+            "Who is the Hokage of Konoha?",
+            "Tell me about sasuke's personality",
+            "Who is the first sensei of naruto?",
+            "What is a sharingan?",
+            "What is the akatsuki?",
+            "Who is the first Hokage?",
+        ],
+        "retriever": {
+            "num_retrieved_docs": 30,
+            "num_docs_final": 5,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "colbert-ir/colbertv2.0",
+            "input_data_folders": [
+                "data/dataset-0001",  # Naruto
+            ],
+            "model_kwargs": {"device": "cuda"},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": True,
+        },
+    },
+]
