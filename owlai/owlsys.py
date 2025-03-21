@@ -9,20 +9,34 @@ from contextlib import contextmanager
 from typing import Optional, Dict, Any
 from rich.console import Console
 import yaml
-
-logger = logging.getLogger("main")
+import os
 
 
 def load_logger_config():
-    with open("logging.yaml", "r") as logger_config:
-        config = yaml.safe_load(logger_config)
-        logging.config.dictConfig(config)
+    # Only load config if not already configured
+    if not logging.getLogger().handlers:
+        config_path = "logging.yaml"
+        if os.path.exists(config_path):
+            with open(config_path, "r") as logger_config:
+                config = yaml.safe_load(logger_config)
+                logging.config.dictConfig(config)
+        else:
+            # Fallback configuration if yaml file not found
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+            )
+
+
+# Load logging config before getting logger
+load_logger_config()
+logger = logging.getLogger("main")
 
 
 @contextmanager
 def track_time(event_name: str, execution_log: Optional[Dict[str, Any]] = None):
     start_time = time.time()
-    logging.debug(f"Started '{event_name}' please wait..")
+    logger.debug(f"Started '{event_name}' please wait..")
     try:
         yield  # This is where the actual event execution happens
     finally:
@@ -35,7 +49,7 @@ def track_time(event_name: str, execution_log: Optional[Dict[str, Any]] = None):
         if minutes > 0:
             human_readable_time += f"{int(minutes)}m "
         human_readable_time += f"{seconds:.3f}s"
-        logging.info(f"'{event_name}' - completed in {human_readable_time}.")
+        logger.debug(f"'{event_name}' - completed in {human_readable_time}.")
         if execution_log:
             execution_log[f"{event_name} - execution time"] = human_readable_time
 
@@ -88,3 +102,7 @@ def get_system_info():
         system_info["GPU"].append({"Error": str(e)})
 
     return system_info
+
+
+def encode_text(text: str) -> str:
+    return text.encode("ascii", errors="replace").decode("utf-8")

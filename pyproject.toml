@@ -58,12 +58,8 @@ spotify = [
     "spotipy",
 ]
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-packages = ["owlai"]
-
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 include = ["owlai*"]
 namespaces = false
 

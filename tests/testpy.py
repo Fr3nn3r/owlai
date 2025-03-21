@@ -104,9 +104,30 @@ async def process_files_in_batches(files: List[str], batch_size: int = 5):
 
 
 # Get list of files
-files = os.listdir("data/dataset-0005/")
+# files = os.listdir("data/dataset-0005/")
 
 # Run the async processing
-asyncio.run(process_files_in_batches(files))
+# asyncio.run(process_files_in_batches(files))
 # Path to your PDF
 # pdf_path = "data/dataset-0004/LEGITEXT000006069576.pdf"
+
+report_path = "C:/Users/fbrun/Documents/GitHub/owlai/data/dataset-0005/20250321-151653-qa_results.json"
+
+import json
+
+with open(report_path, "r", encoding="utf-8") as f:
+    report = json.load(f)
+
+from rich.console import Console
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
+
+console = Console()
+
+# Assuming rag_prompt is a long string inside the report dictionary
+rag_prompt = report["Test #2"]["metadata"]["rag_prompt"]
+
+# Option 1: Use a Panel for nicer formatting
+console.print(Panel(rag_prompt, title="RAG Prompt", expand=True, padding=(1, 2)))

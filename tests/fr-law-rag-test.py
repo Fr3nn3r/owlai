@@ -12,7 +12,8 @@ if __name__ == "__main__":
     import yaml
     import json
 
-    from owlai.rag import LocalRAGTool
+    from owlai.rag import RAGOwlAgent
+    from owlai.core import OwlAgent
     from owlai.db import TOOLS_CONFIG, PROMPT_CONFIG
     from langchain.chat_models import init_chat_model
 
@@ -32,7 +33,7 @@ if __name__ == "__main__":
 
     load_logger_config()
 
-    logger = logging.getLogger("ragtool")
+    logger = logging.getLogger("main")
 
     def extract_footer(doc):
         footers = []
@@ -85,6 +86,45 @@ if __name__ == "__main__":
 
         raise ValueError(f"footer '{footer}' not matching french law convention.")
 
+    def document_curator(doc_content: str, file_path: str) -> str:
+        """
+        Curates documents to be used by the RAG engine.
+
+        Args:
+            pdf_path (str): Path to the PDF file
+
+        Returns:
+            dict: Dictionary containing title, last_modification, and doc_generated_on
+        """
+        doc = fitz.open(pdf_path)
+
+        # Get footer from the first page
+        footers = extract_footer(doc)
+        if not footers:
+            raise ValueError(f"No footer found in the document '{pdf_path}'")
+
+        for footer in footers:
+            doc_content = doc_content.replace(footer, "")
+            logger.info(f"Removed footer: {footer}")
+
+        return doc_content
+
+    def load_fr_law_pdf(pdf_path: str) -> str:
+        """
+        Loads a french law PDF file and returns the content.
+        """
+        doc = fitz.open(pdf_path)
+        
+        for i in range(len(doc)):
+        page = doc[i]               # Page is loaded here
+        text = page.get_text()      # Text is extracted now
+        print(f"Page {i + 1}:", text[:200])
+        
+        return doc.get_text("text")
+
+
+
+
     def main():
 
         execution_log = {}
@@ -134,7 +174,7 @@ if __name__ == "__main__":
                     "input_data_folder": "data/dataset-0004",  # dataset 4 droit fiscal
                     "questions": question_sets["fiscal_law_questions"],
                 },
-                "larger_dataset": {
+                "large_v1": {
                     "input_data_folder": "data/dataset-0005",
                     "questions": question_sets["general_law_questions"]
                     + question_sets["fiscal_law_questions"],
@@ -147,40 +187,57 @@ if __name__ == "__main__":
                 },
             }
 
-            dataset = datasets["fiscal_law_only"]
+            dataset = datasets["large_v1"]
 
-            test_parameters = {
-                "reader_llm": {
+            RAG_AGENTS_CONFIG = [
+                {
+                    "name": "rag-fr-law-v1",
+                    "description": "Agent expecting a french law question",
+                    "args_schema": {
+                        "query": {
+                            "type": "string",
+                            "description": "Any question about french law expressed in french",
+                        }
+                    },
                     "model_provider": "mistralai",
                     "model_name": "mistral-large-latest",
                     "max_tokens": 4096,
                     "temperature": 0.1,
                     "context_size": 4096,
-                    "system_prompt": PROMPT_CONFIG["rag-fr-v1"],
-                },
-                "retriever": {
-                    "num_retrieved_docs": 30,
-                    "num_docs_final": 5,
-                    "embeddings_model_name": "thenlper/gte-small",
-                    "reranker_name": "colbert-ir/colbertv2.0",
-                },
-                "control_llm": {
+                    "tools_names": [],
+                    "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+                    "default_queries": [],
+                    "retriever": {
+                        "num_retrieved_docs": 30,
+                        "num_docs_final": 5,
+                        "embeddings_model_name": "thenlper/gte-small",
+                        "reranker_name": "colbert-ir/colbertv2.0",
+                        "input_data_folders": [],
+                        "model_kwargs": {"device": "cuda"},
+                        "encode_kwargs": {"normalize_embeddings": True},
+                        "multi_process": True,
+                    },
+                }
+            ]
+            input_data_folder = dataset["input_data_folder"]
+
+            CONTROL_LLM_CONFIG = [
+                {
+                    "name": "control-llm",
+                    "description": "Agent without RAG to compare answers with the RAG engine",
                     "model_provider": "openai",
                     "model_name": "gpt-4o",
                     "max_tokens": 4096,
                     "temperature": 0.1,
                     "context_size": 4096,
-                    "system_prompt": PROMPT_CONFIG["rag-fr-v1"],
-                },
-            }
+                    "tools_names": [],
+                    "system_prompt": PROMPT_CONFIG["rag-fr-control-llm-v1"],
+                    "default_queries": [],
+                }
+            ]
 
-            # Override the default configuration (should be done in the test parameters)
-            TOOLS_CONFIG["owl_memory_tool"]["num_retrieved_docs"] = 30
-            TOOLS_CONFIG["owl_memory_tool"]["num_docs_final"] = 5
-
-            rag_tool = LocalRAGTool(**test_parameters["reader_llm"])
-
-            embedding_model = rag_tool._embeddings
+            rag_tool = RAGOwlAgent(**RAG_AGENTS_CONFIG[0])
+            control_llm = OwlAgent(**CONTROL_LLM_CONFIG[0])
 
             input_data_folder = dataset["input_data_folder"]
 
@@ -192,29 +249,30 @@ if __name__ == "__main__":
                     input_data_folder,
                     embedding_model,
                     metadata_extractor=extract_metadata_fr_law,
+                    document_curator=document_curator,
                 )
 
-            rag_tool._vector_stores = KNOWLEDGE_VECTOR_DATABASE
-
-            questions = dataset["questions"]
-
             qa_results = {}
-            qa_results["system_info"] = get_system_info()
+            # qa_results["system_info"] = get_system_info()
 
-            qa_results["test_parameters"] = test_parameters
+            # Merge the two dictionaries to store test parameters
+            qa_results["test_parameters"] = {
+                "rag_config": RAG_AGENTS_CONFIG[0],
+                "control_llm_config": CONTROL_LLM_CONFIG[0],
+            }
 
             qa_results["dataset"] = dataset
 
+            questions = dataset["questions"]
             # Generate a filename for the test report using the current date and time
             start_date_time = time.strftime("%Y%m%d-%H%M%S")
             test_report_filename = f"{start_date_time}-qa_results.json"
 
-            gpt = init_chat_model("gpt-4o", temperature=0.1, max_tokens=4096)
-
-        for i, question in enumerate(questions, 1):
+        for i, question in enumerate(questions[0:5], 1):
 
             with track_time(f"RAG Question {i}", execution_log):
                 answer = rag_tool.rag_question(question)
+
                 logger.info(f"USER QUERY : {question}")
                 logger.info(f"ANSWER : {answer['answer']}")
 
@@ -224,13 +282,14 @@ if __name__ == "__main__":
                     question=question
                 )
                 # Invoke the model with the formatted prompt
-                answer_control_llm = gpt.invoke(control_prompt).content
+                answer_control_llm = control_llm.invoke(control_prompt)
                 logger.info(f"CONTROL LLM ANSWER : {answer_control_llm}")
 
             qa_results[f"Test #{i}"] = {
                 "question": question,
                 "answer": answer["answer"],
                 "answer_control_llm": answer_control_llm,
+                "metadata": answer["metadata"],
             }
 
         qa_results["execution_log"] = execution_log

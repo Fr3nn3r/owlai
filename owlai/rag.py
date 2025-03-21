@@ -24,6 +24,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
 from langchain_core.tools.base import ArgsSchema
 
+from owlai.owlsys import encode_text
 import sys
 from pathlib import Path
 
@@ -159,7 +160,7 @@ class RAGOwlAgent(OwlAgent):
     def split_documents(
         self,
         chunk_size: int,  # The maximum number of tokens in a chunk
-        knowledge_base: List[LangchainDocument],
+        input_docs: List[LangchainDocument],
         tokenizer_name: str,
     ) -> List[LangchainDocument]:
         """
@@ -180,15 +181,15 @@ class RAGOwlAgent(OwlAgent):
                 "",
             ],
         )
-        logger.debug(f"Splitting {len(knowledge_base)} documents")
+        logger.debug(f"Splitting {len(input_docs)} documents")
 
         docs_processed = []
-        for doc in tqdm(knowledge_base, desc="Splitting documents"):
+        for doc in tqdm(input_docs, desc="Splitting documents"):
             result = text_splitter.split_documents([doc])
             docs_processed += result
 
         logger.debug(
-            f"Splitted {len(knowledge_base)} documents into {len(docs_processed)} chunks"
+            f"Splitted {len(input_docs)} documents into {len(docs_processed)} chunks"
         )
         # Remove duplicates
         unique_texts = {}
@@ -210,6 +211,7 @@ class RAGOwlAgent(OwlAgent):
         embedding_model: HuggingFaceEmbeddings,
         chunk_size: int = 512,
         metadata_extractor: Optional[Callable] = None,
+        document_curator: Optional[Callable] = None,
     ) -> Optional[FAISS]:
         """
         Loads an existing vector store if exists in the input_data_folder.
@@ -257,6 +259,7 @@ class RAGOwlAgent(OwlAgent):
                         chunk_size,
                         embedding_model.model_name,
                         metadata_extractor,
+                        document_curator,
                     )
 
                     # Create or update vector store
@@ -299,6 +302,7 @@ class RAGOwlAgent(OwlAgent):
         chunk_size: int,
         model_name: str,
         metadata_extractor: Optional[Callable] = None,
+        document_curator: Optional[Callable] = None,
     ) -> List[LangchainDocument]:
         """
         Loads a document file and splits it into chunks.
@@ -350,10 +354,14 @@ class RAGOwlAgent(OwlAgent):
                 # logger.debug(f"Loading page {page_number} of {total_pages}")
                 metadata.update(doc.metadata)
                 metadata["source"] = f"{filename}:{page_number}"
+                doc_content = doc.page_content
+                # Call document curator if provided
+                if document_curator:
+                    doc_content = document_curator(doc_content, filepath)
 
                 loaded_docs.append(
                     LangchainDocument(
-                        page_content=doc.page_content,
+                        page_content=doc_content,
                         metadata=metadata,
                     )
                 )
@@ -415,11 +423,8 @@ class RAGOwlAgent(OwlAgent):
 
         with track_time("Model invocation with RAG context", metadata):
 
-            def _encode_text(text: str) -> str:
-                return text.encode("ascii", errors="replace").decode("utf-8")
-
             docs_content = "\n\n".join(
-                _encode_text(doc.page_content) for doc in reranked_docs
+                encode_text(doc.page_content) for doc in reranked_docs
             )
 
             docs_content = "\n\n".join(
@@ -433,14 +438,18 @@ class RAGOwlAgent(OwlAgent):
                 raise Exception("Prompt is not set")
 
             rag_prompt = self._prompt.format(question=question, context=docs_content)
-            rag_prompt = rag_prompt.encode("ascii", errors="replace").decode("utf-8")
+            rag_prompt = encode_text(rag_prompt)
+            # Add the RAG prompt to the metadata for debugging and analysis purposes
+            metadata["rag_prompt"] = rag_prompt
 
             # logger.debug(f"Final prompt: {rag_prompt}")
             message = SystemMessage(rag_prompt)
             messages = self.chat_model.invoke([message])
         # logger.debug(f"Raw RAG answer: {messages.content}")
 
-        answer["answer"] = str(messages.content) if messages.content is not None else ""
+        answer["answer"] = (
+            encode_text(str(messages.content)) if messages.content is not None else ""
+        )
         answer["metadata"] = metadata
 
         return answer
@@ -546,7 +555,7 @@ class RAGOwlAgent(OwlAgent):
                 reranked_docs.append(doc)
 
             # Add reranked docs metadata to metadata (you can't have too much metadata)
-            metadata["reranked_docs"] = {
+            metadata["selected_docs"] = {
                 i: {
                     "title": doc.metadata.get("title", "No title"),
                     "source": doc.metadata.get("source", "Unknown source"),
@@ -557,7 +566,7 @@ class RAGOwlAgent(OwlAgent):
             }
 
         for i in range(min(5, len(reranked_docs))):
-            logger.debug(f"Reranked doc {i}: {reranked_docs[i].metadata}")
+            # logger.debug(f"Reranked doc {i}: {reranked_docs[i].metadata}")
             if reranked_docs[i].metadata.get("rerank_score", 0.0) < 15:
                 logger.warning(
                     f"Reranked doc {i} has a score of {reranked_docs[i].metadata.get('rerank_score', 0.0)}"
