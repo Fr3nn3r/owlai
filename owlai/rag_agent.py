@@ -146,19 +146,26 @@ class RAGAgent:
 
         # Log details of retrieved documents
         for i, doc in enumerate(relevant_docs):
-            logger.debug(f"Document {i+1}:")
-            logger.debug(f"  Source: {doc.metadata.get('source', 'Unknown')}")
-            logger.debug(f"  Content preview: {doc.page_content[:200]}...")
-            logger.debug(f"  Metadata: {doc.metadata}")
-            logger.debug("-" * 80)
+            logger.debug(
+                f"Document {i+1} Source: {doc.metadata.get('source', 'Unknown')}"
+            )
 
-        # Use the chain to get the answer
+        # Prepare context from retrieved documents
+        context = "\n\n".join(
+            f"Document {i+1}:\n{doc.page_content}"
+            for i, doc in enumerate(relevant_docs)
+        )
+
+        # Use the chain to get the answer with our retrieved context
         logger.debug("Using chain to generate answer...")
-        result = self.chain.invoke({"query": query})
+        result = self.chain.invoke(
+            {"query": query, "context": context, "source_documents": relevant_docs}
+        )
         logger.info("Received response from chain")
 
         return {
             "answer": result["result"],
+            "source_documents": relevant_docs,  # Include source documents in result
             "metadata": {
                 "num_docs_retrieved": len(relevant_docs),
                 "sources": [

@@ -136,6 +136,8 @@ class VectorStore:
         Args:
             other_store: The vector store to merge
         """
+        if self.docstore is None or other_store.docstore is None:
+            raise ValueError("Both vector stores must be initialized before merging")
         self.docstore.merge_from(other_store.docstore)
 
     def get_document_count(self) -> int:

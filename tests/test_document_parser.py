@@ -84,7 +84,7 @@ def test_french_law_parser_invalid_file(french_law_parser):
 
 def test_french_law_parser_empty_file():
     """Test parser behavior with empty file"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".pdf", delete=False) as tmp:
         # Create an empty PDF
         doc = fitz.open()
         doc.new_page()

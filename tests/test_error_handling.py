@@ -4,13 +4,29 @@ from langchain.docstore.document import Document
 import tempfile
 import os
 import fitz  # PyMuPDF
+from owlai.document_parser import FrenchLawParser
+import time
+
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    """Cleanup temporary files after each test"""
+    yield
+    # Give the system a moment to release file handles
+    time.sleep(0.1)
+    # Clean up any remaining temporary PDF files
+    for file in os.listdir(tempfile.gettempdir()):
+        if file.startswith("tmp") and file.endswith(".pdf"):
+            try:
+                os.remove(os.path.join(tempfile.gettempdir(), file))
+            except PermissionError:
+                # Ignore permission errors during cleanup
+                pass
 
 
 @pytest.fixture
 def french_law_parser():
     """Fixture to provide a French law parser"""
-    from owlai.document_parser import FrenchLawParser
-
     return FrenchLawParser()
 
 
@@ -22,7 +38,8 @@ def test_parse_nonexistent_file(french_law_parser):
 
 def test_parse_empty_file():
     """Test parsing an empty file"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create an empty file
         with open(tmp.name, "w") as f:
             f.write("")
@@ -30,11 +47,14 @@ def test_parse_empty_file():
         parser = FrenchLawParser()
         with pytest.raises(ValueError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_corrupted_pdf():
     """Test parsing a corrupted PDF file"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a corrupted PDF file
         with open(tmp.name, "w") as f:
             f.write("Not a valid PDF file")
@@ -42,19 +62,25 @@ def test_parse_corrupted_pdf():
         parser = FrenchLawParser()
         with pytest.raises(ValueError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_invalid_file_type():
     """Test parsing a file with invalid extension"""
-    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+    try:
         parser = FrenchLawParser()
         with pytest.raises(ValueError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_file_permission_error():
     """Test parsing a file with permission error"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a PDF file
         doc = fitz.open()
         doc.new_page()
@@ -67,11 +93,14 @@ def test_parse_file_permission_error():
         parser = FrenchLawParser()
         with pytest.raises(PermissionError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_memory_error():
     """Test parsing a file that would cause memory error"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a very large PDF file
         doc = fitz.open()
         for _ in range(1000):  # Create 1000 pages
@@ -85,11 +114,14 @@ def test_parse_memory_error():
         parser = FrenchLawParser()
         with pytest.raises(MemoryError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_timeout_error():
     """Test parsing a file that would cause timeout"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a PDF file with complex content
         doc = fitz.open()
         page = doc.new_page()
@@ -103,11 +135,14 @@ def test_parse_timeout_error():
         parser = FrenchLawParser()
         with pytest.raises(TimeoutError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_unicode_error():
     """Test parsing a file with invalid Unicode characters"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         page = doc.new_page()
         # Add text with invalid Unicode characters
@@ -118,11 +153,14 @@ def test_parse_unicode_error():
         parser = FrenchLawParser()
         with pytest.raises(UnicodeDecodeError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_io_error():
     """Test parsing a file with IO error"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a PDF file
         doc = fitz.open()
         doc.new_page()
@@ -134,11 +172,14 @@ def test_parse_io_error():
         with pytest.raises(IOError):
             parser.parse(tmp.name)
             os.remove(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_generic_error():
     """Test parsing a file that would cause a generic error"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a PDF file with invalid content
         with open(tmp.name, "wb") as f:
             f.write(b"\x00" * 1000)  # Write null bytes
@@ -146,6 +187,8 @@ def test_parse_generic_error():
         parser = FrenchLawParser()
         with pytest.raises(Exception):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_error_recovery():
@@ -157,7 +200,8 @@ def test_parse_error_recovery():
         parser.parse("nonexistent.pdf")
 
     # Second attempt with valid file
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         page = doc.new_page()
         page.insert_text((50, 50), "Valid content")
@@ -167,3 +211,5 @@ def test_parse_error_recovery():
         documents = parser.parse(tmp.name)
         assert len(documents) > 0
         assert "Valid content" in documents[0].page_content
+    finally:
+        tmp.close()

@@ -24,6 +24,8 @@ import traceback
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
 from langchain_core.tools.base import ArgsSchema
+import fitz
+from fitz import Page
 
 from owlai.owlsys import encode_text
 import sys

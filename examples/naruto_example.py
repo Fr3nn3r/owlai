@@ -17,8 +17,8 @@ if sys.platform == "win32":
     try:
         # Try to set UTF-8 locale on Windows
         locale.setlocale(locale.LC_ALL, "")
-        # Force UTF-8 encoding for stdout
-        if hasattr(sys.stdout, "reconfigure"):
+        # Force UTF-8 encoding for stdout (Python 3.7+)
+        if sys.version_info >= (3, 7) and hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8")
     except (locale.Error, AttributeError):
         pass
@@ -30,20 +30,10 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hu
 load_dotenv()
 
 # Debug prints for logging configuration
-print("Current working directory:", os.getcwd())
-print("Loading logger config...")
 load_logger_config()
-print("Logger config loaded")
 
 # Configure logging before getting logger
 logger = logging.getLogger("naruto")
-print("Logger level:", logger.getEffectiveLevel())
-print("Logger handlers:", logger.handlers)
-
-# Test logging to verify it's working
-logger.info("Starting Naruto example script")
-logger.debug("Debug message test")
-logger.warning("Warning message test")
 
 
 def process_dataset(dataset_path: str, rag_agent: RAGAgent) -> None:
@@ -125,13 +115,13 @@ def main():
 
     # Test the RAG system
     test_questions = [
-        "What is the main character's name?",
-        "What is the main character's goal?",
-        "What is the main character's village?",
+        "Tell me about Orochimaru",
+        "Who is itachi?",
+        "Who is madara?",
     ]
 
     for question in test_questions:
-        logger.info(f"\Question: {question}")
+        logger.info(f"Question: {question}")
         result = rag_agent.query(question)
         logger.info(f"Answer: {result['answer']}")
         logger.info(f"Sources: {result['metadata']['sources']}")

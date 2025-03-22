@@ -4,12 +4,35 @@ from langchain.docstore.document import Document
 import tempfile
 import os
 import fitz  # PyMuPDF
+import time
+from owlai.fr_law_load_docs import (
+    load_fr_law_pdf,
+    analyze_chunk_size_distribution,
+    document_curator,
+)
+
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    """Cleanup temporary files after each test"""
+    yield
+    # Give the system a moment to release file handles
+    time.sleep(0.1)
+    # Clean up any remaining temporary PDF files
+    for file in os.listdir(tempfile.gettempdir()):
+        if file.startswith("tmp") and file.endswith(".pdf"):
+            try:
+                os.remove(os.path.join(tempfile.gettempdir(), file))
+            except PermissionError:
+                # Ignore permission errors during cleanup
+                pass
 
 
 @pytest.fixture
 def sample_pdf_path():
     """Create a temporary PDF file with French law content"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a PDF with French law content
         doc = fitz.open()
         page = doc.new_page()
@@ -21,12 +44,12 @@ def sample_pdf_path():
         doc.save(tmp.name)
         doc.close()
         return tmp.name
+    finally:
+        tmp.close()
 
 
 def test_load_fr_law_pdf(sample_pdf_path):
     """Test loading a French law PDF file"""
-    from fr_law_load_docs import load_fr_law_pdf
-
     documents = load_fr_law_pdf(sample_pdf_path)
 
     assert len(documents) > 0
@@ -37,31 +60,28 @@ def test_load_fr_law_pdf(sample_pdf_path):
 
 def test_load_fr_law_pdf_invalid_file():
     """Test loading with invalid file path"""
-    from fr_law_load_docs import load_fr_law_pdf
-
     with pytest.raises(FileNotFoundError):
         load_fr_law_pdf("nonexistent.pdf")
 
 
 def test_load_fr_law_pdf_empty_file():
     """Test loading an empty PDF file"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create an empty PDF
         doc = fitz.open()
         doc.new_page()
         doc.save(tmp.name)
         doc.close()
 
-        from fr_law_load_docs import load_fr_law_pdf
-
         with pytest.raises(ValueError):
             load_fr_law_pdf(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_analyze_chunk_size_distribution(sample_pdf_path, tmp_path):
     """Test analyzing chunk size distribution"""
-    from fr_law_load_docs import load_fr_law_pdf, analyze_chunk_size_distribution
-
     # Load and split documents
     documents = load_fr_law_pdf(sample_pdf_path)
     split_docs = [
@@ -83,8 +103,6 @@ def test_analyze_chunk_size_distribution(sample_pdf_path, tmp_path):
 
 def test_document_curator(sample_pdf_path):
     """Test document curator function"""
-    from fr_law_load_docs import load_fr_law_pdf, document_curator
-
     # Load document
     documents = load_fr_law_pdf(sample_pdf_path)
 
@@ -99,24 +117,18 @@ def test_document_curator(sample_pdf_path):
 
 def test_document_curator_empty_content():
     """Test document curator with empty content"""
-    from fr_law_load_docs import document_curator
-
     curated_content = document_curator("", "test.pdf")
     assert curated_content == ""
 
 
 def test_document_curator_single_line():
     """Test document curator with single line content"""
-    from fr_law_load_docs import document_curator
-
     curated_content = document_curator("Single line content", "test.pdf")
     assert curated_content == "Single line content"
 
 
 def test_document_curator_no_footer():
     """Test document curator with content without footer"""
-    from fr_law_load_docs import document_curator
-
     content = "Line 1\nLine 2\nLine 3"
     curated_content = document_curator(content, "test.pdf")
     assert curated_content == content

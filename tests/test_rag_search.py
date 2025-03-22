@@ -6,34 +6,22 @@ from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain.docstore.document import Document as LangchainDocument
 import tempfile
 import os
+from tests.test_config import TEST_RAG_CONFIG, TEST_DOCUMENTS
 
 
 @pytest.fixture
 def sample_documents():
     """Create sample documents for testing"""
-    return [
-        LangchainDocument(
-            page_content="This is a test document about French law.",
-            metadata={"source": "test1.pdf", "page": 1},
-        ),
-        LangchainDocument(
-            page_content="Another test document with legal content.",
-            metadata={"source": "test2.pdf", "page": 1},
-        ),
-        LangchainDocument(
-            page_content="This document contains information about legal procedures.",
-            metadata={"source": "test3.pdf", "page": 1},
-        ),
-    ]
+    return [LangchainDocument(**doc) for doc in TEST_DOCUMENTS]
 
 
 @pytest.fixture
 def embedding_model():
     """Create a test embedding model"""
     return HuggingFaceEmbeddings(
-        model_name="thenlper/gte-small",
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
+        model_name=TEST_RAG_CONFIG["retriever"]["embeddings_model_name"],
+        model_kwargs=TEST_RAG_CONFIG["retriever"]["model_kwargs"],
+        encode_kwargs=TEST_RAG_CONFIG["retriever"]["encode_kwargs"],
     )
 
 
@@ -42,7 +30,7 @@ def rag_agent(embedding_model):
     """Create a RAG agent for testing"""
     from owlai.rag import RAGOwlAgent
 
-    return RAGOwlAgent(embedding_model=embedding_model)
+    return RAGOwlAgent(**TEST_RAG_CONFIG)
 
 
 def test_rag_search_basic(rag_agent, sample_documents, tmp_path):

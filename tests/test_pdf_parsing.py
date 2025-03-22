@@ -4,12 +4,32 @@ from langchain.docstore.document import Document
 import tempfile
 import os
 import fitz  # PyMuPDF
+import time
+
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    """Cleanup fixture that runs after each test"""
+    yield
+    # Give the system a moment to release file handles
+    time.sleep(0.1)
+    # Clean up any remaining temporary files
+    temp_dir = tempfile.gettempdir()
+    for file in os.listdir(temp_dir):
+        if file.endswith(".pdf") and file.startswith("tmp"):
+            try:
+                file_path = os.path.join(temp_dir, file)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete {file_path}: {e}")
 
 
 @pytest.fixture
 def sample_pdf_path():
     """Create a temporary PDF file with French law content"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create a PDF with French law content
         doc = fitz.open()
         page = doc.new_page()
@@ -21,12 +41,15 @@ def sample_pdf_path():
         doc.save(tmp.name)
         doc.close()
         return tmp.name
+    finally:
+        tmp.close()
 
 
 @pytest.fixture
 def multi_page_pdf_path():
     """Create a temporary multi-page PDF file"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         # Page 1
         page1 = doc.new_page()
@@ -46,6 +69,8 @@ def multi_page_pdf_path():
         doc.save(tmp.name)
         doc.close()
         return tmp.name
+    finally:
+        tmp.close()
 
 
 @pytest.fixture
@@ -74,7 +99,8 @@ def test_parse_pdf_invalid_file(french_law_parser):
 
 def test_parse_pdf_empty_file():
     """Test parsing an empty PDF file"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         # Create an empty PDF
         doc = fitz.open()
         doc.new_page()
@@ -84,6 +110,8 @@ def test_parse_pdf_empty_file():
         parser = FrenchLawParser()
         with pytest.raises(ValueError):
             parser.parse(tmp.name)
+    finally:
+        tmp.close()
 
 
 def test_parse_pdf_multiple_pages(french_law_parser, multi_page_pdf_path):
@@ -110,7 +138,8 @@ def test_parse_pdf_metadata(french_law_parser, sample_pdf_path):
 
 def test_parse_pdf_encoding(french_law_parser):
     """Test parsing PDF with different encodings"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         page = doc.new_page()
         # Add text with special characters
@@ -121,11 +150,14 @@ def test_parse_pdf_encoding(french_law_parser):
         documents = french_law_parser.parse(tmp.name)
         assert len(documents) > 0
         assert "Légal contenu" in documents[0].page_content
+    finally:
+        tmp.close()
 
 
 def test_parse_pdf_with_images():
     """Test parsing PDF with images"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         page = doc.new_page()
         # Add text and image
@@ -139,11 +171,14 @@ def test_parse_pdf_with_images():
         documents = parser.parse(tmp.name)
         assert len(documents) > 0
         assert "Text content" in documents[0].page_content
+    finally:
+        tmp.close()
 
 
 def test_parse_pdf_with_tables():
     """Test parsing PDF with tables"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         page = doc.new_page()
         # Add text in table-like format
@@ -156,11 +191,14 @@ def test_parse_pdf_with_tables():
         assert len(documents) > 0
         assert "Header 1" in documents[0].page_content
         assert "Value 1" in documents[0].page_content
+    finally:
+        tmp.close()
 
 
 def test_parse_pdf_with_links():
     """Test parsing PDF with hyperlinks"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         page = doc.new_page()
         # Add text and link
@@ -176,11 +214,14 @@ def test_parse_pdf_with_links():
         documents = parser.parse(tmp.name)
         assert len(documents) > 0
         assert "Click here" in documents[0].page_content
+    finally:
+        tmp.close()
 
 
 def test_parse_pdf_with_rotated_text():
     """Test parsing PDF with rotated text"""
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         doc = fitz.open()
         page = doc.new_page()
         # Add rotated text
@@ -192,3 +233,5 @@ def test_parse_pdf_with_rotated_text():
         documents = parser.parse(tmp.name)
         assert len(documents) > 0
         assert "Rotated text" in documents[0].page_content
+    finally:
+        tmp.close()
