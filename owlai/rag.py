@@ -3,6 +3,7 @@ from typing import Optional, List, Tuple, Any, Callable
 import os
 import time
 import logging
+import warnings
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -33,10 +34,12 @@ from pathlib import Path
 from owlai.core import OwlAgent
 from owlai.db import TOOLS_CONFIG, RAG_AGENTS_CONFIG
 from owlai.owlsys import track_time, load_logger_config
-import warnings
 from tqdm import tqdm
 
-warnings.simplefilter("ignore", category=FutureWarning)
+# Suppress specific warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub")
+warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
+warnings.filterwarnings("ignore", category=FutureWarning, module="langchain")
 
 from owlai.owlsys import load_logger_config, sprint
 

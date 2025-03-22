@@ -58,7 +58,7 @@ class OwlAgent(BaseTool, BaseModel):
     max_tokens: int = 2048
     context_size: int = 4096
     tools_names: List[str] = []  # list of tools this agent can use
-    default_queries: Optional[List[str]] = None
+    default_queries: Optional[List[str]] = []
 
     # Runtime updated properties
     total_tokens: int = 0

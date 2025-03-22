@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional
 from langchain_community.docstore.document import Document as LangchainDocument
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
 import logging
@@ -21,11 +21,10 @@ class VectorStore:
             embedding_model: The embedding model to use
         """
         self.embedding_model = embedding_model
-        self.docstore = FAISS.from_documents(
-            [],
-            embedding_model,
-            distance_strategy=DistanceStrategy.COSINE,
+        self.docstore = (
+            None  # Initialize as None, will be created when first document is added
         )
+        self.documents = []  # List of documents
 
     def add_documents(self, documents: List[LangchainDocument]) -> None:
         """
@@ -37,16 +36,23 @@ class VectorStore:
         if not documents:
             return
 
-        batch_store = FAISS.from_documents(
-            documents,
-            self.embedding_model,
-            distance_strategy=DistanceStrategy.COSINE,
-        )
+        texts = [doc.page_content for doc in documents]
+        metadatas = [doc.metadata for doc in documents]
 
-        if len(self.docstore.docstore.docs) == 0:
-            self.docstore = batch_store
+        if self.docstore is None:
+            # Create new vector store with first batch of documents
+            self.docstore = FAISS.from_texts(
+                texts,
+                self.embedding_model,
+                metadatas=metadatas,
+                distance_strategy=DistanceStrategy.COSINE,
+            )
         else:
-            self.docstore.merge_from(batch_store)
+            # Add to existing vector store
+            self.docstore.add_texts(texts, metadatas=metadatas)
+
+        logger.info(f"Added {len(documents)} documents to vector store")
+        self.documents.extend(documents)
 
     def similarity_search(
         self,
@@ -86,9 +92,17 @@ class VectorStore:
 
         Args:
             path: Path to save the vector store
+
+        Raises:
+            ValueError: If no documents have been added to the vector store
         """
+        if self.docstore is None:
+            raise ValueError(
+                "Cannot save empty vector store. Please add documents first."
+            )
+
         self.docstore.save_local(path)
-        logger.info(f"Vector store saved to {path}")
+        logger.info(f"Saved vector store to {path}")
 
     def load_local(self, path: str) -> None:
         """
@@ -107,13 +121,12 @@ class VectorStore:
         self.docstore = FAISS.load_local(
             path,
             self.embedding_model,
-            distance_strategy=DistanceStrategy.COSINE,
-            allow_dangerous_deserialization=True,
+            allow_dangerous_deserialization=True,  # Required for loading FAISS index
         )
         end_time = time.time()
 
         logger.info(
-            f"Vector store loaded from disk in {end_time - start_time:.2f} seconds"
+            f"Loaded vector store from disk in {end_time - start_time:.2f} seconds"
         )
 
     def merge(self, other_store: "VectorStore") -> None:
@@ -127,12 +140,12 @@ class VectorStore:
 
     def get_document_count(self) -> int:
         """
-        Get the number of documents in the store.
+        Get the number of documents in the vector store.
 
         Returns:
             Number of documents
         """
-        return len(self.docstore.docstore.docs)
+        return self.docstore.index.ntotal
 
     def get_document_by_id(self, doc_id: str) -> Optional[LangchainDocument]:
         """
@@ -144,7 +157,10 @@ class VectorStore:
         Returns:
             The document if found, None otherwise
         """
-        return self.docstore.docstore.docs.get(doc_id)
+        for doc in self.documents:
+            if doc.metadata.get("id") == doc_id:
+                return doc
+        return None
 
     def delete_document(self, doc_id: str) -> bool:
         """
@@ -156,7 +172,17 @@ class VectorStore:
         Returns:
             True if document was deleted, False otherwise
         """
-        if doc_id in self.docstore.docstore.docs:
-            del self.docstore.docstore.docs[doc_id]
-            return True
+        for i, doc in enumerate(self.documents):
+            if doc.metadata.get("id") == doc_id:
+                del self.documents[i]
+                return True
         return False
+
+    def get_documents(self) -> List[LangchainDocument]:
+        """
+        Get all documents from the vector store.
+
+        Returns:
+            List of all documents
+        """
+        return self.documents

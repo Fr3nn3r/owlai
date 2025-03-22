@@ -26,11 +26,24 @@ handlers:
     level: DEBUG
     formatter: simple
     filename: logs/edwige.log
+    encoding: utf-8
+
+  naruto_file:
+    class: logging.FileHandler
+    level: DEBUG
+    formatter: simple
+    filename: logs/naruto.log
+    encoding: utf-8
 
 loggers:
   main:
     level: DEBUG
     handlers: [console, file]
+    propagate: no
+    
+  naruto:
+    level: DEBUG
+    handlers: [console, naruto_file]
     propagate: no
     
 root:

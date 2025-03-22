@@ -56,15 +56,10 @@ if __name__ == "__main__":
         extract_metadata_fr_law,
     )
 
-    def load_logger_config():
-        with open("logging.yaml", "r") as logger_config:
-            config = yaml.safe_load(logger_config)
-            logging.config.dictConfig(config)
-
     transformers.logging.set_verbosity_error()
 
+    # Use centralized logging configuration
     load_logger_config()
-
     logger = logging.getLogger("main")
 
     def document_curator(doc_content: str, file_path: str) -> str:

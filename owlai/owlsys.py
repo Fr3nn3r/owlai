@@ -13,23 +13,17 @@ import os
 
 
 def load_logger_config():
-    # Only load config if not already configured
-    if not logging.getLogger().handlers:
-        config_path = "logging.yaml"
-        if os.path.exists(config_path):
-            with open(config_path, "r") as logger_config:
-                config = yaml.safe_load(logger_config)
-                logging.config.dictConfig(config)
-        else:
-            # Fallback configuration if yaml file not found
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-            )
+    """Load logging configuration from logging.yaml"""
+    config_path = "logging.yaml"
+    if os.path.exists(config_path):
+        with open(config_path, "r") as logger_config:
+            config = yaml.safe_load(logger_config)
+            logging.config.dictConfig(config)
+    else:
+        raise Exception("logging.yaml not found")
 
 
-# Load logging config before getting logger
-load_logger_config()
+# Get logger after config is loaded
 logger = logging.getLogger("main")
 
 
