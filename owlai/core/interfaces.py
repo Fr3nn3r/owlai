@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union
 from langchain_core.messages import BaseMessage
 from langchain_core.tools import BaseTool
+from langchain_core.language_models import LanguageModelLike
 
 
 class MessageOperations(ABC):
@@ -51,6 +52,11 @@ class ModelOperations(ABC):
         pass
 
     @abstractmethod
-    def count_tokens(self, message: BaseMessage) -> int:
-        """Count tokens in message"""
+    def count_tokens(self, message: Union[BaseMessage, List[BaseMessage]]) -> int:
+        """Count tokens in a message or list of messages"""
+        pass
+
+    @abstractmethod
+    def get_model(self) -> LanguageModelLike:
+        """Get the underlying model instance"""
         pass
