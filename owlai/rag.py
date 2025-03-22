@@ -5,7 +5,7 @@ import time
 import logging
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage
@@ -18,7 +18,7 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import TextLoader
 import traceback
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
@@ -40,6 +40,7 @@ warnings.simplefilter("ignore", category=FutureWarning)
 
 from owlai.owlsys import load_logger_config, sprint
 
+import fitz
 
 logger = logging.getLogger("main")
 
@@ -332,33 +333,46 @@ class RAGOwlAgent(OwlAgent):
 
         # Load document
         if filename.endswith(".pdf"):
-            loader = PyPDFLoader(
-                file_path=filepath,
-                extract_images=False,
-                extraction_mode="plain",
-            )
-            docs = loader.lazy_load()
+            doc = fitz.open(filepath)
+            total_pages = len(doc)
+            loaded_docs: List[LangchainDocument] = []
+
+            with track_time(f"Loading document: '{filename}'"):
+                for page_number in tqdm(
+                    range(total_pages), desc=f"Loading pages from {filename}"
+                ):
+                    page = doc[page_number]
+                    page_content = page.get_text("text")
+
+                    # Call document curator if provided
+                    if document_curator:
+                        page_content = document_curator(page_content, filepath)
+
+                    # Update metadata
+                    page_metadata = metadata.copy()
+                    page_metadata.update(
+                        {
+                            "source": f"{filename}:{page_number}",
+                            "page_number": page_number + 1,
+                            "num_pages": total_pages,
+                        }
+                    )
+
+                    loaded_docs.append(
+                        LangchainDocument(
+                            page_content=page_content,
+                            metadata=page_metadata,
+                        )
+                    )
+            doc.close()
         else:  # .txt files
             loader = TextLoader(filepath)
             docs = loader.lazy_load()
-
-        # Convert to LangchainDocuments
-        total_pages = metadata.get("num_pages", 0)
-        loaded_docs: List[LangchainDocument] = []
-        with track_time(f"Loading document: '{filename}'"):
-            for page_number, doc in tqdm(
-                enumerate(docs),
-                total=total_pages,
-                desc=f"Loading pages from {filename}",
-            ):
-                # logger.debug(f"Loading page {page_number} of {total_pages}")
-                metadata.update(doc.metadata)
-                metadata["source"] = f"{filename}:{page_number}"
+            loaded_docs = []
+            for doc in docs:
                 doc_content = doc.page_content
-                # Call document curator if provided
                 if document_curator:
                     doc_content = document_curator(doc_content, filepath)
-
                 loaded_docs.append(
                     LangchainDocument(
                         page_content=doc_content,
@@ -396,64 +410,6 @@ class RAGOwlAgent(OwlAgent):
 
         return split_docs
 
-    def rag_question(self, question: str) -> Dict[str, Any]:
-        """
-        Runs the RAG query against the vector store and returns an answer to the question.
-        Args:
-            question: a string containing the question to answer.
-
-        Returns:
-            A dictionary containing the question, answer, and metadata.
-        """
-        logger.debug(f"Running RAG query: '{question}'")
-
-        answer: Dict[str, Any] = {"question": question}
-
-        # TODO: think about passing parameters in a structure
-        k = self.retriever.num_retrieved_docs
-        k_final = self.retriever.num_docs_final
-
-        reranked_docs, metadata = self.retrieve_relevant_chunks(
-            query=question,
-            knowledge_base=self._vector_stores,
-            reranker=self._reranker,
-            num_retrieved_docs=k,
-            num_docs_final=k_final,
-        )
-
-        with track_time("Model invocation with RAG context", metadata):
-
-            docs_content = "\n\n".join(
-                encode_text(doc.page_content) for doc in reranked_docs
-            )
-
-            docs_content = "\n\n".join(
-                [
-                    f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', 'Unknown Source')}] \"{doc.page_content}\""
-                    for idx, doc in enumerate(reranked_docs)
-                ]
-            )
-
-            if self._prompt is None:
-                raise Exception("Prompt is not set")
-
-            rag_prompt = self._prompt.format(question=question, context=docs_content)
-            rag_prompt = encode_text(rag_prompt)
-            # Add the RAG prompt to the metadata for debugging and analysis purposes
-            metadata["rag_prompt"] = rag_prompt
-
-            # logger.debug(f"Final prompt: {rag_prompt}")
-            message = SystemMessage(rag_prompt)
-            messages = self.chat_model.invoke([message])
-        # logger.debug(f"Raw RAG answer: {messages.content}")
-
-        answer["answer"] = (
-            encode_text(str(messages.content)) if messages.content is not None else ""
-        )
-        answer["metadata"] = metadata
-
-        return answer
-
     def load_vector_store(
         self, input_data_folder: str, embedding_model: HuggingFaceEmbeddings
     ) -> Optional[FAISS]:
@@ -474,7 +430,7 @@ class RAGOwlAgent(OwlAgent):
                 f"Vector database loaded from disk in {end_time - start_time:.2f} seconds"
             )
         else:
-            logger.error(f"Vector database not found in {file_path}")
+            raise FileNotFoundError(f"Vector database not found in {file_path}")
 
         return KNOWLEDGE_VECTOR_DATABASE
 
@@ -489,7 +445,7 @@ class RAGOwlAgent(OwlAgent):
         """
         Retrieve the k most relevant document chunks for a given query.
 
-        Args:0
+        Args:
             query: The user query to find relevant documents for
             knowledge_base: The vector database containing indexed documents
             reranker: Optional reranker model to rerank results
@@ -513,22 +469,25 @@ class RAGOwlAgent(OwlAgent):
             return [], metadata
 
         with track_time(f"Documents search", metadata):
-            retrieved_docs = knowledge_base.similarity_search(
-                query=query, k=num_retrieved_docs
-            )
-            metadata["num_docs_retrieved"] = len(retrieved_docs)
-            metadata["retrieved_docs"] = {
-                i: {
-                    "title": doc.metadata.get("title", "No title"),
-                    "source": doc.metadata.get("source", "Unknown source"),
+            try:
+                retrieved_docs = knowledge_base.similarity_search(
+                    query=query, k=min(num_retrieved_docs, knowledge_base.index.ntotal)
+                )
+                metadata["num_docs_retrieved"] = len(retrieved_docs)
+                metadata["retrieved_docs"] = {
+                    i: {
+                        "title": doc.metadata.get("title", "No title"),
+                        "source": doc.metadata.get("source", "Unknown source"),
+                    }
+                    for i, doc in enumerate(retrieved_docs)
                 }
-                for i, doc in enumerate(retrieved_docs)
-            }
-            logger.debug(f"{len(retrieved_docs)} documents retrieved")
-        # print([doc.metadata for doc in retrieved_docs])
+                logger.debug(f"{len(retrieved_docs)} documents retrieved")
+            except Exception as e:
+                logger.error(f"Error during similarity search: {str(e)}")
+                return [], metadata
 
-        # If no reranker, just return top k docs
-        if not reranker:
+        # If no reranker or no docs retrieved, just return top k docs
+        if not reranker or not retrieved_docs:
             return retrieved_docs[:num_docs_final], metadata
 
         # Rerank results
@@ -537,42 +496,52 @@ class RAGOwlAgent(OwlAgent):
         )
 
         with track_time("Documents chunks reranking", metadata):
+            try:
+                # Create mapping of content to original doc for later matching
+                content_to_doc = {doc.page_content: doc for doc in retrieved_docs}
 
-            # Create mapping of content to original doc for later matching
-            content_to_doc = {doc.page_content: doc for doc in retrieved_docs}
-
-            # Get reranked results
-            reranked_results = reranker.rerank(
-                query, [doc.page_content for doc in retrieved_docs], k=num_docs_final
-            )
-
-            # Match reranked results back to original docs and add scores to doc metadata
-            reranked_docs = []
-            for rank, result in enumerate(reranked_results):
-                doc = content_to_doc[result["content"]]
-                doc.metadata["rerank_score"] = result["score"]
-                doc.metadata["rerank_position"] = result["rank"]
-                reranked_docs.append(doc)
-
-            # Add reranked docs metadata to metadata (you can't have too much metadata)
-            metadata["selected_docs"] = {
-                i: {
-                    "title": doc.metadata.get("title", "No title"),
-                    "source": doc.metadata.get("source", "Unknown source"),
-                    "rerank_score": doc.metadata.get("rerank_score", 0.0),
-                    "rerank_position": doc.metadata.get("rerank_position", -1),
-                }
-                for i, doc in enumerate(reranked_docs)
-            }
-
-        for i in range(min(5, len(reranked_docs))):
-            # logger.debug(f"Reranked doc {i}: {reranked_docs[i].metadata}")
-            if reranked_docs[i].metadata.get("rerank_score", 0.0) < 15:
-                logger.warning(
-                    f"Reranked doc {i} has a score of {reranked_docs[i].metadata.get('rerank_score', 0.0)}"
+                # Get reranked results
+                reranked_results = reranker.rerank(
+                    query,
+                    [doc.page_content for doc in retrieved_docs],
+                    k=num_docs_final,
                 )
 
-        return reranked_docs, metadata
+                if not reranked_results:
+                    logger.warning("Reranker returned no results, using original order")
+                    return retrieved_docs[:num_docs_final], metadata
+
+                # Match reranked results back to original docs and add scores to doc metadata
+                reranked_docs = []
+                for rank, result in enumerate(reranked_results):
+                    doc = content_to_doc[result["content"]]
+                    doc.metadata["rerank_score"] = result["score"]
+                    doc.metadata["rerank_position"] = result["rank"]
+                    reranked_docs.append(doc)
+
+                # Add reranked docs metadata
+                metadata["selected_docs"] = {
+                    i: {
+                        "title": doc.metadata.get("title", "No title"),
+                        "source": doc.metadata.get("source", "Unknown source"),
+                        "rerank_score": doc.metadata.get("rerank_score", 0.0),
+                        "rerank_position": doc.metadata.get("rerank_position", -1),
+                    }
+                    for i, doc in enumerate(reranked_docs)
+                }
+
+                for i in range(min(5, len(reranked_docs))):
+                    if reranked_docs[i].metadata.get("rerank_score", 0.0) < 15:
+                        logger.warning(
+                            f"Reranked doc {i} has a score of {reranked_docs[i].metadata.get('rerank_score', 0.0)}"
+                        )
+
+                return reranked_docs, metadata
+
+            except Exception as e:
+                logger.error(f"Error during reranking: {str(e)}")
+                # Fall back to original order if reranking fails
+                return retrieved_docs[:num_docs_final], metadata
 
     def _run(
         self,
@@ -602,14 +571,131 @@ class RAGOwlAgent(OwlAgent):
             raise Exception("No answer found")
         return answer.get("answer", "?????")
 
+    def load_dataset_from_split_docs(
+        self,
+        split_docs: List[LangchainDocument],
+        input_data_folder: str,
+        input_store: Optional[FAISS] = None,
+    ) -> Optional[FAISS]:
+        """
+        Loads a dataset from pre-split documents into a FAISS vector store.
+
+        Args:
+            split_docs: List of pre-split LangchainDocument objects
+            input_data_folder: Path to the folder containing documents
+            embedding_model: The embedding model to use
+
+        Returns:
+            FAISS vector store or None if no documents were processed
+        """
+        vector_db_file_path = f"{input_data_folder}/vector_db"
+        vector_store = input_store
+
+        if self._embeddings is None:
+            raise Exception("No embedding model provided")
+
+        logger.debug(f"Vector store: {vector_store}")
+
+        if os.path.exists(vector_db_file_path) and vector_store is None:
+            logger.info(f"Loading existing vector database from: {vector_db_file_path}")
+            vector_store = self.load_vector_store(input_data_folder, self._embeddings)
+
+        if vector_store is None:
+            logger.info(
+                f"Creating new vector database from {len(split_docs)} documents"
+            )
+            vector_store = FAISS.from_documents(
+                split_docs,
+                self._embeddings,
+                distance_strategy=DistanceStrategy.COSINE,
+            )
+        else:
+            logger.info(
+                f"Merging {len(split_docs)} documents into existing vector database"
+            )
+            batch_store = FAISS.from_documents(
+                split_docs,
+                self._embeddings,
+                distance_strategy=DistanceStrategy.COSINE,
+            )
+            vector_store.merge_from(batch_store)
+
+        # Save to disk
+        vector_store.save_local(vector_db_file_path)
+        logger.info(f"Vector database saved to {vector_db_file_path}")
+
+        return vector_store
+
+    def rag_question(self, question: str) -> Dict[str, Any]:
+        """
+        Runs the RAG query against the vector store and returns an answer to the question.
+        Args:
+            question: a string containing the question to answer.
+
+        Returns:
+            A dictionary containing the question, answer, and metadata.
+        """
+        if not question or not question.strip():
+            raise ValueError("Question cannot be empty")
+
+        logger.debug(f"Running RAG query: '{question}'")
+
+        answer: Dict[str, Any] = {"question": question}
+
+        # TODO: think about passing parameters in a structure
+        k = self.retriever.num_retrieved_docs
+        k_final = self.retriever.num_docs_final
+
+        reranked_docs, metadata = self.retrieve_relevant_chunks(
+            query=question,
+            knowledge_base=self._vector_stores,
+            reranker=self._reranker,
+            num_retrieved_docs=k,
+            num_docs_final=k_final,
+        )
+
+        if not reranked_docs:
+            answer["answer"] = "I don't know based on the provided sources."
+            answer["metadata"] = metadata
+            return answer
+
+        with track_time("Model invocation with RAG context", metadata):
+            docs_content = "\n\n".join(
+                [
+                    f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', 'Unknown Source')}] \"{doc.page_content}\""
+                    for idx, doc in enumerate(reranked_docs)
+                ]
+            )
+
+            if self._prompt is None:
+                raise Exception("Prompt is not set")
+
+            rag_prompt = self._prompt.format(question=question, context=docs_content)
+            rag_prompt = encode_text(rag_prompt)
+            # Add the RAG prompt to the metadata for debugging and analysis purposes
+            metadata["rag_prompt"] = rag_prompt
+
+            # logger.debug(f"Final prompt: {rag_prompt}")
+            message = SystemMessage(rag_prompt)
+            messages = self.chat_model.invoke([message])
+        # logger.debug(f"Raw RAG answer: {messages.content}")
+
+        answer["answer"] = (
+            encode_text(str(messages.content))
+            if messages.content is not None
+            else "I don't know based on the provided sources."
+        )
+        answer["metadata"] = metadata
+
+        return answer
+
 
 def main():
+    # Import fitz here to prevent reloading in concurrent processes
+    import fitz
 
     config = RAG_AGENTS_CONFIG[0]
-
     load_logger_config()
-
-    # sprint(config)
 
     rag_tool = RAGOwlAgent(**config)
 

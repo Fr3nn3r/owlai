@@ -5,24 +5,56 @@ if __name__ == "__main__":
     main_start_time = datetime.now()
 
     import os
-    import transformers
-
+    import sys
     import logging
     import logging.config
     import yaml
     import json
+    import warnings
+    import transformers  # Add missing import
+
+    from tqdm import tqdm
+
+    import fitz  # PyMuPDF
+    import re
+
+    from langchain.docstore.document import Document as LangchainDocument
+    from langchain_community.vectorstores import FAISS
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_community.vectorstores.utils import DistanceStrategy
+    from langchain_core.prompts import PromptTemplate
+    from langchain_core.messages import SystemMessage
+    from langchain_core.runnables import RunnableConfig
+    from ragatouille import RAGPretrainedModel
+    from pydantic import BaseModel, Field
+    from langchain_core.tools import BaseTool, ArgsSchema
+    from langchain_core.callbacks import (
+        AsyncCallbackManagerForToolRun,
+        CallbackManagerForToolRun,
+    )
+    from langchain_community.document_loaders import PyPDFLoader, TextLoader
+    import traceback
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from transformers import AutoTokenizer
+    from sentence_transformers import SentenceTransformer
 
     from owlai.rag import RAGOwlAgent
     from owlai.core import OwlAgent
     from owlai.db import TOOLS_CONFIG, PROMPT_CONFIG
     from langchain.chat_models import init_chat_model
 
-    from tqdm import tqdm
+    from owlai.owlsys import get_system_info, track_time, load_logger_config, sprint
+    from owlai.owlsys import encode_text
 
-    from owlai.owlsys import get_system_info, track_time
+    warnings.simplefilter("ignore", category=FutureWarning)
 
-    import fitz  # PyMuPDF
-    import re
+    # Import functions from fr-law-load-docs.py
+    from fr_law_load_docs import (
+        load_fr_law_pdf,
+        analyze_chunk_size_distribution,
+        extract_footer,
+        extract_metadata_fr_law,
+    )
 
     def load_logger_config():
         with open("logging.yaml", "r") as logger_config:
@@ -35,99 +67,59 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("main")
 
-    def extract_footer(doc):
-        footers = []
-
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-
-            # Extract text and split into lines
-            text = page.get_text("text")
-            lines = text.split("\n")
-
-            if len(lines) > 1:
-                footer = lines[-2:]  # Assume footer is in the last two lines
-                footers.append((page_num + 1, " | ".join(footer)))
-
-        return footers
-
-    def extract_metadata_fr_law(pdf_path):
-        """
-        Extract metadata from a PDF file footer (file expected to follow french law convention).
-
-        Args:
-            pdf_path (str): Path to the PDF file
-
-        Returns:
-            dict: Dictionary containing title, last_modification, and doc_generated_on
-        """
-        doc = fitz.open(pdf_path)
-
-        # Get footer from the first page
-        footers = extract_footer(doc)
-        if not footers:
-            raise ValueError(f"No footer found in the document '{pdf_path}'")
-
-        footer = footers[0][1]
-
-        # Regular Expression to Extract Components
-        match = re.match(r"^(.*?)\s*-\s*(.*?)\s*-\s*(.*?)$", footer)
-        if match:
-            title = match.group(1).strip()
-            last_modification = match.group(2).strip()
-            doc_generated_on = match.group(3).strip()
-
-            return {
-                "title": title,
-                "last_modification": last_modification,
-                "doc_generated_on": doc_generated_on,
-                "num_pages": len(doc),
-            }
-
-        raise ValueError(f"footer '{footer}' not matching french law convention.")
-
     def document_curator(doc_content: str, file_path: str) -> str:
         """
-        Curates documents to be used by the RAG engine.
+        Curates documents to be used by the RAG engine by removing footers.
 
         Args:
-            pdf_path (str): Path to the PDF file
+            doc_content (str): The document content to curate
+            file_path (str): Path to the document file
 
         Returns:
-            dict: Dictionary containing title, last_modification, and doc_generated_on
+            str: Curated document content with footer removed
         """
-        doc = fitz.open(pdf_path)
+        # Split content into lines
+        lines = doc_content.split("\n")
 
-        # Get footer from the first page
-        footers = extract_footer(doc)
-        if not footers:
-            raise ValueError(f"No footer found in the document '{pdf_path}'")
+        # Remove the last two lines (footer) if there are at least 2 lines
+        if len(lines) > 2:
+            curated_content = "\n".join(lines[:-2])
+            logger.info(f"Removed footer from document: {file_path}")
+        else:
+            curated_content = doc_content
+            logger.info(f"No footer found in document: {file_path}")
 
-        for footer in footers:
-            doc_content = doc_content.replace(footer, "")
-            logger.info(f"Removed footer: {footer}")
+        return curated_content
 
-        return doc_content
+    def index_and_save_to_disk(
+        folder_path: str, vector_store: FAISS, embedding_model: SentenceTransformer
+    ):
+        docs = load_fr_law_pdf_from_folder(folder_path)
+        # Create or update vector store
+        if vector_store is None:
+            vector_store = FAISS.from_documents(
+                split_docs,
+                embedding_model,
+                distance_strategy=DistanceStrategy.COSINE,
+            )
+        else:
+            batch_store = FAISS.from_documents(
+                split_docs,
+                embedding_model,
+                distance_strategy=DistanceStrategy.COSINE,
+            )
+            vector_store.merge_from(batch_store)
 
-    def load_fr_law_pdf(pdf_path: str) -> str:
-        """
-        Loads a french law PDF file and returns the content.
-        """
-        doc = fitz.open(pdf_path)
-        
-        for i in range(len(doc)):
-        page = doc[i]               # Page is loaded here
-        text = page.get_text()      # Text is extracted now
-        print(f"Page {i + 1}:", text[:200])
-        
-        return doc.get_text("text")
-
-
-
+        # Move processed file to 'in_store' folder
+        in_store_folder = os.path.join(input_data_folder, "in_store")
+        os.makedirs(in_store_folder, exist_ok=True)
+        os.rename(filepath, os.path.join(in_store_folder, filename))
 
     def main():
 
         execution_log = {}
+
+        print("QQQQQQQQQQQQQQQQQQQStarting test")
 
         with track_time("Loading resources", execution_log):
             # Define question sets
@@ -185,9 +177,15 @@ if __name__ == "__main__":
                         "Explique la gestion en france de la confusion des peines"
                     ],
                 },
+                "large_v2": {
+                    "input_data_folder": "data/dataset-0006",  # for loading only
+                    "questions": [
+                        "Explique la gestion en france de la confusion des peines"
+                    ],
+                },
             }
 
-            dataset = datasets["large_v1"]
+            dataset = datasets["large_v2"]
 
             RAG_AGENTS_CONFIG = [
                 {
@@ -241,16 +239,29 @@ if __name__ == "__main__":
 
             input_data_folder = dataset["input_data_folder"]
 
-            # Using the metadata extractor function with the vector store creation
-            # this is allowing the caller to specify how the metadata is extracted from the documents
-            # and stored in the vector store
-            with track_time("Vector store loading", execution_log):
-                KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_dataset(
-                    input_data_folder,
-                    embedding_model,
-                    metadata_extractor=extract_metadata_fr_law,
-                    document_curator=document_curator,
-                )
+            docs = []
+            KNOWLEDGE_VECTOR_DATABASE = None
+            total_chunks = 0
+            for file in os.listdir(input_data_folder):
+                if file.endswith(".pdf"):
+                    logger.info(f"Processing file: {file}")
+                    doc = load_fr_law_pdf(os.path.join(input_data_folder, file))
+                    total_chunks += len(doc)
+                    docs.append(doc)
+                    analyze_chunk_size_distribution(
+                        input_data_folder, file, doc, "thenlper/gte-small"
+                    )
+                    logger.info(f"Loading vector database from split docs")
+                    KNOWLEDGE_VECTOR_DATABASE = rag_tool.load_dataset_from_split_docs(
+                        docs,
+                        input_data_folder,
+                        rag_tool._embeddings,
+                        KNOWLEDGE_VECTOR_DATABASE,
+                    )
+
+            rag_tool._vector_stores = KNOWLEDGE_VECTOR_DATABASE
+
+            print(f"Total chunks in store: {total_chunks}")
 
             qa_results = {}
             # qa_results["system_info"] = get_system_info()

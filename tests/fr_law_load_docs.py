@@ -4,10 +4,16 @@ from fitz import Document
 from langchain.docstore.document import Document as LangchainDocument
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
-
+from owlai.owlsys import track_time
 from rich.console import Console
 from rich.panel import Panel
 from tqdm import tqdm
+
+from typing import List
+import os
+import logging
+
+logger = logging.getLogger("main")
 
 
 def extract_footer(doc):
@@ -39,7 +45,7 @@ def extract_footer(doc):
 
     # If we've checked enough pages and found a consistent footer, return it
     if common_footer and len(footers) >= max_pages_to_check:
-        print(f"Common footer found: {common_footer}")
+        logger.debug(f"Common footer found: '''{common_footer}'''")
         return common_footer
 
     raise ValueError("No consistent footer found in the document")
@@ -75,11 +81,55 @@ def extract_metadata_fr_law(footer: str, doc: Document):
     raise ValueError(f"footer '{footer}' not matching french law convention.")
 
 
+def analyze_chunk_size_distribution(
+    input_data_folder,
+    filename,
+    docs: List[LangchainDocument],
+    model_name="thenlper/gte-small",
+):
+    """
+    Analyze and visualize document lengths.
+
+    Args:
+        docs: to analyze
+        model_name: Name of the embedding model to use
+    """
+    from sentence_transformers import SentenceTransformer
+    from transformers import AutoTokenizer
+
+    # Get max sequence length from SentenceTransformer
+    max_seq_len = SentenceTransformer(model_name).max_seq_length
+    info_message = (
+        f"Model's max sequence size: '{max_seq_len}' Document count: '{len(docs)}'"
+    )
+    logger.info(info_message)
+
+    # Analyze token lengths (should init tokenizer once... whatever)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    lengths = [len(tokenizer.encode(doc.page_content)) for doc in docs]
+
+    # Plot distribution
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    fig = pd.Series(lengths).hist()
+    plt.title(f"Distribution of page lengths [tokens] for {filename}")
+    file_dir = f"{input_data_folder}/images"
+    file_path = f"{file_dir}/chunk_size_distribution-{filename}.png"
+    os.makedirs(file_dir, exist_ok=True)
+    plt.savefig(file_path)
+    plt.close()
+    print(f"Distribution of document lengths (in count of tokens) saved to {file_path}")
+    return file_path
+
+
 def load_fr_law_pdf(pdf_path: str) -> list[LangchainDocument]:
     """
     Loads a french law PDF file and returns the content.
     """
     doc: Document = fitz.open(pdf_path)
+
+    file_name = os.path.basename(pdf_path)
 
     footer = extract_footer(doc)
 
@@ -91,11 +141,12 @@ def load_fr_law_pdf(pdf_path: str) -> list[LangchainDocument]:
     from rich.console import Console
     from rich.panel import Panel
 
-    console = Console()
-    console.print(metadata)
+    # console = Console()
+    # console.print(metadata)
 
     total_pages = metadata.get("num_pages", 0)
     loaded_docs: List[LangchainDocument] = []
+    total_page_content = ""
 
     for page_number, page in tqdm(
         enumerate(doc),
@@ -112,99 +163,112 @@ def load_fr_law_pdf(pdf_path: str) -> list[LangchainDocument]:
         # Update page-specific metadata
         page_metadata = metadata.copy()
         page_metadata["page_number"] = page_number + 1  # 1-based page numbering
-        page_metadata["source"] = f"{pdf_path}:{page_number + 1}"
+        page_metadata["source"] = f"{file_name}:{page_number + 1}"
         # metadata.update(page.metadata)
-        metadata["source"] = f"{pdf_path}:{page_number}"
+        # metadata["source"] = f"{file_name}:{page_number}"
         # Call document curator if provided
         # if document_curator:
         #     doc_content = document_curator(doc_content, filepath)
 
-        loaded_docs.append(
-            LangchainDocument(
-                page_content=page_content,
-                metadata=metadata,
-            )
-        )
-        # Split documents
-        chunk_size = 512
-        chunk_overlap = int(chunk_size / 5)
-        tokenizer = AutoTokenizer.from_pretrained("thenlper/gte-small")
-        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        total_page_content += page_content
 
+        # loaded_docs.append(
+        #    LangchainDocument(
+        #        page_content=page_content,
+        #        metadata=page_metadata,
+        #    )
+        # )
+
+        # if page_number > 200:
+        # break
+
+    loaded_docs.append(
+        LangchainDocument(
+            page_content=total_page_content,
+            metadata=page_metadata,
+        )
+    )
+
+    # Split documents
+    embeddings_chunk_size = 512
+
+    chunk_size = 512
+    chunk_overlap = int(embeddings_chunk_size / 5)
+    chunk_size = embeddings_chunk_size * 0.9
+    tokenizer = AutoTokenizer.from_pretrained("thenlper/gte-small")
+    tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+    separators = [
+        # "\nPartie[^\n]*",
+        # "\nLivre[^\n]*",
+        # "\nTitre[^\n]*",
+        # "\nChapitre[^\n]*",
+        # "\nArticle[^\n]*",
+        ".{10,}(?=\n)Partie[^\n]*",
+        ".{10,}(?=\n)Livre[^\n]*",
+        ".{10,}(?=\n)Titre[^\n]*",
+        ".{10,}(?=\n)Chapitre[^\n]*",
+        ".{10,}(?=\n)Article[^\n]*",
+        "\n \n \n",
+        "\n\n \n",
+        "\n \n\n",
+        "\n \n",
+        "\n\n",
+        "\n",
+        ".",
+        # " ",
+        # "",
+    ]
+
+    with track_time("Splitting documents"):
         text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
             tokenizer,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,  # The number of characters to overlap between chunks
             add_start_index=True,  # If `True`, includes chunk's start index in metadata
             strip_whitespace=True,  # If `True`, strips whitespace from the start and end of every document
-            separators=[
-                # "Livre",
-                # "Titre",
-                # "Chapitre",
-                "Article",
-                "\n\n",
-                "\n",
-                " ",
-                "",
-            ],
+            separators=separators,
+            is_separator_regex=True,
         )
-        
+
         def count_tokens(text: str) -> int:
             return len(tokenizer.encode(text))
 
-        docs_processed = []
-        separator = "Article"
-        chunk_buffer = ""
-        current_chunk = ""
-        for idoc in loaded_docs:
-            result = text_splitter.split_documents([idoc])
-            for i in idoc:
-                next_chunk : str = i.page_content
-                if separator in next_chunk:
-                    current_chunk += next_chunk.split(separator,1)[0] # split the chunk at the first occurrence of the separator
-                    next_chunk = next_chunk.split(separator,1)[1]
-                    chunk_buffer += current_chunk
-                    current_chunk_token_count = count_tokens(chunk_buffer)
-                    next_chunk_token_count = count_tokens(next_chunk)
-                    if current_chunk_token_count < chunk_size - chunk_overlap :
-                        current_chunk = separator
-                        continue
-                    elif current_chunk_token_count < chunk_size :
-                        if current_chunk_token_count + next_chunk_token_count < chunk_size:
-                            current_chunk = separator
-                            continue
-                        elif:
-                            docs_processed.append(LangchainDocument(page_content=chunk_buffer, metadata=i.metadata))
-                            chunk_buffer = ""
-                            current_chunk = separator
-                            continue
-                        
-                        i.metadata["token_count"] = token_count
-                        docs_processed.append(LangchainDocument(page_content=chunk_buffer, metadata=i.metadata))
-                        chunk_buffer = ""
+        docs_processed: List[LangchainDocument] = []
 
-
-
-
-
-            docs_processed += result
+        docs_processed = text_splitter.split_documents(loaded_docs)
 
         unique_texts = {}
         docs_processed_unique = []
         for idoc in docs_processed:
             if idoc.page_content not in unique_texts:
                 unique_texts[idoc.page_content] = True
-                docs_processed_unique.append(idoc)
-
-        if page_number > 20:
-            break
+                metadata_update = idoc.metadata.copy()
+                metadata_update["token_count"] = count_tokens(idoc.page_content)
+                docs_processed_unique.append(
+                    LangchainDocument(
+                        page_content=idoc.page_content, metadata=metadata_update
+                    )
+                )
 
     return docs_processed_unique
 
 
-docs = load_fr_law_pdf("data/dataset-0005/in_store/LEGITEXT000006069414.pdf")
+def load_fr_law_pdf_from_folder(folder_path: str) -> list[LangchainDocument]:
+    docs = []
+    for file in os.listdir(folder_path):
+        if file.endswith(".pdf"):
+            doc = load_fr_law_pdf(os.path.join(folder_path, file))
+            docs.append(doc)
+            analyze_chunk_size_distribution(
+                folder_path, file, doc, "thenlper/gte-small"
+            )
+    return docs
 
-console = Console()
 
-for i in range(10):
-    console.print(docs[i])
+docs = load_fr_law_pdf_from_folder("data/dataset-0006")
+
+
+# console = Console()
+# for i in range(10):
+#    console.print(docs[i])
