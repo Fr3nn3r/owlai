@@ -32,12 +32,12 @@ class RAGAgent:
             vector_store_path: Optional path to load existing vector store
         """
         self.parser = FrenchLawParser()
-        self.vector_store = VectorStore(embedding_model)
+        self.vector_store = VectorStore(embedding_model, vector_store_path or "")
         self.llm = llm
         self.chain = None  # Initialize chain as None, will be created when needed
 
-        if vector_store_path:
-            self.vector_store.load_local(vector_store_path)
+        # if vector_store_path:
+        #    self.vector_store.load_local(vector_store_path)
 
         # Create the QA chain
         prompt_template = """Use the following pieces of context to answer the question at the end. 

@@ -38,7 +38,8 @@ def debug_print(logger: logging.Logger, title: str, content: Any) -> None:
     """Print debug information using rich console if debug is enabled"""
     console = Console(force_terminal=True) if logger.isEnabledFor(10) else None
     if console and logger.isEnabledFor(10):
-        console.print(Panel(Pretty(content), title=title, border_style="blue"))
+        # May be we'll put this back later: console.print(Panel(Pretty(content), title=title, border_style="blue"))
+        console.print(content)
 
 
 def debug_table(logger: logging.Logger, title: str, data: List[dict]) -> None:

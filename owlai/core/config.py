@@ -1,12 +1,37 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, field_validator
+from owlai.core.rag_config import RAGConfig
+from enum import Enum
+
+
+class Provider(str, Enum):
+    """Supported LLM providers"""
+
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    OPENAI = "openai"
+    MISTRALAI = "mistralai"
+    HUGGINGFACE = "huggingface"
+    OLLAMA = "ollama"
+    AZURE = "azure"
+    FIREWORKS = "fireworks"
+    TOGETHER = "together"
+    VERTEXAI = "vertexai"
+    BEDROCK = "bedrock"
+    COHERE = "cohere"
+    DEEPINFRA = "deepinfra"
+    GROQ = "groq"
+    PERPLEXITY = "perplexity"
+    ZHIPUAI = "zhipuai"
+    YI = "yi"
+    CUSTOM = "custom"
 
 
 class ModelConfig(BaseModel):
     """Configuration for language models"""
 
-    provider: str = Field(..., description="Model provider (e.g., 'openai')")
+    provider: Provider = Field(..., description="Model provider (e.g., 'openai')")
     model_name: str = Field(..., description="Name of the model to use")
     temperature: float = Field(
         default=0.1, ge=0.0, le=2.0, description="Model temperature"
@@ -15,14 +40,6 @@ class ModelConfig(BaseModel):
         default=2048, gt=0, description="Maximum tokens per response"
     )
     context_size: int = Field(default=4096, gt=0, description="Maximum context size")
-
-    @field_validator("provider")
-    @classmethod
-    def validate_provider(cls, v):
-        valid_providers = {"openai", "anthropic", "google"}
-        if v.lower() not in valid_providers:
-            raise ValueError(f"Provider must be one of {valid_providers}")
-        return v.lower()
 
 
 class AgentConfig(BaseModel):
@@ -39,6 +56,9 @@ class AgentConfig(BaseModel):
     )
     tools_names: List[str] = Field(
         default_factory=list, description="Names of tools to use"
+    )
+    retriever: Optional[RAGConfig] = Field(
+        default=None, description="RAG configuration for retrieval"
     )
 
     @field_validator("name")

@@ -4,6 +4,7 @@
 #  VV-VV
 
 print("Loading db module")
+import torch
 
 USER_DATABASE = {
     "user_id_4385972043572": {
@@ -195,7 +196,7 @@ PROMPT_CONFIG = {
     "{context}\n"
     "### Instructions:\n"
     "- If multiple sources contribute, cite them as [Source: A, B].\n"
-    "- If uncertain, respond with 'I don’t know based on the provided sources.'\n"
+    "- If uncertain, respond with 'I don't know based on the provided sources.'\n"
     "- Do not hallucinate information not found in the sources.\n"
     "Answer:\n",
     ##################################
@@ -208,7 +209,7 @@ PROMPT_CONFIG = {
     "{context}\n"
     "### Instructions:\n"
     "- If multiple sources contribute, cite them as [Source: A, B].\n"
-    "- If uncertain, respond with 'I don’t know based on the provided sources.'\n"
+    "- If uncertain, respond with 'I don't know based on the provided sources.'\n"
     "- Do not hallucinate information not found in the sources.\n"
     "Answer:\n",
     ##################################
@@ -501,4 +502,39 @@ RAG_AGENTS_CONFIG = [
             "multi_process": True,
         },
     },
+]
+
+
+RAG_AGENTS_CONFIG_V2 = [
+    {
+        "name": "french_law_agent",
+        "description": "Agent specialized in French law",
+        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "llm_config": {
+            "provider": "mistralai",
+            "model_name": "mistral-large-latest",
+            "temperature": 0.1,
+            "max_tokens": 4000,
+            "top_p": 0.95,
+            "top_k": 50,
+            "repetition_penalty": 1.1,
+            "stop": ["</s>", "Human:", "Assistant:"],
+            "model_kwargs": {"device_map": "auto", "trust_remote_code": True},
+        },
+        "retriever": {
+            "num_retrieved_docs": 5,
+            "num_docs_final": 3,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "colbert-ir/colbertv2.0",
+            "input_data_folders": ["data/french_law"],
+            "model_kwargs": {"device": "cuda" if torch.cuda.is_available() else "cpu"},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": True,
+        },
+        "default_queries": [
+            "What are the main principles of French law?",
+            "How does the French legal system work?",
+            "What are the key differences between civil and criminal law in France?",
+        ],
+    }
 ]

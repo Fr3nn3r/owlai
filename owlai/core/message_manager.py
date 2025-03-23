@@ -1,5 +1,11 @@
 from typing import List, Optional
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    AIMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from owlai.core.interfaces import MessageOperations
 from owlai.core.config import ModelConfig
 from owlai.core.logging_setup import get_logger
@@ -22,26 +28,24 @@ class MessageManager(MessageOperations):
             )
             raise ValueError("Message must be a BaseMessage instance")
 
-        # Convert tool messages to the correct format
+        # Convert AIMessages with tool role to proper ToolMessages
         if (
             isinstance(message, AIMessage)
             and message.additional_kwargs.get("role") == "tool"
         ):
-            # For tool response messages, we need to preserve the tool_call_id and name
-            # and set the role to "tool" to match OpenAI's expected format
+            # For tool response messages, convert to proper ToolMessage
             tool_call_id = message.additional_kwargs.get("tool_call_id", "")
             name = message.additional_kwargs.get("name", "")
-            preserved_message = AIMessage(
+
+            # Create a proper ToolMessage
+            preserved_message = ToolMessage(
                 content=message.content,
-                additional_kwargs={
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "name": name,
-                },
+                tool_call_id=tool_call_id,
+                name=name,
             )
             self._messages.append(preserved_message)
             self.logger.debug(
-                f"Added tool response message: tool_call_id={tool_call_id}, name={name}"
+                f"Converted AIMessage to ToolMessage: tool_call_id={tool_call_id}, name={name}"
             )
         else:
             # For non-tool messages, preserve all additional kwargs
@@ -52,7 +56,6 @@ class MessageManager(MessageOperations):
                     preserved_message = AIMessage(
                         content=message.content,
                         additional_kwargs={
-                            "role": "assistant",
                             "tool_calls": [
                                 {
                                     "id": tc.get("id", ""),
@@ -64,13 +67,6 @@ class MessageManager(MessageOperations):
                                 }
                                 for tc in message.tool_calls
                             ],
-                        },
-                    )
-                else:
-                    preserved_message = AIMessage(
-                        content=message.content,
-                        additional_kwargs={
-                            "role": "assistant",
                         },
                     )
             self._messages.append(preserved_message)

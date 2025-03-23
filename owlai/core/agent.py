@@ -1,12 +1,14 @@
 from typing import List, Optional
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
+from langchain_core.messages.tool import ToolCall
 from owlai.core.config import AgentConfig
 from owlai.core.message_manager import MessageManager
 from owlai.core.tool_manager import ToolManager
 from owlai.core.model_manager import ModelManager
 from owlai.core.logging_setup import get_logger, debug_print, debug_table
 from rich.console import Console
+import json
 
 
 class OwlAgent:
@@ -63,30 +65,15 @@ class OwlAgent:
             self.logger.debug(f"Getting model completion for {len(messages)} messages")
             ai_message = self.model_manager.get_completion(messages)
 
-            # Add detailed debug logging for AI message structure
-            debug_print(self.logger, "AI Message Structure", ai_message)
-            debug_print(self.logger, "AI Model", self.model_manager._model)
-            debug_print(self.logger, "AI Model config", self.model_manager.model_config)
-
             # Process any tool calls
             tool_calls = getattr(ai_message, "tool_calls", None)
             if not tool_calls:
                 tool_calls = ai_message.additional_kwargs.get("tool_calls", [])
 
-            # Add more detailed tool calls debugging
-            debug_print(
-                self.logger,
-                "Tool Calls Analysis",
-                {
-                    "has_tool_calls_attr": hasattr(ai_message, "tool_calls"),
-                    "tool_calls_attr_value": getattr(ai_message, "tool_calls", None),
-                    "tool_calls_kwargs": ai_message.additional_kwargs.get("tool_calls"),
-                    "tool_calls_final": tool_calls,
-                    "available_tools": list(self.tool_manager._tools.keys()),
-                },
-            )
-
             # Create a new AIMessage with the tool calls preserved
+            # Preserve the original AI message with tool calls using langchain's built-in structures
+            # This avoids manual dictionary manipulation by using the proper AIMessage constructor
+            # with the appropriate structure for tool calls
             preserved_message = AIMessage(
                 content=ai_message.content,
                 additional_kwargs={
@@ -110,34 +97,28 @@ class OwlAgent:
                 for tool_call in tool_calls:
                     tool_name = None
                     tool_args = {}
-                    try:
-                        # Log the tool call format
-                        debug_print(
-                            self.logger,
-                            "Processing Tool Call",
-                            {
-                                "raw_tool_call": tool_call,
-                                "tool_call_type": type(tool_call),
-                                "tool_call_dict": (
-                                    tool_call if isinstance(tool_call, dict) else None
-                                ),
-                            },
-                        )
+                    args_str = "{}"  # Initialize with empty JSON object string
 
+                    try:
                         # Handle both old and new tool call formats
                         if isinstance(tool_call, dict):
                             if "function" in tool_call:
                                 tool_name = tool_call["function"]["name"]
+                                # Get arguments string
+                                args_str = tool_call["function"].get("arguments", "{}")
                                 # Try to parse arguments, fall back to empty dict if invalid
                                 try:
-                                    args_str = tool_call["function"]["arguments"]
                                     if args_str == "{}" or not args_str.strip():
                                         tool_args = {}
                                     else:
-                                        tool_args = eval(args_str)
-                                except:
+                                        # Replace eval with safer json.loads
+                                        tool_args = json.loads(args_str)
+                                except json.JSONDecodeError:
+                                    self.logger.warning(
+                                        f"Failed to parse tool arguments: {args_str}"
+                                    )
                                     tool_args = {}
-                                debug_print(
+                                self.logger.debug(
                                     self.logger,
                                     "Extracted Tool Info (New Format)",
                                     {"name": tool_name, "args": tool_args},
@@ -145,7 +126,7 @@ class OwlAgent:
                             elif "name" in tool_call:
                                 tool_name = tool_call["name"]
                                 tool_args = tool_call.get("args", {})
-                                debug_print(
+                                self.logger.debug(
                                     self.logger,
                                     "Extracted Tool Info (Old Format)",
                                     {"name": tool_name, "args": tool_args},
@@ -175,14 +156,12 @@ class OwlAgent:
                             )
                             # Pass the query as tool_input
                             tool_result = tool.run(tool_args.get("query", ""))
-                            # Add tool result to history as a tool message
-                            tool_message = AIMessage(
+
+                            # Use ToolMessage instead of AIMessage with additional_kwargs
+                            tool_message = ToolMessage(
                                 content=str(tool_result),
-                                additional_kwargs={
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.get("id", ""),
-                                    "name": tool_name,
-                                },
+                                name=tool_name,
+                                tool_call_id=tool_call.get("id", ""),
                             )
                             self.message_manager.append_message(tool_message)
                             self.logger.debug(
@@ -201,9 +180,6 @@ class OwlAgent:
                                 self.message_manager.append_message(
                                     AIMessage(
                                         content=final_response.content,
-                                        additional_kwargs={
-                                            "role": "assistant",
-                                        },
                                     )
                                 )
                             return str(final_response.content or "")

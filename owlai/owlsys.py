@@ -11,6 +11,8 @@ from rich.console import Console
 import yaml
 import os
 
+from owlai.core.logging_setup import get_logger
+
 
 def load_logger_config():
     """Load logging configuration from logging.yaml"""
@@ -24,7 +26,7 @@ def load_logger_config():
 
 
 # Get logger after config is loaded
-logger = logging.getLogger("main")
+logger = get_logger("owlsys")
 
 
 @contextmanager
