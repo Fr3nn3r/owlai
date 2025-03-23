@@ -62,7 +62,9 @@ if __name__ == "__main__":
             for iagent_config in RAG_AGENTS_CONFIG:
                 try:
                     agent = RAGOwlAgent(**iagent_config)
-                    agent.init_callable_tools(self.toolbox.get_tools(agent.tools_names))
+                    agent.init_callable_tools(
+                        self.toolbox.get_tools(agent.llm_config.tools_names)
+                    )
                     self.owls[agent.name] = agent
                     self.names.append(agent.name)
                 except ValidationError as e:

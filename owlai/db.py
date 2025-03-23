@@ -434,12 +434,14 @@ RAG_AGENTS_CONFIG = [
                 "description": "Any question about the anime series Naruto expressed in english",
             }
         },
-        "model_provider": "mistralai",
-        "model_name": "mistral-large-latest",
-        "max_tokens": 4096,
-        "temperature": 0.1,
-        "context_size": 4096,
-        "tools_names": [],
+        "llm_config": {
+            "model_provider": "mistralai",
+            "model_name": "mistral-large-latest",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": [],
+        },
         "system_prompt": PROMPT_CONFIG["rag-en-v2"],
         "default_queries": [
             "Who is Tsunade?",
@@ -473,12 +475,14 @@ RAG_AGENTS_CONFIG = [
                 "description": "Any question about french law expressed in french",
             }
         },
-        "model_provider": "mistralai",
-        "model_name": "mistral-large-latest",
-        "max_tokens": 4096,
-        "temperature": 0.1,
-        "context_size": 4096,
-        "tools_names": [],
+        "llm_config": {
+            "model_provider": "mistralai",
+            "model_name": "mistral-large-latest",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": [],
+        },
         "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
         "default_queries": [
             "Expliquez les différentes servitudes et leurs modes d'établissement.",

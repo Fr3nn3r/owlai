@@ -45,19 +45,23 @@ class DefaultOwlAgentInput(BaseModel):
     query: str = Field(description="some natural language input to the agent")
 
 
-class OwlAgent(BaseTool, BaseModel):
-
-    # JSON defined properties
-    name: str = "sad_unamed_owl_agent"
-    description: str
-    args_schema: Optional[ArgsSchema] = DefaultOwlAgentInput
-    system_prompt: str
+class LLMConfig(BaseModel):
     model_provider: str
     model_name: str
     temperature: float = 0.1
     max_tokens: int = 2048
     context_size: int = 4096
     tools_names: List[str] = []  # list of tools this agent can use
+
+
+class OwlAgent(BaseTool, BaseModel):
+
+    # JSON defined properties
+    name: str = "sad_unamed_owl_agent"
+    description: str
+    args_schema: Optional[ArgsSchema] = DefaultOwlAgentInput
+    llm_config: LLMConfig
+    system_prompt: str
     default_queries: Optional[List[str]] = None
 
     # Runtime updated properties
@@ -74,13 +78,13 @@ class OwlAgent(BaseTool, BaseModel):
     def chat_model(self) -> BaseChatModel:
         if self._chat_model_cache is None:
             self._chat_model_cache = init_chat_model(
-                model=self.model_name,
-                model_provider=self.model_provider,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+                model=self.llm_config.model_name,
+                model_provider=self.llm_config.model_provider,
+                temperature=self.llm_config.temperature,
+                max_tokens=self.llm_config.max_tokens,
             )
             logger.debug(
-                f"Chat model initialized: {self.model_name} {self.model_provider} {self.temperature} {self.max_tokens}"
+                f"Chat model initialized: {self.llm_config.model_name} {self.llm_config.model_provider} {self.llm_config.temperature} {self.llm_config.max_tokens}"
             )
         return self._chat_model_cache
 
@@ -103,27 +107,30 @@ class OwlAgent(BaseTool, BaseModel):
 
         metadata = message.response_metadata
         # Should get rid of model_provider dependend code ------------- should be a util function outside owlagent
-        if self.model_provider == "openai" or self.model_provider == "mistralai":
+        if (
+            self.llm_config.model_provider == "openai"
+            or self.llm_config.model_provider == "mistralai"
+        ):
             return metadata["token_usage"]["total_tokens"]
-        elif self.model_provider == "anthropic":
+        elif self.llm_config.model_provider == "anthropic":
             anthropic_total_tokens = (
                 metadata["usage"]["input_tokens"] + metadata["usage"]["output_tokens"]
             )
             return anthropic_total_tokens
         else:
             logger.warning(
-                f"Token count unsupported for model provider: '{self.model_provider}'"
+                f"Token count unsupported for model provider: '{self.llm_config.model_provider}'"
             )
             return -1
 
     def append_message(self, message: BaseMessage):
         if type(message) == AIMessage:
             self.total_tokens = self._token_count(message)
-        if (self.total_tokens > self.context_size) and (
+        if (self.total_tokens > self.llm_config.context_size) and (
             self.fifo_message_mode == False
         ):
             logger.warning(
-                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.context_size}' -> activating FIFO message mode"
+                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.llm_config.context_size}' -> activating FIFO message mode"
             )
             self.fifo_message_mode = True
         if self.fifo_message_mode:
@@ -155,7 +162,7 @@ class OwlAgent(BaseTool, BaseModel):
             tool_args = tool_call.get("args", {})
 
             # Check if tool exists
-            if tool_name not in self.tools_names:
+            if tool_name not in self.llm_config.tools_names:
                 error_msg = f"Tool '{tool_name}' not found in available tools"
                 logger.error(error_msg)
                 tool_msg = ToolMessage(
@@ -224,7 +231,9 @@ class OwlAgent(BaseTool, BaseModel):
         # )
         try:
             # update system prompt with latestcontext
-            system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
+            system_message = SystemMessage(
+                f"{self.llm_config.system_prompt}\n{user_context}"
+            )
             if len(self._message_history) == 0:
                 self._message_history.append(system_message)
             else:
@@ -250,7 +259,7 @@ class OwlAgent(BaseTool, BaseModel):
             return str(response.content)  # Return the model response as string
 
         except Exception as e:
-            logger.error(f"Error invoking model '{self.model_name}': '{e}'")
+            logger.error(f"Error invoking model '{self.llm_config.model_name}': '{e}'")
             logger.error(f"Stack trace: '{traceback.format_exc()}'")
             return f"Error: {str(e)}"
 
@@ -268,7 +277,7 @@ class OwlAgent(BaseTool, BaseModel):
         if len(self._message_history) > 0:
             logger.info(f"System prompt: '{self._message_history[0].content}'")
         else:
-            logger.info(f"System prompt: '{self.system_prompt}'")
+            logger.info(f"System prompt: '{self.llm_config.system_prompt}'")
 
     def reset_message_history(self):
         if len(self._message_history) > 0:
@@ -280,7 +289,7 @@ class OwlAgent(BaseTool, BaseModel):
 
     def print_model_info(self):
         logger.debug(
-            f"Chat model: {self.model_name} {self.model_provider} {self.temperature} {self.max_tokens}"
+            f"Chat model: {self.llm_config.model_name} {self.llm_config.model_provider} {self.llm_config.temperature} {self.llm_config.max_tokens}"
         )
         sprint(self.chat_model)
 

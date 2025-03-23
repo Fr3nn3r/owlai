@@ -28,8 +28,8 @@ if tts_engine_name == "elevenlabs":
     )
 elif tts_engine_name == "azure":
     tts_engine = AzureEngine(
-        os.getenv("AZURE_SPEECH_KEY"),
-        os.getenv("AZURE_SPEECH_REGION"),
+        # os.getenv("AZURE_SPEECH_KEY"),
+        # os.getenv("AZURE_SPEECH_REGION"),
         voice="en-US-AvaNeural",
         rate=30,
     )
@@ -47,6 +47,9 @@ elif tts_engine_name == "coqui":
     # tts_engine = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2").to("cuda")
 else:
     raise ValueError(f"Unsuported TTS engine: {tts_engine_name}")
+
+if tts_engine is None:
+    raise ValueError("No TTS engine was initialized")
 
 tts_stream = TextToAudioStream(tts_engine)
 
