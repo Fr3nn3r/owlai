@@ -13,8 +13,11 @@ def setup_logging(config_path: Optional[str] = None) -> None:
         )
 
     # Create logs directory if it doesn't exist
-    os.makedirs(os.path.dirname(config_path), exist_ok=True)
     os.makedirs("logs", exist_ok=True)
+
+    # Load and validate logging configuration
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Logging configuration file not found: {config_path}")
 
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -24,13 +27,4 @@ def setup_logging(config_path: Optional[str] = None) -> None:
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance with the given name"""
-    logger = logging.getLogger(f"owlai.{name}")
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-    return logger
+    return logging.getLogger(f"owlai.{name}")

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Union
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.tools import BaseTool
 from langchain_core.language_models import LanguageModelLike
 
@@ -47,7 +47,7 @@ class ModelOperations(ABC):
     """Interface for model operations"""
 
     @abstractmethod
-    def get_completion(self, messages: List[BaseMessage]) -> str:
+    def get_completion(self, messages: List[BaseMessage]) -> AIMessage:
         """Get completion from model"""
         pass
 

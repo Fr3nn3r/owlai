@@ -1,5 +1,5 @@
 from typing import List, Optional, Union
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.language_models import LanguageModelLike
 from langchain.chat_models import init_chat_model
 from owlai.core.config import ModelConfig
@@ -22,6 +22,18 @@ class ModelManager(ModelOperations):
                 "temperature": model_config.temperature,
                 "max_tokens": model_config.max_tokens,
             },
+        )
+
+    def __repr__(self) -> str:
+        """String representation of the model manager"""
+        self.logger.debug("Generating string representation of ModelManager")
+        return (
+            f"ModelManager(provider='{self.model_config.provider}', "
+            f"model_name='{self.model_config.model_name}', "
+            f"temperature={self.model_config.temperature}, "
+            f"max_tokens={self.model_config.max_tokens}, "
+            f"context_size={self.model_config.context_size}, "
+            f"model_initialized={self._model is not None})"
         )
 
     def get_model(self) -> LanguageModelLike:
@@ -54,7 +66,7 @@ class ModelManager(ModelOperations):
                 raise
         return self._model
 
-    def get_completion(self, messages: List[BaseMessage]) -> str:
+    def get_completion(self, messages: List[BaseMessage]) -> AIMessage:
         """Get completion from model"""
         if not messages:
             self.logger.warning("Attempted to get completion with empty messages")
@@ -70,15 +82,15 @@ class ModelManager(ModelOperations):
             )
             response = self.get_model().invoke(messages)
             if isinstance(response, str):
-                result = response
+                result = AIMessage(content=response)
             else:
-                result = str(response)
+                result = response
 
             self.logger.info(
                 "Model completion successful",
                 extra={
                     "message_count": len(messages),
-                    "response_length": len(result),
+                    "response_length": len(result.content),
                 },
             )
             return result
