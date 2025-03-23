@@ -1,23 +1,83 @@
-from typing import List
-from langchain_core.messages import BaseMessage, SystemMessage
+from typing import List, Optional
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from owlai.core.interfaces import MessageOperations
 from owlai.core.config import ModelConfig
+from owlai.core.logging_setup import get_logger
 
 
 class MessageManager(MessageOperations):
-    """Manages message history and context window"""
+    """Manages message history and token counting"""
 
     def __init__(self, model_config: ModelConfig):
         self.model_config = model_config
         self._messages: List[BaseMessage] = []
         self.fifo_mode = False
+        self.logger = get_logger("messages")
 
     def append_message(self, message: BaseMessage) -> None:
-        """Add a message to history, managing context window"""
+        """Add a message to the history"""
         if not isinstance(message, BaseMessage):
-            raise ValueError("Invalid message type")
+            self.logger.warning(
+                f"Invalid message type: {type(message).__name__}, expected BaseMessage"
+            )
+            raise ValueError("Message must be a BaseMessage instance")
 
-        self._messages.append(message)
+        # Convert tool messages to the correct format
+        if (
+            isinstance(message, AIMessage)
+            and message.additional_kwargs.get("role") == "tool"
+        ):
+            # For tool response messages, we need to preserve the tool_call_id and name
+            # and set the role to "tool" to match OpenAI's expected format
+            tool_call_id = message.additional_kwargs.get("tool_call_id", "")
+            name = message.additional_kwargs.get("name", "")
+            preserved_message = AIMessage(
+                content=message.content,
+                additional_kwargs={
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "name": name,
+                },
+            )
+            self._messages.append(preserved_message)
+            self.logger.debug(
+                f"Added tool response message: tool_call_id={tool_call_id}, name={name}"
+            )
+        else:
+            # For non-tool messages, preserve all additional kwargs
+            preserved_message = message
+            if isinstance(message, AIMessage):
+                # For AI messages, ensure we preserve tool calls if present
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    preserved_message = AIMessage(
+                        content=message.content,
+                        additional_kwargs={
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": tc.get("id", ""),
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.get("name", ""),
+                                        "arguments": str(tc.get("args", {})),
+                                    },
+                                }
+                                for tc in message.tool_calls
+                            ],
+                        },
+                    )
+                else:
+                    preserved_message = AIMessage(
+                        content=message.content,
+                        additional_kwargs={
+                            "role": "assistant",
+                        },
+                    )
+            self._messages.append(preserved_message)
+            self.logger.debug(
+                f"Added message: type={type(message).__name__}, content_length={len(message.content)}"
+            )
+
         total_tokens = sum(self._count_tokens(msg) for msg in self._messages)
 
         if total_tokens > self.model_config.context_size:
@@ -27,13 +87,15 @@ class MessageManager(MessageOperations):
                 total_tokens -= self._count_tokens(removed)
 
     def get_message_history(self) -> List[BaseMessage]:
-        """Get current message history"""
-        return self._messages.copy()
+        """Get the message history"""
+        return self._messages
 
     def clear_history(self) -> None:
-        """Clear message history"""
-        self._messages.clear()
+        """Clear the message history"""
+        message_count = len(self._messages)
+        self._messages = []
         self.fifo_mode = False
+        self.logger.debug(f"Cleared {message_count} messages from history")
 
     def _count_tokens(self, message: BaseMessage) -> int:
         """Count tokens in a message"""

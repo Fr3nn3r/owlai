@@ -84,12 +84,40 @@ class OwlAgent(BaseTool, BaseModel):
             )
         return self._chat_model_cache
 
-    def init_callable_tools(self, tools: List[Any]):
+    def register_tool(self, tool: BaseTool) -> None:
+        """Register a tool with both ToolManager and ModelManager."""
+        if not isinstance(tool, BaseTool):
+            logger.error(f"Invalid tool type: {type(tool)}")
+            raise ValueError("Invalid tool type")
+
+        if not tool.name:
+            logger.error("Tool name cannot be empty")
+            raise ValueError("Tool name cannot be empty")
+
+        # Register with ToolManager
+        self._tool_dict[tool.name] = tool
+        self.callable_tools.append(tool)
+
+        # Register with ModelManager
+        if self._chat_model_cache:
+            self._chat_model_cache = self._chat_model_cache.bind(
+                tools=self.callable_tools
+            )
+
+        logger.info(f"Registered tool: {tool.name}")
+
+    def init_callable_tools(self, tools: List[Any]) -> BaseChatModel:
         """Initialize callable tools with the provided tools list."""
         self.callable_tools = tools
-        self._chat_model_cache = self.chat_model.bind_tools(tools)
         for tool in tools:
             self._tool_dict[tool.name] = tool
+            logger.info(f"Initialized tool: {tool.name}")
+
+        # Bind tools to chat model
+        if self._chat_model_cache:
+            self._chat_model_cache = self._chat_model_cache.bind(
+                tools=self.callable_tools
+            )
         return self._chat_model_cache
 
     def _token_count(self, message: Union[AIMessage, BaseMessage]):

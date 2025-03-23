@@ -91,7 +91,7 @@ def create_agent() -> OwlAgent:
 
     # Create and return the agent
     agent = OwlAgent(config.agent)
-    agent.tool_manager.register_tool(tavily_tool)
+    agent.register_tool(tavily_tool)
 
     logger.info(f"Created search agent: {agent}")
     return agent

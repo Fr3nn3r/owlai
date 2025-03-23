@@ -1,8 +1,12 @@
 import os
 import yaml
 import logging.config
-from typing import Optional
+from typing import Optional, List, Any
 import logging
+from rich.console import Console
+from rich.pretty import Pretty
+from rich.panel import Panel
+from rich.table import Table
 
 
 def setup_logging(config_path: Optional[str] = None) -> None:
@@ -28,3 +32,23 @@ def setup_logging(config_path: Optional[str] = None) -> None:
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance with the given name"""
     return logging.getLogger(f"owlai.{name}")
+
+
+def debug_print(logger: logging.Logger, title: str, content: Any) -> None:
+    """Print debug information using rich console if debug is enabled"""
+    console = Console(force_terminal=True) if logger.isEnabledFor(10) else None
+    if console and logger.isEnabledFor(10):
+        console.print(Panel(Pretty(content), title=title, border_style="blue"))
+
+
+def debug_table(logger: logging.Logger, title: str, data: List[dict]) -> None:
+    """Print debug information in table format using rich console if debug is enabled"""
+    console = Console(force_terminal=True) if logger.isEnabledFor(10) else None
+    if console and logger.isEnabledFor(10):
+        table = Table(title=title, show_header=True, header_style="bold magenta")
+        if data:
+            for key in data[0].keys():
+                table.add_column(key)
+            for row in data:
+                table.add_row(*[str(v) for v in row.values()])
+        console.print(table)

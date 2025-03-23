@@ -102,3 +102,21 @@ def test_model_completion_with_empty_messages(model_manager):
     """Test model completion with empty messages"""
     with pytest.raises(ValueError, match="Messages list cannot be empty"):
         model_manager.get_completion([])
+
+
+def test_tool_binding_format(model_manager, mock_tool):
+    """Test that tools are properly bound to the model"""
+    # Register tool
+    model_manager.register_tool(mock_tool)
+
+    # Verify the tool was stored
+    assert len(model_manager._tools) == 1
+    assert model_manager._tools[0] == mock_tool
+
+    # Get model to trigger binding
+    model = model_manager.get_model()
+
+    # Verify the model has the tool bound
+    bound_tools = model._tools
+    assert len(bound_tools) == 1
+    assert bound_tools[0] == mock_tool

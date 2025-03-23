@@ -5,11 +5,8 @@ from owlai.core.config import AgentConfig
 from owlai.core.message_manager import MessageManager
 from owlai.core.tool_manager import ToolManager
 from owlai.core.model_manager import ModelManager
-from owlai.core.logging_setup import get_logger
+from owlai.core.logging_setup import get_logger, debug_print, debug_table
 from rich.console import Console
-from rich.pretty import Pretty
-from rich.panel import Panel
-from rich.table import Table
 
 
 class OwlAgent:
@@ -36,22 +33,6 @@ class OwlAgent:
             SystemMessage(content=self.config.system_prompt)
         )
         self.logger.info(f"Initialized OwlAgent: {self}")
-
-    def _debug_print(self, title: str, content: any) -> None:
-        """Print debug information using rich console if debug is enabled"""
-        if self.console and self.logger.isEnabledFor(10):
-            self.console.print(Panel(Pretty(content), title=title, border_style="blue"))
-
-    def _debug_table(self, title: str, data: List[dict]) -> None:
-        """Print debug information in table format using rich console if debug is enabled"""
-        if self.console and self.logger.isEnabledFor(10):
-            table = Table(title=title, show_header=True, header_style="bold magenta")
-            if data:
-                for key in data[0].keys():
-                    table.add_column(key)
-                for row in data:
-                    table.add_row(*[str(v) for v in row.values()])
-            self.console.print(table)
 
     def __repr__(self) -> str:
         """String representation of the agent"""
@@ -81,31 +62,48 @@ class OwlAgent:
             messages = self.message_manager.get_message_history()
             self.logger.debug(f"Getting model completion for {len(messages)} messages")
             ai_message = self.model_manager.get_completion(messages)
-            self.message_manager.append_message(ai_message)
 
             # Add detailed debug logging for AI message structure
-            self._debug_print(
-                "AI Message Structure",
+            debug_print(self.logger, "AI Message Structure", ai_message)
+            debug_print(self.logger, "AI Model", self.model_manager._model)
+            debug_print(self.logger, "AI Model config", self.model_manager.model_config)
+
+            # Process any tool calls
+            tool_calls = getattr(ai_message, "tool_calls", None)
+            if not tool_calls:
+                tool_calls = ai_message.additional_kwargs.get("tool_calls", [])
+
+            # Add more detailed tool calls debugging
+            debug_print(
+                self.logger,
+                "Tool Calls Analysis",
                 {
-                    "attributes": dir(ai_message),
-                    "additional_kwargs": ai_message.additional_kwargs,
-                    "has_tool_calls": hasattr(ai_message, "tool_calls"),
-                    "content_length": len(ai_message.content),
+                    "has_tool_calls_attr": hasattr(ai_message, "tool_calls"),
+                    "tool_calls_attr_value": getattr(ai_message, "tool_calls", None),
+                    "tool_calls_kwargs": ai_message.additional_kwargs.get("tool_calls"),
+                    "tool_calls_final": tool_calls,
+                    "available_tools": list(self.tool_manager._tools.keys()),
                 },
             )
 
-            # Process any tool calls
-            tool_calls = getattr(
-                ai_message, "tool_calls", None
-            ) or ai_message.additional_kwargs.get("tool_calls", [])
-            self._debug_print(
-                "Tool Calls",
-                {
-                    "from_attribute": getattr(ai_message, "tool_calls", None),
-                    "from_kwargs": ai_message.additional_kwargs.get("tool_calls"),
-                    "final_value": tool_calls,
+            # Create a new AIMessage with the tool calls preserved
+            preserved_message = AIMessage(
+                content=ai_message.content,
+                additional_kwargs={
+                    "tool_calls": [
+                        {
+                            "id": tc.get("id", ""),
+                            "type": "function",
+                            "function": {
+                                "name": tc.get("name", ""),
+                                "arguments": str(tc.get("args", {})),
+                            },
+                        }
+                        for tc in tool_calls
+                    ],
                 },
             )
+            self.message_manager.append_message(preserved_message)
 
             if tool_calls:
                 self.logger.info(f"Processing {len(tool_calls)} tool calls")
@@ -114,23 +112,54 @@ class OwlAgent:
                     tool_args = {}
                     try:
                         # Log the tool call format
-                        self._debug_print("Processing Tool Call", tool_call)
+                        debug_print(
+                            self.logger,
+                            "Processing Tool Call",
+                            {
+                                "raw_tool_call": tool_call,
+                                "tool_call_type": type(tool_call),
+                                "tool_call_dict": (
+                                    tool_call if isinstance(tool_call, dict) else None
+                                ),
+                            },
+                        )
 
                         # Handle both old and new tool call formats
-                        if isinstance(tool_call, dict) and "function" in tool_call:
-                            tool_name = tool_call["function"]["name"]
-                            tool_args = eval(tool_call["function"]["arguments"])
-                            self._debug_print(
-                                "Extracted Tool Info (New Format)",
-                                {"name": tool_name, "args": tool_args},
-                            )
+                        if isinstance(tool_call, dict):
+                            if "function" in tool_call:
+                                tool_name = tool_call["function"]["name"]
+                                # Try to parse arguments, fall back to empty dict if invalid
+                                try:
+                                    args_str = tool_call["function"]["arguments"]
+                                    if args_str == "{}" or not args_str.strip():
+                                        tool_args = {}
+                                    else:
+                                        tool_args = eval(args_str)
+                                except:
+                                    tool_args = {}
+                                debug_print(
+                                    self.logger,
+                                    "Extracted Tool Info (New Format)",
+                                    {"name": tool_name, "args": tool_args},
+                                )
+                            elif "name" in tool_call:
+                                tool_name = tool_call["name"]
+                                tool_args = tool_call.get("args", {})
+                                debug_print(
+                                    self.logger,
+                                    "Extracted Tool Info (Old Format)",
+                                    {"name": tool_name, "args": tool_args},
+                                )
+                            else:
+                                self.logger.error(
+                                    f"Invalid tool call format: {tool_call}"
+                                )
+                                continue
                         else:
-                            tool_name = tool_call["name"]
-                            tool_args = tool_call["args"]
-                            self._debug_print(
-                                "Extracted Tool Info (Old Format)",
-                                {"name": tool_name, "args": tool_args},
+                            self.logger.error(
+                                f"Tool call is not a dictionary: {tool_call}"
                             )
+                            continue
 
                         if not tool_name:
                             self.logger.error(
@@ -138,46 +167,88 @@ class OwlAgent:
                             )
                             continue
 
-                        self.logger.debug(
-                            f"Invoking tool: {tool_name}, args={tool_args}"
-                        )
-                        tool_result = self.tool_manager.invoke_tool(
-                            tool_name, tool_args
-                        )
-                        # Add tool result to history
-                        tool_message = AIMessage(content=f"Tool result: {tool_result}")
-                        self.message_manager.append_message(tool_message)
-                        self.logger.debug(
-                            f"Tool execution successful: {tool_name}, result={tool_result}"
-                        )
-                        # Return the tool result
-                        return str(tool_result)
-                    except Exception as e:
-                        self.logger.error(
-                            f"Tool execution failed: {tool_name or 'unknown'} - {e}"
-                        )
-                        # Log tool error but continue processing
-                        error_message = f"Tool error: {str(e)}"
-                        self.message_manager.append_message(
-                            AIMessage(content=error_message)
-                        )
-                        # Return the error message
-                        return error_message
+                        try:
+                            # Let the tool manager handle case-insensitive matching
+                            tool = self.tool_manager.get_tool(tool_name)
+                            self.logger.debug(
+                                f"Invoking tool: {tool_name}, args={tool_args}"
+                            )
+                            # Pass the query as tool_input
+                            tool_result = tool.run(tool_args.get("query", ""))
+                            # Add tool result to history as a tool message
+                            tool_message = AIMessage(
+                                content=str(tool_result),
+                                additional_kwargs={
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.get("id", ""),
+                                    "name": tool_name,
+                                },
+                            )
+                            self.message_manager.append_message(tool_message)
+                            self.logger.debug(
+                                f"Tool execution successful: {tool_name}, result={tool_result}"
+                            )
 
-            self.logger.info(
-                f"Message processing completed: {len(ai_message.content)} chars, "
-                f"{len(self.message_manager.get_message_history())} total messages"
-            )
-            return str(ai_message.content)
+                            # Get assistant's response to the tool result
+                            messages = self.message_manager.get_message_history()
+                            self.logger.debug(
+                                f"Getting assistant's response to tool result"
+                            )
+                            final_response = self.model_manager.get_completion(messages)
+
+                            # Add the assistant's response to the message history
+                            if final_response.content:
+                                self.message_manager.append_message(
+                                    AIMessage(
+                                        content=final_response.content,
+                                        additional_kwargs={
+                                            "role": "assistant",
+                                        },
+                                    )
+                                )
+                            return str(final_response.content or "")
+
+                        except ValueError as e:
+                            self.logger.error(f"Tool not found or invalid: {tool_name}")
+                            raise e
+                        except Exception as e:
+                            self.logger.error(
+                                f"Tool execution failed: {tool_name} - {e}"
+                            )
+                            raise e
+
+                    except Exception as e:
+                        self.logger.error(f"Error processing tool call: {e}")
+                        raise e
+
+            # Return the AI message content if no tool calls
+            return str(ai_message.content or "")
 
         except Exception as e:
-            self.logger.error(f"Error processing message: {e}")
+            self.logger.error(f"Error processing message: {str(e)}")
             raise Exception(f"Error processing message: {str(e)}")
 
     def register_tool(self, tool: BaseTool) -> None:
         """Register a new tool with the agent"""
         self.logger.debug(f"Registering tool: {tool}")
+
+        # Register with tool manager for execution
         self.tool_manager.register_tool(tool)
+
+        # Register with model manager which handles tool binding
+        self.model_manager.register_tool(tool)
+
+        # Update system prompt with tool information
+        system_prompt = self.config.system_prompt
+        if self.model_manager._tools:
+            system_prompt += "\n\nAvailable tools:\n"
+            for t in self.model_manager._tools:
+                system_prompt += f"- {t.name}: {t.description}\n"
+
+        # Clear history and reinitialize with updated system prompt
+        self.message_manager.clear_history()
+        self.message_manager.append_message(SystemMessage(content=system_prompt))
+
         self.logger.info(f"Tool registered: {tool.name}")
 
     def clear_history(self) -> None:
