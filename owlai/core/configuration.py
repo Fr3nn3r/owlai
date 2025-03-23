@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Any, Optional
 from owlai.core.config import AgentConfig, ModelConfig
-from owlai.core.logging import LoggingManager
+from owlai.core.logging_setup import get_logger
 
 
 class ConfigurationManager:
@@ -9,7 +9,7 @@ class ConfigurationManager:
 
     def __init__(self, environment: str = "development"):
         self.environment = environment
-        self.logger = LoggingManager()
+        self.logger = get_logger("configuration")
         self._config_cache: Dict[str, Any] = {}
 
     def load_config(self) -> AgentConfig:

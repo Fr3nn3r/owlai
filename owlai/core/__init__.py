@@ -6,7 +6,7 @@ from owlai.core.message_manager import MessageManager
 from owlai.core.model_manager import ModelManager
 from owlai.core.tool_manager import ToolManager
 from owlai.core.configuration import ConfigurationManager
-from owlai.core.logging import LoggingManager
+from owlai.core.logging_setup import get_logger
 
 __all__ = [
     "OwlAgent",
@@ -20,5 +20,5 @@ __all__ = [
     "ModelManager",
     "ToolManager",
     "ConfigurationManager",
-    "LoggingManager",
+    "get_logger",
 ]

@@ -2,7 +2,7 @@ from typing import List, Optional
 from langchain_core.tools import BaseTool
 from owlai.core.agent import OwlAgent
 from owlai.core.config import AgentConfig, ModelConfig
-from owlai.core.logging import LoggingManager
+from owlai.core.logging_setup import get_logger
 from owlai.core.configuration import ConfigurationManager
 
 
@@ -11,7 +11,6 @@ class OwlAgentFactory:
 
     def __init__(self, environment: str = "development"):
         self.config_manager = ConfigurationManager(environment)
-        self.logging_manager = LoggingManager()
 
     def create(
         self,
@@ -37,5 +36,5 @@ class OwlAgentFactory:
             return agent
 
         except Exception as e:
-            self.logging_manager.error(f"Error creating agent: {str(e)}")
+            get_logger("factory").error(f"Error creating agent: {str(e)}")
             raise

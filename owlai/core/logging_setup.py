@@ -2,6 +2,7 @@ import os
 import yaml
 import logging.config
 from typing import Optional
+import logging
 
 
 def setup_logging(config_path: Optional[str] = None) -> None:
@@ -23,4 +24,13 @@ def setup_logging(config_path: Optional[str] = None) -> None:
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance with the given name"""
-    return logging.getLogger(f"owlai.{name}")
+    logger = logging.getLogger(f"owlai.{name}")
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    return logger
