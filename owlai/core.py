@@ -231,9 +231,7 @@ class OwlAgent(BaseTool, BaseModel):
         # )
         try:
             # update system prompt with latestcontext
-            system_message = SystemMessage(
-                f"{self.llm_config.system_prompt}\n{user_context}"
-            )
+            system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
             if len(self._message_history) == 0:
                 self._message_history.append(system_message)
             else:
@@ -277,7 +275,7 @@ class OwlAgent(BaseTool, BaseModel):
         if len(self._message_history) > 0:
             logger.info(f"System prompt: '{self._message_history[0].content}'")
         else:
-            logger.info(f"System prompt: '{self.llm_config.system_prompt}'")
+            logger.info(f"System prompt: '{self.system_prompt}'")
 
     def reset_message_history(self):
         if len(self._message_history) > 0:

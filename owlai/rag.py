@@ -91,7 +91,7 @@ class RAGOwlAgent(OwlAgent):
         )
         reranker_name = self.retriever.reranker_name
         self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
-        self._prompt = PromptTemplate.from_template(self.llm_config.system_prompt)
+        self._prompt = PromptTemplate.from_template(self.system_prompt)
 
         input_data_folders = self.retriever.input_data_folders
 
@@ -525,7 +525,6 @@ class RAGOwlAgent(OwlAgent):
                 for i, doc in enumerate(retrieved_docs)
             }
             logger.debug(f"{len(retrieved_docs)} documents retrieved")
-        # print([doc.metadata for doc in retrieved_docs])
 
         # If no reranker, just return top k docs
         if not reranker:
