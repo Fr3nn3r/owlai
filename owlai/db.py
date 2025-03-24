@@ -428,6 +428,7 @@ RAG_AGENTS_CONFIG = [
     {
         "name": "rag-naruto-v1",
         "description": "Agent that knows everything about the anime series Naruto",
+        "system_prompt": PROMPT_CONFIG["rag-en-v2"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -442,7 +443,6 @@ RAG_AGENTS_CONFIG = [
             "context_size": 4096,
             "tools_names": [],
         },
-        "system_prompt": PROMPT_CONFIG["rag-en-v2"],
         "default_queries": [
             "Who is Tsunade?",
             "Provide details about Orochimaru.",
@@ -469,6 +469,7 @@ RAG_AGENTS_CONFIG = [
     {
         "name": "rag-fr-law-v1",
         "description": "Agent expecting a french law question",
+        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -483,7 +484,6 @@ RAG_AGENTS_CONFIG = [
             "context_size": 4096,
             "tools_names": [],
         },
-        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
         "default_queries": [
             "Expliquez les différentes servitudes et leurs modes d'établissement.",
             "Comment s'opère la vente en l'état futur d'achèvement (VEFA) et quelles garanties offre-t-elle ?",
@@ -493,16 +493,27 @@ RAG_AGENTS_CONFIG = [
             "Explique la gestion en france de la confusion des peines",
         ],
         "retriever": {
-            "num_retrieved_docs": 30,
-            "num_docs_final": 10,
+            "num_retrieved_docs": 5,
+            "num_docs_final": 2,
             "embeddings_model_name": "thenlper/gte-small",
             "reranker_name": "colbert-ir/colbertv2.0",
-            "input_data_folders": [
-                "data/dataset-0005",  # Larger dataset
-            ],
             "model_kwargs": {"device": "cuda"},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": True,
+            "datastore": {
+                "input_data_folder": "data/dataset-0004",  # Larger dataset
+                "parser": {
+                    "implementation": "FrenchLawParser",
+                    "output_data_folder": "data/dataset-0005",
+                    "chunk_size": 512,
+                    "chunk_overlap": 50,
+                    "add_start_index": True,
+                    "strip_whitespace": True,
+                    "separators": ["\n\n", "\n", " ", ""],
+                    "extract_images": False,
+                    "extraction_mode": "plain",
+                },
+            },
         },
     },
 ]

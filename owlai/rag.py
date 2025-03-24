@@ -1,7 +1,6 @@
 print("Loading rag module")
 from typing import Optional, List, Tuple, Any, Callable
 import os
-import time
 import logging
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.vectorstores import FAISS
@@ -9,157 +8,54 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage
-from langchain_core.runnables import RunnableConfig
 from ragatouille import RAGPretrainedModel
-from pydantic import BaseModel, Field
-from langchain_core.tools import BaseTool, ArgsSchema
-from typing import Dict, List, Literal, Optional, Tuple, Type, Union
+from pydantic import BaseModel
+from typing import Dict, List, Optional, Tuple, Literal
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-import traceback
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
-from langchain_core.tools.base import ArgsSchema
+from sentence_transformers import SentenceTransformer
 
+# Plot distribution
+import matplotlib.pyplot as plt
+import pandas as pd
 from owlai.owlsys import encode_text
-import sys
-from pathlib import Path
-
-# sys.path.append(str(Path(__file__).parent.parent))
+import traceback
 
 from owlai.core import OwlAgent
 from owlai.db import TOOLS_CONFIG, RAG_AGENTS_CONFIG
-from owlai.owlsys import track_time, load_logger_config
+from owlai.owlsys import track_time, load_logger_config, sprint
 import warnings
 from tqdm import tqdm
 
 warnings.simplefilter("ignore", category=FutureWarning)
 
-from owlai.owlsys import load_logger_config, sprint
-
-
 logger = logging.getLogger("main")
 
 
-class OwlMemoryInput(BaseModel):
-    """Input schema for OwlMemoryTool."""
+class DefaultParser(BaseModel):
+    """
+    Default parser for RAGDataStore.
+    """
 
-    query: str = Field(
-        description="a natural language question to answer from the knowledge base"
-    )
+    implementation: str = "DefaultParser"
+    output_data_folder: str
+    chunk_size: int
+    chunk_overlap: float
+    add_start_index: bool
+    strip_whitespace: bool
+    separators: List[str]
+    extract_images: bool
+    extraction_mode: Literal["plain", "layout"] = "plain"
 
+    _image_folder: str = "images"
 
-""" Class config for HuggingFace embeddings, and FAISS vector store """
-
-
-class RAGConfig(BaseModel):
-    num_retrieved_docs: int
-    num_docs_final: int
-    embeddings_model_name: str
-    reranker_name: str
-    input_data_folders: List[str]
-    model_kwargs: Dict[str, Any]
-    encode_kwargs: Dict[str, Any]
-    multi_process: bool = True
-
-
-""" Class based on HuggingFace embeddings, and FAISS vector store """
-
-
-class RAGOwlAgent(OwlAgent):
-
-    # JSON defined properties
-    retriever: RAGConfig
-
-    # Runtime updated properties
-    _init_completed = False
-    _prompt = None
-    _vector_stores = None
-    _embeddings = None
-    _reranker = None
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._embeddings = HuggingFaceEmbeddings(
-            model_name=self.retriever.embeddings_model_name,
-            multi_process=self.retriever.multi_process,
-            model_kwargs=self.retriever.model_kwargs,
-            encode_kwargs=self.retriever.encode_kwargs,
-        )
-        reranker_name = self.retriever.reranker_name
-        self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
-        self._prompt = PromptTemplate.from_template(self.system_prompt)
-
-        input_data_folders = self.retriever.input_data_folders
-
-        self._vector_stores = None
-        for ifolder in input_data_folders:
-            logger.debug(f"Loading dataset from {ifolder}")
-            current_store = self.load_dataset(ifolder, self._embeddings)
-            if current_store is not None:
-                if self._vector_stores is None:
-                    self._vector_stores = current_store
-                else:
-                    logger.debug(f"Merging dataset from {ifolder}")
-                    self._vector_stores.merge_from(current_store)
-
-        if self._vector_stores is None:
-            logger.warning(
-                "No vector stores found: you must set the vector store manually."
-            )
-        else:
-            logger.info(f"Loaded data stores: {input_data_folders}")
-
-    def analyze_chunk_size_distribution(
+    def _split_documents(
         self,
-        input_data_folder,
-        filename,
-        docs: List[LangchainDocument],
-        model_name="thenlper/gte-small",
-    ):
-        """
-        Analyze and visualize document lengths.
-
-        Args:
-            docs: to analyze
-            model_name: Name of the embedding model to use
-        """
-        from sentence_transformers import SentenceTransformer
-        from transformers import AutoTokenizer
-
-        # Get max sequence length from SentenceTransformer
-        max_seq_len = SentenceTransformer(model_name).max_seq_length
-        info_message = (
-            f"Model's max sequence size: '{max_seq_len}' Document count: '{len(docs)}'"
-        )
-        logger.debug(info_message)
-
-        # Analyze token lengths (should init tokenizer once... whatever)
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        lengths = [len(tokenizer.encode(doc.page_content)) for doc in docs]
-
-        # Plot distribution
-        import matplotlib.pyplot as plt
-        import pandas as pd
-
-        fig = pd.Series(lengths).hist()
-        plt.title(f"Distribution of page lengths [tokens] for {filename}")
-        file_dir = f"{input_data_folder}/images"
-        file_path = f"{file_dir}/chunk_size_distribution-{filename}.png"
-        os.makedirs(file_dir, exist_ok=True)
-        plt.savefig(file_path)
-        plt.close()
-        logger.debug(
-            f"Distribution of document lengths (in count of tokens) saved to {file_path}"
-        )
-        return file_path
-
-    def split_documents(
-        self,
-        chunk_size: int,  # The maximum number of tokens in a chunk
         input_docs: List[LangchainDocument],
         tokenizer_name: str,
     ) -> List[LangchainDocument]:
@@ -168,18 +64,11 @@ class RAGOwlAgent(OwlAgent):
         """
         text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
             AutoTokenizer.from_pretrained(tokenizer_name),
-            chunk_size=chunk_size,
-            chunk_overlap=int(
-                chunk_size / 10
-            ),  # The number of characters to overlap between chunks
-            add_start_index=True,  # If `True`, includes chunk's start index in metadata
-            strip_whitespace=True,  # If `True`, strips whitespace from the start and end of every document
-            separators=[
-                "\n\n",
-                "\n",
-                " ",
-                "",
-            ],
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,  # The number of characters to overlap between chunks
+            add_start_index=self.add_start_index,  # If `True`, includes chunk's start index in metadata
+            strip_whitespace=self.strip_whitespace,  # If `True`, strips whitespace from the start and end of every document
+            separators=self.separators,
         )
         logger.debug(f"Splitting {len(input_docs)} documents")
 
@@ -205,101 +94,10 @@ class RAGOwlAgent(OwlAgent):
 
         return docs_processed_unique
 
-    def load_dataset(
-        self,
-        input_data_folder: str,
-        embedding_model: HuggingFaceEmbeddings,
-        chunk_size: int = 512,
-        metadata_extractor: Optional[Callable] = None,
-        document_curator: Optional[Callable] = None,
-    ) -> Optional[FAISS]:
-        """
-        Loads an existing vector store if exists in the input_data_folder.
-        Processes documents and adds them to the store.
-        Processed documents are moved to the 'in_store' folder
-
-        Args:
-            input_data_folder: Path to the folder containing documents
-            embedding_model: The embedding model to use
-            chunk_size: Size of text chunks for splitting documents
-            metadata_extractor: Optional callback function for extracting metadata
-
-        Returns:
-            FAISS vector store or None if no documents were processed
-        """
-        vector_db_file_path = f"{input_data_folder}/vector_db"
-        in_store_folder = f"{input_data_folder}/in_store"
-        vector_store = None
-
-        if os.path.exists(vector_db_file_path):
-            logger.info(f"Loading existing vector database from: {vector_db_file_path}")
-            vector_store = self.load_vector_store(input_data_folder, embedding_model)
-
-        # Get list of PDF and text files
-        files = [
-            f for f in os.listdir(input_data_folder) if f.endswith((".pdf", ".txt"))
-        ]
-        logger.info(
-            f"Found {len(files)} new documents to process in {input_data_folder}"
-        )
-
-        # Process each file individually
-        with track_time(f"{len(files)} document(s) loading into vector database"):
-            for filename in files:
-                filepath = os.path.join(input_data_folder, filename)
-                logger.info(
-                    f"Processing file: {filename} size: {os.path.getsize(filepath)}"
-                )
-
-                try:
-                    split_docs = self.load_and_split_document(
-                        filepath,
-                        input_data_folder,
-                        filename,
-                        chunk_size,
-                        embedding_model.model_name,
-                        metadata_extractor,
-                        document_curator,
-                    )
-
-                    # Create or update vector store
-                    if vector_store is None:
-                        vector_store = FAISS.from_documents(
-                            split_docs,
-                            embedding_model,
-                            distance_strategy=DistanceStrategy.COSINE,
-                        )
-                    else:
-                        batch_store = FAISS.from_documents(
-                            split_docs,
-                            embedding_model,
-                            distance_strategy=DistanceStrategy.COSINE,
-                        )
-                        vector_store.merge_from(batch_store)
-
-                    # Move processed file to 'in_store' folder
-                    in_store_folder = os.path.join(input_data_folder, "in_store")
-                    os.makedirs(in_store_folder, exist_ok=True)
-                    os.rename(filepath, os.path.join(in_store_folder, filename))
-
-                except Exception as e:
-                    logger.error(f"Error processing {filename}: {str(e)}")
-                    logger.error(f"Error details: {traceback.format_exc()}")
-                    continue
-
-        # Save to disk
-        if vector_store is not None and len(files) > 0:
-            vector_store.save_local(vector_db_file_path)
-            logger.info(f"Vector database saved to {vector_db_file_path}")
-
-        return vector_store
-
     def load_and_split_document(
         self,
         filepath: str,
-        input_data_folder: str,
         filename: str,
-        chunk_size: int,
         model_name: str,
         metadata_extractor: Optional[Callable] = None,
         document_curator: Optional[Callable] = None,
@@ -334,8 +132,8 @@ class RAGOwlAgent(OwlAgent):
         if filename.endswith(".pdf"):
             loader = PyPDFLoader(
                 file_path=filepath,
-                extract_images=False,
-                extraction_mode="plain",
+                extract_images=self.extract_images,
+                extraction_mode=self.extraction_mode,
             )
             docs = loader.lazy_load()
         else:  # .txt files
@@ -367,15 +165,13 @@ class RAGOwlAgent(OwlAgent):
                 )
 
         # Split documents
-        split_docs = self.split_documents(
-            chunk_size,
+        split_docs = self._split_documents(
             loaded_docs,
             tokenizer_name=model_name,
         )
 
         # Analyze document chunks before splitting
         pre_split_file = self.analyze_chunk_size_distribution(
-            input_data_folder,
             "pre-split-" + filename,
             loaded_docs,
             model_name,
@@ -384,7 +180,6 @@ class RAGOwlAgent(OwlAgent):
 
         # Analyze post-split chunks and add to metadata
         post_split_file = self.analyze_chunk_size_distribution(
-            input_data_folder,
             "post-split-" + filename,
             split_docs,
             model_name,
@@ -396,95 +191,427 @@ class RAGOwlAgent(OwlAgent):
 
         return split_docs
 
-    def rag_question(self, question: str) -> Dict[str, Any]:
+    def analyze_chunk_size_distribution(
+        self,
+        source_doc_filename: str,
+        docs: List[LangchainDocument],
+        model_name="thenlper/gte-small",
+    ) -> str:
         """
-        Runs the RAG query against the vector store and returns an answer to the question.
+        Counts number of tokens in each document and saves to a file to visualize.
+
         Args:
-            question: a string containing the question to answer.
+            docs: to analyze
+            model_name: Name of the embedding model to use
+        """
+
+        # Get max sequence length from SentenceTransformer
+        max_seq_len = SentenceTransformer(model_name).max_seq_length
+        info_message = (
+            f"Model's max sequence size: '{max_seq_len}' Document count: '{len(docs)}'"
+        )
+        logger.debug(info_message)
+
+        # Analyze token lengths (should init tokenizer once... whatever)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        lengths = [len(tokenizer.encode(doc.page_content)) for doc in docs]
+
+        fig = pd.Series(lengths).hist()
+        plt.title(f"Distribution of page lengths [tokens] for {source_doc_filename}")
+        # Create a path for saving visualization images
+        file_dir = os.path.join(self.output_data_folder, self._image_folder)
+        file_path = os.path.join(
+            file_dir, f"chunk_size_distribution-{source_doc_filename}.png"
+        )
+        os.makedirs(file_dir, exist_ok=True)
+        plt.savefig(file_path)
+        plt.close()
+        logger.debug(
+            f"Distribution of document lengths (in count of tokens) saved to {file_path}"
+        )
+        return file_path
+
+
+import fitz
+import re
+from fitz import Document, Page
+
+
+class FrenchLawParser(BaseModel):
+
+    implementation: str = "FrenchLawParser"
+
+    def extract_footer(self, doc: Document) -> str:
+        footers = []
+
+        # Check at least the first 10 pages or all pages if less than 10
+        max_pages_to_check = min(10, len(doc))
+        common_footer = None
+
+        for page_num in range(max_pages_to_check):
+            page = doc[page_num]  # type: Page
+
+            # Extract text and split into lines
+            text = page.get_text("text")  # type: ignore
+            lines = text.split("\n")
+
+            if len(lines) > 1:
+                current_footer = "".join(
+                    lines[-2:]
+                )  # Assume footer is in the last two lines
+                footers.append((page_num + 1, current_footer))
+
+                # Initialize common_footer with the first page's footer
+                if page_num == 0:
+                    common_footer = current_footer
+                # Check if footer is consistent across pages
+                elif current_footer != common_footer:
+                    common_footer = None  # Footers don't match
+
+        # If we've checked enough pages and found a consistent footer, return it
+        if common_footer and len(footers) >= max_pages_to_check:
+            logger.debug(f"Common footer found: '''{common_footer}'''")
+            return common_footer
+
+        raise ValueError("No consistent footer found in the document")
+
+    def extract_metadata_fr_law(self, footer: str, doc: Document) -> dict:
+        """
+        Extract metadata from a PDF file footer (file expected to follow french law convention).
+
+        Args:
+            pdf_path (str): Path to the PDF file
 
         Returns:
-            A dictionary containing the question, answer, and metadata.
+            dict: Dictionary containing title, last_modification, and doc_generated_on
         """
-        logger.debug(f"Running RAG query: '{question}'")
 
-        answer: Dict[str, Any] = {"question": question}
+        # Regular Expression to Extract Components
+        match = re.match(r"^(.*?)\s*-\s*(.*?)\s*-\s*(.*?)$", footer)
+        if match:
+            title = match.group(1).strip()
+            last_modification = match.group(2).strip()
+            last_modification = last_modification.replace(
+                "Dernière modification le ", ""
+            )
+            doc_generated_on = match.group(3).strip()
+            doc_generated_on = doc_generated_on.replace("Document généré le ", "")
 
-        # TODO: think about passing parameters in a structure
-        k = self.retriever.num_retrieved_docs
-        k_final = self.retriever.num_docs_final
+            return {
+                "title": title,
+                "last_modification_fr": last_modification,
+                "doc_generated_on_fr": doc_generated_on,
+                "num_pages": len(doc),
+            }
 
-        reranked_docs, metadata = self.retrieve_relevant_chunks(
-            query=question,
-            knowledge_base=self._vector_stores,
-            reranker=self._reranker,
-            num_retrieved_docs=k,
-            num_docs_final=k_final,
+        raise ValueError(f"footer '{footer}' not matching french law convention.")
+
+    def load_fr_law_pdf(self, pdf_path: str) -> list[LangchainDocument]:
+        """
+        Loads a french law PDF file and returns the content.
+        """
+        # Normalize file path to ensure consistent separators
+        pdf_path = os.path.normpath(pdf_path)
+
+        # Verify the file exists
+        if not os.path.isfile(pdf_path):
+            raise FileNotFoundError(f"PDF file not found at path: {pdf_path}")
+
+        # Check file extension
+        if not pdf_path.lower().endswith(".pdf"):
+            raise ValueError(f"File must be a PDF: {pdf_path}")
+
+        logger.debug(f"Loading French law PDF from: {pdf_path}")
+
+        doc: Document = fitz.open(pdf_path)
+
+        if not doc or doc is None:
+            raise ValueError(f"Failed to load document from {pdf_path}")
+
+        file_name = os.path.basename(pdf_path)
+
+        footer = self.extract_footer(doc)
+
+        metadata = doc.metadata.copy()
+
+        # Merge the two dictionaries - metadata from the document and extracted metadata from the footer
+        metadata.update(self.extract_metadata_fr_law(footer, doc))
+        metadata["source"] = file_name
+
+        total_pages = int(metadata.get("num_pages", 0))
+        loaded_docs: List[LangchainDocument] = []
+        total_page_content = ""
+
+        # Use a simpler loop approach with tqdm
+        for page_number in tqdm(
+            range(total_pages), desc=f"Loading pages from {pdf_path}"
+        ):
+            # Explicitly type page to avoid linter errors with PyMuPDF
+            page = doc[page_number]  # type: ignore
+            # Extract text content from the page
+            page_content = page.get_text("text")  # type: ignore
+
+            # Remove footer if present to avoid duplication
+            page_content = page_content.replace(footer, "")
+
+            # Load the whole document to ensure we don't force a split between pages
+            total_page_content += page_content
+
+        loaded_docs.append(
+            LangchainDocument(
+                page_content=total_page_content,
+                metadata=metadata,
+            )
         )
 
-        with track_time("Model invocation with RAG context", metadata):
+        return loaded_docs
+        # Split documents
 
-            docs_content = "\n\n".join(
-                encode_text(doc.page_content) for doc in reranked_docs
+    def parse_fr_law_docs(
+        self, loaded_docs: List[LangchainDocument]
+    ) -> List[LangchainDocument]:
+
+        # All that stuff could be in the parser parameters
+        embeddings_chunk_size = 512
+        chunk_size = 512
+        chunk_overlap = int(embeddings_chunk_size / 5)
+        chunk_size = embeddings_chunk_size * 0.9
+        tokenizer = AutoTokenizer.from_pretrained("thenlper/gte-small")
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        separators = [
+            # "\nPartie[^\n]*",
+            # "\nLivre[^\n]*",
+            # "\nTitre[^\n]*",
+            # "\nChapitre[^\n]*",
+            # "\nArticle[^\n]*",
+            ".{10,}(?=\n)Partie[^\n]*",
+            ".{10,}(?=\n)Livre[^\n]*",
+            ".{10,}(?=\n)Titre[^\n]*",
+            ".{10,}(?=\n)Chapitre[^\n]*",
+            ".{10,}(?=\n)Article[^\n]*",
+            "\n \n \n",
+            "\n\n \n",
+            "\n \n\n",
+            "\n \n",
+            "\n\n",
+            "\n",
+            ".",
+            # " ",
+            # "",
+        ]
+
+        with track_time("Splitting documents"):
+            text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+                tokenizer,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,  # The number of characters to overlap between chunks
+                add_start_index=True,  # If `True`, includes chunk's start index in metadata
+                strip_whitespace=True,  # If `True`, strips whitespace from the start and end of every document
+                separators=separators,
+                is_separator_regex=True,
             )
 
-            docs_content = "\n\n".join(
-                [
-                    f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', 'Unknown Source')}] \"{doc.page_content}\""
-                    for idx, doc in enumerate(reranked_docs)
-                ]
+            def count_tokens(text: str) -> int:
+                return len(tokenizer.encode(text))
+
+            docs_processed: List[LangchainDocument] = []
+
+            docs_processed = text_splitter.split_documents(loaded_docs)
+
+            unique_texts = {}
+            docs_processed_unique = []
+            for idoc in docs_processed:
+                if idoc.page_content not in unique_texts:
+                    unique_texts[idoc.page_content] = True
+                    metadata_update = idoc.metadata.copy()
+                    metadata_update["token_count"] = count_tokens(idoc.page_content)
+                    docs_processed_unique.append(
+                        LangchainDocument(
+                            page_content=idoc.page_content, metadata=metadata_update
+                        )
+                    )
+
+        return docs_processed_unique
+
+    def load_and_split_document(
+        self,
+        filepath: str,
+        filename: str,
+        model_name: str,
+        metadata_extractor: Optional[Callable] = None,
+        document_curator: Optional[Callable] = None,
+    ) -> List[LangchainDocument]:
+        loaded_docs = self.load_fr_law_pdf(filepath)
+        return self.parse_fr_law_docs(loaded_docs)
+
+
+class RAGDataStore(BaseModel):
+
+    input_data_folder: str
+
+    parser: DefaultParser
+
+    _vector_store: Optional[FAISS] = None
+    _images_folder: str = "images"
+    _in_store_documents_folder: str = "in_store"
+    _vector_store_folder: str = "vector_db"
+
+    def __init__(self, **kwargs):
+        """
+        Initialize the RAGDataStore with the provided configuration.
+
+        This constructor handles the initialization of the RAGDataStore object,
+        setting up all necessary parameters for document processing and vector storage.
+        """
+        super().__init__(**kwargs)
+        # Ensure input_data_folder exists
+        if not os.path.exists(self.input_data_folder):
+            logger.warning(
+                f"Input data folder does not exist: {self.input_data_folder}"
             )
 
-            if self._prompt is None:
-                raise Exception("Prompt is not set")
-
-            rag_prompt = self._prompt.format(question=question, context=docs_content)
-            rag_prompt = encode_text(rag_prompt)
-            # Add the RAG prompt to the metadata for debugging and analysis purposes
-            metadata["rag_prompt"] = rag_prompt
-
-            # logger.debug(f"Final prompt: {rag_prompt}")
-            message = SystemMessage(rag_prompt)
-            messages = self.chat_model.invoke([message])
-        # logger.debug(f"Raw RAG answer: {messages.content}")
-
-        answer["answer"] = (
-            encode_text(str(messages.content)) if messages.content is not None else ""
-        )
-        answer["metadata"] = metadata
-
-        return answer
+        if self.parser.implementation == "DefaultParser":
+            logger.info(f"Using DefaultParser")
+        else:
+            logger.warning(f"Using custom parser: {self.parser.implementation}")
+            self.parser = create_instance(self.parser.implementation)
+            if self.parser is None:
+                raise Exception(f"{self.parser.implementation} is not a valid parser")
 
     def load_vector_store(
         self, input_data_folder: str, embedding_model: HuggingFaceEmbeddings
     ) -> Optional[FAISS]:
-        file_path = f"{input_data_folder}/vector_db"
-        KNOWLEDGE_VECTOR_DATABASE = None
+        file_path = os.path.normpath(
+            os.path.join(input_data_folder, self._vector_store_folder)
+        )
+        logger.debug(f"Looking for vector database at: {file_path}")
+        FAISS_vector_store = None
 
         if os.path.exists(file_path):
-            logger.info(f"Loading the vector database from disk: {file_path}")
-            start_time = time.time()
-            KNOWLEDGE_VECTOR_DATABASE = FAISS.load_local(
-                file_path,
-                embedding_model,
-                distance_strategy=DistanceStrategy.COSINE,
-                allow_dangerous_deserialization=True,
-            )
-            end_time = time.time()
-            logger.info(
-                f"Vector database loaded from disk in {end_time - start_time:.2f} seconds"
-            )
+            with track_time(f"Loading the vector database from disk: {file_path}"):
+                FAISS_vector_store = FAISS.load_local(
+                    file_path,
+                    embedding_model,
+                    distance_strategy=DistanceStrategy.COSINE,
+                    allow_dangerous_deserialization=True,
+                )
         else:
             logger.error(f"Vector database not found in {file_path}")
 
-        return KNOWLEDGE_VECTOR_DATABASE
+        return FAISS_vector_store
+
+    def load_dataset(
+        self,
+        embedding_model: HuggingFaceEmbeddings,
+        metadata_extractor: Optional[Callable] = None,
+        document_curator: Optional[Callable] = None,
+    ) -> Optional[FAISS]:
+        """
+        Loads an existing vector store if exists in the input_data_folder.
+        Processes documents and adds them to the store.
+        Processed documents are moved to the 'in_store' folder
+
+        Args:
+            input_data_folder: Path to the folder containing documents
+            embedding_model: The embedding model to use
+            chunk_size: Size of text chunks for splitting documents
+            metadata_extractor: Optional callback function for extracting metadata
+
+        Returns:
+            FAISS vector store or None if no documents were processed
+        """
+        # Use os.path.join for platform-independent path handling
+        # Normalize paths to ensure OS-compatible separators
+        input_data_folder = os.path.normpath(self.input_data_folder)
+        vector_db_file_path = os.path.join(input_data_folder, self._vector_store_folder)
+        in_store_folder = os.path.join(
+            input_data_folder, self._in_store_documents_folder
+        )
+        vector_store = None
+
+        if os.path.exists(vector_db_file_path):
+            logger.info(f"Loading existing vector database from: {vector_db_file_path}")
+            vector_store = self.load_vector_store(
+                self.input_data_folder, embedding_model
+            )
+
+        # Get list of PDF and text files
+        files = [
+            f
+            for f in os.listdir(self.input_data_folder)
+            if f.endswith((".pdf", ".txt"))
+        ]
+        logger.info(
+            f"Found {len(files)} new documents to process in {self.input_data_folder}"
+        )
+
+        if len(files) > 0:
+            # Process each file individually
+            with track_time(f"{len(files)} document(s) loading into vector database"):
+                for filename in files:
+                    filepath = os.path.join(self.input_data_folder, filename)
+                    logger.info(
+                        f"Processing file: {filename} size: {os.path.getsize(filepath)}"
+                    )
+
+                    try:
+                        split_docs = self.parser.load_and_split_document(
+                            filepath,
+                            filename,
+                            embedding_model.model_name,
+                            metadata_extractor,
+                            document_curator,
+                        )
+
+                        # Create or update vector store
+                        if vector_store is None:
+                            vector_store = FAISS.from_documents(
+                                split_docs,
+                                embedding_model,
+                                distance_strategy=DistanceStrategy.COSINE,
+                            )
+                        else:
+                            batch_store = FAISS.from_documents(
+                                split_docs,
+                                embedding_model,
+                                distance_strategy=DistanceStrategy.COSINE,
+                            )
+                            vector_store.merge_from(batch_store)
+
+                        # Move processed file to 'in_store' folder
+                        os.makedirs(in_store_folder, exist_ok=True)
+                        os.rename(filepath, os.path.join(in_store_folder, filename))
+
+                    except Exception as e:
+                        logger.error(f"Error processing {filename}: {str(e)}")
+                        logger.error(f"Error details: {traceback.format_exc()}")
+                        continue
+
+            # Save to disk
+            if vector_store is not None and len(files) > 0:
+                vector_store.save_local(vector_db_file_path)
+                logger.info(f"Vector database saved to {vector_db_file_path}")
+
+        return vector_store
+
+
+class RAGRetriever(BaseModel):
+    """Classe responsible for retrieving relevant chunks from the knowledge base"""
+
+    num_retrieved_docs: int = 30  # Commonly called k
+    num_docs_final: int = 5
+    embeddings_model_name: str = "thenlper/gte-small"
+    reranker_name: str = "colbert-ir/colbertv2.0"
+    model_kwargs: Dict[str, Any] = {}
+    encode_kwargs: Dict[str, Any] = {}
+    multi_process: bool = True
+    datastore: RAGDataStore
 
     def retrieve_relevant_chunks(
         self,
         query: str,
         knowledge_base: Optional[FAISS],
         reranker: Optional[RAGPretrainedModel] = None,
-        num_retrieved_docs: int = 30,
-        num_docs_final: int = 5,
     ) -> Tuple[List[LangchainDocument], dict]:
         """
         Retrieve the k most relevant document chunks for a given query.
@@ -499,22 +626,19 @@ class RAGOwlAgent(OwlAgent):
         Returns:
             Tuple containing a list of retrieved and reranked LangchainDocument objects with scores and metadata
         """
-        logger.info(
-            f"Starting retrieval for query: '{query}' with k={num_retrieved_docs}"
-        )
-        metadata = {
-            "query": query,
-            "k": num_retrieved_docs,
-            "num_docs_final": num_docs_final,
-        }
 
         if knowledge_base is None:
-            logger.warning("Knowledge base is None, returning empty results")
-            return [], metadata
+            raise Exception("Invalid FAISS vector store")
+
+        metadata = {
+            "query": query,
+            "k": self.num_retrieved_docs,
+            "num_docs_final": self.num_docs_final,
+        }
 
         with track_time(f"Documents search", metadata):
             retrieved_docs = knowledge_base.similarity_search(
-                query=query, k=num_retrieved_docs
+                query=query, k=self.num_retrieved_docs
             )
             metadata["num_docs_retrieved"] = len(retrieved_docs)
             metadata["retrieved_docs"] = {
@@ -525,14 +649,15 @@ class RAGOwlAgent(OwlAgent):
                 for i, doc in enumerate(retrieved_docs)
             }
             logger.debug(f"{len(retrieved_docs)} documents retrieved")
+            sprint(retrieved_docs[0])
 
         # If no reranker, just return top k docs
         if not reranker:
-            return retrieved_docs[:num_docs_final], metadata
+            return retrieved_docs[: self.num_docs_final], metadata
 
         # Rerank results
         logger.debug(
-            f"Reranking {len(retrieved_docs)} documents chunks to {num_docs_final} please wait..."
+            f"Reranking {len(retrieved_docs)} documents chunks to {self.num_docs_final} please wait..."
         )
 
         with track_time("Documents chunks reranking", metadata):
@@ -542,7 +667,9 @@ class RAGOwlAgent(OwlAgent):
 
             # Get reranked results
             reranked_results = reranker.rerank(
-                query, [doc.page_content for doc in retrieved_docs], k=num_docs_final
+                query,
+                [doc.page_content for doc in retrieved_docs],
+                k=self.num_docs_final,
             )
 
             # Match reranked results back to original docs and add scores to doc metadata
@@ -565,13 +692,102 @@ class RAGOwlAgent(OwlAgent):
             }
 
         for i in range(min(5, len(reranked_docs))):
-            # logger.debug(f"Reranked doc {i}: {reranked_docs[i].metadata}")
+            # logger.debug(
+            #    f"Reranked doc {i}: {reranked_docs[i].metadata} {reranked_docs[i].page_content[:100]}"
+            # )
             if reranked_docs[i].metadata.get("rerank_score", 0.0) < 15:
                 logger.warning(
                     f"Reranked doc {i} has a score of {reranked_docs[i].metadata.get('rerank_score', 0.0)}"
                 )
 
         return reranked_docs, metadata
+
+    def load_dataset(self, embeddings: HuggingFaceEmbeddings) -> Optional[FAISS]:
+        return self.datastore.load_dataset(embeddings)
+
+
+class RAGAgent(OwlAgent):
+
+    # JSON defined properties
+    retriever: RAGRetriever
+
+    # Runtime updated properties
+    _init_completed = False
+    _prompt = None
+    _vector_store = None
+    _embeddings = None
+    _reranker = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._embeddings = HuggingFaceEmbeddings(
+            model_name=self.retriever.embeddings_model_name,
+            multi_process=self.retriever.multi_process,
+            model_kwargs=self.retriever.model_kwargs,
+            encode_kwargs=self.retriever.encode_kwargs,
+        )
+        reranker_name = self.retriever.reranker_name
+        self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
+        self._prompt = PromptTemplate.from_template(self.system_prompt)
+
+        # input_data_folders = self.retriever.datastore.input_data_folder
+
+        self._vector_store = self.retriever.load_dataset(self._embeddings)
+
+        if self._vector_store is None:
+            logger.warning(
+                "No vector stores found: you must set the vector store manually."
+            )
+        else:
+            logger.info(
+                f"Data store loaded: {self.retriever.datastore.input_data_folder}"
+            )
+
+    def invoke_rag(self, question: str) -> Dict[str, Any]:
+        """
+        Runs the RAG query against the vector store and returns an answer to the question.
+        Args:
+            question: a string containing the question to answer.
+
+        Returns:
+            A dictionary containing the question, answer, and metadata.
+        """
+        logger.debug(f"Running RAG query: '{question}'")
+
+        answer: Dict[str, Any] = {"question": question}
+
+        reranked_docs, metadata = self.retriever.retrieve_relevant_chunks(
+            query=question,
+            knowledge_base=self._vector_store,
+            reranker=self._reranker,
+        )
+
+        with track_time("Model invocation with RAG context", metadata):
+
+            logger.debug(f"TOP RERANKED DOCS: {reranked_docs[0].page_content}")
+            docs_content = "\n\n".join(
+                [
+                    f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
+                    for idx, doc in enumerate(reranked_docs)
+                ]
+            )
+            logger.debug(f"DOCS CONTENT: {docs_content}")
+            if self._prompt is None:
+                raise Exception("Prompt is not set")
+
+            rag_prompt = self._prompt.format(question=question, context=docs_content)
+
+            # Add the RAG prompt to the metadata for debugging and analysis purposes
+            metadata["rag_prompt"] = rag_prompt
+            logger.debug(f"Final prompt: {rag_prompt}")
+            message = SystemMessage(rag_prompt)
+            messages = self.chat_model.invoke([message])
+            logger.debug(f"RAG answer: {messages.content}")
+
+        answer["answer"] = str(messages.content) if messages.content is not None else ""
+        answer["metadata"] = metadata
+
+        return answer
 
     def _run(
         self,
@@ -596,27 +812,38 @@ class RAGOwlAgent(OwlAgent):
             f"[RAGOwlAgent.message_invoke] Called from {self.name} with message: {message}"
         )
         logger.warning(f"RAG engine not keeping context for now")
-        answer = self.rag_question(message)
+        answer = self.invoke_rag(message)
         if "answer" not in answer or answer["answer"] == "":
             raise Exception("No answer found")
         return answer.get("answer", "?????")
 
 
+# Instantiate by class name string
+def create_instance(class_name):
+    cls = globals()[class_name]
+    return cls()
+
+
 def main():
 
-    config = RAG_AGENTS_CONFIG[0]
+    # sprint(globals())
+
+    # print("FrenchLawParser" in globals())
+
+    config = RAG_AGENTS_CONFIG[1]
 
     load_logger_config()
 
     # sprint(config)
 
-    rag_tool = RAGOwlAgent(**config)
+    rag_tool = RAGAgent(**config)
 
     if hasattr(rag_tool, "default_queries") and rag_tool.default_queries:
         for iq in rag_tool.default_queries:
-            logger.info(iq)
-            logger.info(rag_tool.rag_question(iq).get("answer"))
-            logger.info("-" * 100)
+            print(iq)
+            print(rag_tool.invoke_rag(iq).get("answer"))
+            print("-" * 100)
+            break
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ logger = logging.getLogger("main")
 @contextmanager
 def track_time(event_name: str, execution_log: Optional[Dict[str, Any]] = None):
     start_time = time.time()
-    logger.debug(f"Started '{event_name}' please wait..")
+    logger.debug(f"Started '{event_name}' with time tracking...")
     try:
         yield  # This is where the actual event execution happens
     finally:
@@ -105,4 +105,4 @@ def get_system_info():
 
 
 def encode_text(text: str) -> str:
-    return text.encode("ascii", errors="replace").decode("utf-8")
+    return text.encode("utf-8", errors="ignore").decode("utf-8")

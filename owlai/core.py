@@ -39,7 +39,7 @@ logger = logging.getLogger("main")
 user_context: str = "CONTEXT: "
 
 
-class DefaultOwlAgentInput(BaseModel):
+class DefaultAgentInput(BaseModel):
     """Input schema for DefaultOwlAgent."""
 
     query: str = Field(description="some natural language input to the agent")
@@ -59,7 +59,7 @@ class OwlAgent(BaseTool, BaseModel):
     # JSON defined properties
     name: str = "sad_unamed_owl_agent"
     description: str
-    args_schema: Optional[ArgsSchema] = DefaultOwlAgentInput
+    args_schema: Optional[ArgsSchema] = DefaultAgentInput
     llm_config: LLMConfig
     system_prompt: str
     default_queries: Optional[List[str]] = None

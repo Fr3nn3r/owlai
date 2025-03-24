@@ -133,16 +133,10 @@ def load_fr_law_pdf(pdf_path: str) -> list[LangchainDocument]:
 
     footer = extract_footer(doc)
 
-    metadata = doc.metadata
+    metadata = doc.metadata.copy()
 
     # Merge the two dictionaries - metadata from the document and extracted metadata from the footer
     metadata.update(extract_metadata_fr_law(footer, doc))
-
-    from rich.console import Console
-    from rich.panel import Panel
-
-    # console = Console()
-    # console.print(metadata)
 
     total_pages = metadata.get("num_pages", 0)
     loaded_docs: List[LangchainDocument] = []
@@ -157,47 +151,36 @@ def load_fr_law_pdf(pdf_path: str) -> list[LangchainDocument]:
         page_content = page.get_text("text")
 
         # Remove footer if present to avoid duplication
-        # if footer and page_content.endswith(footer):
         page_content = page_content.replace(footer, "")
 
         # Update page-specific metadata
-        page_metadata = metadata.copy()
-        page_metadata["page_number"] = page_number + 1  # 1-based page numbering
-        page_metadata["source"] = f"{file_name}:{page_number + 1}"
-        # metadata.update(page.metadata)
-        # metadata["source"] = f"{file_name}:{page_number}"
-        # Call document curator if provided
-        # if document_curator:
-        #     doc_content = document_curator(doc_content, filepath)
+        # page_metadata = metadata.copy()
+        # page_metadata["page_number"] = page_number + 1  # 1-based page numbering
+        # page_metadata["source"] = f"{file_name}:{page_number + 1}"
 
+        # Load the whole document to ensure we don't force a split between pages
         total_page_content += page_content
-
-        # loaded_docs.append(
-        #    LangchainDocument(
-        #        page_content=page_content,
-        #        metadata=page_metadata,
-        #    )
-        # )
-
-        # if page_number > 200:
-        # break
 
     loaded_docs.append(
         LangchainDocument(
             page_content=total_page_content,
-            metadata=page_metadata,
+            metadata=metadata,
         )
     )
 
+    return loaded_docs
     # Split documents
-    embeddings_chunk_size = 512
 
+
+def parse_fr_law_docs(docs: List[LangchainDocument]) -> List[LangchainDocument]:
+
+    # All that stuff could be in the parse parameters
+    embeddings_chunk_size = 512
     chunk_size = 512
     chunk_overlap = int(embeddings_chunk_size / 5)
     chunk_size = embeddings_chunk_size * 0.9
     tokenizer = AutoTokenizer.from_pretrained("thenlper/gte-small")
     tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-
     separators = [
         # "\nPartie[^\n]*",
         # "\nLivre[^\n]*",
@@ -266,9 +249,7 @@ def load_fr_law_pdf_from_folder(folder_path: str) -> list[LangchainDocument]:
     return docs
 
 
-docs = load_fr_law_pdf_from_folder("data/dataset-0006")
+doc = load_fr_law_pdf("data/dataset-0006/LEGITEXT000006069568.pdf")
 
-
-# console = Console()
-# for i in range(10):
-#    console.print(docs[i])
+console = Console()
+console.print(doc[0])
