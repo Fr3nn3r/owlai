@@ -458,12 +458,23 @@ RAG_AGENTS_CONFIG = [
             "num_docs_final": 5,
             "embeddings_model_name": "thenlper/gte-small",
             "reranker_name": "colbert-ir/colbertv2.0",
-            "input_data_folders": [
-                "data/dataset-0001",  # Naruto
-            ],
             "model_kwargs": {"device": "cuda"},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": True,
+            "datastore": {
+                "input_data_folder": "data/dataset-0001",  # Larger dataset
+                "parser": {
+                    "implementation": "DefaultParser",
+                    "output_data_folder": "data/dataset-0001",
+                    "chunk_size": 512,
+                    "chunk_overlap": 50,
+                    "add_start_index": True,
+                    "strip_whitespace": True,
+                    "separators": ["\n\n", "\n", " ", ""],
+                    "extract_images": False,
+                    "extraction_mode": "plain",
+                },
+            },
         },
     },
     {
@@ -504,7 +515,7 @@ RAG_AGENTS_CONFIG = [
                 "input_data_folder": "data/dataset-0004",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
-                    "output_data_folder": "data/dataset-0005",
+                    "output_data_folder": "data/dataset-0004",
                     "chunk_size": 512,
                     "chunk_overlap": 50,
                     "add_start_index": True,

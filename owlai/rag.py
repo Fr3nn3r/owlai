@@ -17,6 +17,7 @@ from langchain_core.callbacks import (
 )
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from sentence_transformers.util import fullname
 from transformers import AutoTokenizer
 from sentence_transformers import SentenceTransformer
 
@@ -44,7 +45,7 @@ class DefaultParser(BaseModel):
 
     implementation: str = "DefaultParser"
     output_data_folder: str
-    chunk_size: int
+    chunk_size: float
     chunk_overlap: float
     add_start_index: bool
     strip_whitespace: bool
@@ -62,37 +63,121 @@ class DefaultParser(BaseModel):
         """
         Split documents into chunks of maximum size `chunk_size` tokens and return a list of documents.
         """
-        text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-            AutoTokenizer.from_pretrained(tokenizer_name),
-            chunk_size=self.chunk_size,
-            chunk_overlap=self.chunk_overlap,  # The number of characters to overlap between chunks
-            add_start_index=self.add_start_index,  # If `True`, includes chunk's start index in metadata
-            strip_whitespace=self.strip_whitespace,  # If `True`, strips whitespace from the start and end of every document
-            separators=self.separators,
-        )
-        logger.debug(f"Splitting {len(input_docs)} documents")
+        try:
+            # Initialize tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-        docs_processed = []
-        for doc in tqdm(input_docs, desc="Splitting documents"):
-            result = text_splitter.split_documents([doc])
-            docs_processed += result
+            # Ensure chunk_size and chunk_overlap are integers
+            chunk_size = int(self.chunk_size)
+            chunk_overlap = int(self.chunk_overlap)
 
-        logger.debug(
-            f"Splitted {len(input_docs)} documents into {len(docs_processed)} chunks"
-        )
-        # Remove duplicates
-        unique_texts = {}
-        docs_processed_unique = []
-        for doc in tqdm(docs_processed, desc="Removing duplicates"):
-            if doc.page_content not in unique_texts:
-                unique_texts[doc.page_content] = True
-                docs_processed_unique.append(doc)
+            # Configure text splitter with more conservative settings
+            text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+                tokenizer,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                add_start_index=True,
+                strip_whitespace=True,
+                separators=[
+                    "\n\n",
+                    "\n",
+                    ".",
+                    "!",
+                    "?",
+                    ",",
+                    " ",
+                    "",
+                ],  # Simplified separators
+                is_separator_regex=False,  # Disable regex for more reliable splitting
+            )
+            logger.debug(
+                f"Splitting {len(input_docs)} documents with chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
+            )
 
-        logger.debug(
-            f"Removed {len(docs_processed) - len(docs_processed_unique)} duplicates from {len(docs_processed)} chunks"
-        )
+            docs_processed = []
+            for doc in tqdm(input_docs, desc="Splitting documents"):
+                try:
+                    # Clean and normalize the text content
+                    content = doc.page_content
+                    if not content or not isinstance(content, str):
+                        logger.warning(
+                            f"Skipping document with invalid content type: {type(content)}"
+                        )
+                        continue
 
-        return docs_processed_unique
+                    # Normalize text: remove problematic characters and normalize whitespace
+                    content = (
+                        content.replace("\u2015", "-")
+                        .replace("\u300c", '"')
+                        .replace("\u300d", '"')
+                        .replace("\u2018", "'")
+                        .replace("\u2019", "'")
+                        .replace("\u201c", '"')
+                        .replace("\u201d", '"')
+                    )
+                    # Normalize whitespace and remove multiple spaces
+                    content = " ".join(content.split())
+
+                    if not content:
+                        logger.warning(
+                            "Skipping document with empty content after cleaning"
+                        )
+                        continue
+
+                    # Create a new document with cleaned content
+                    cleaned_doc = LangchainDocument(
+                        page_content=content, metadata=doc.metadata.copy()
+                    )
+
+                    # Split the document with error handling
+                    try:
+                        # First try to split by tokens
+                        tokens = tokenizer.encode(content)
+                        if len(tokens) <= chunk_size:
+                            # If content is small enough, keep it as is
+                            docs_processed.append(cleaned_doc)
+                        else:
+                            # Otherwise use the text splitter
+                            result = text_splitter.split_documents([cleaned_doc])
+                            docs_processed.extend(result)
+                    except Exception as split_error:
+                        logger.error(f"Error during text splitting: {str(split_error)}")
+                        logger.error(
+                            f"Content length: {len(content)}, Token count: {len(tokens)}"
+                        )
+                        # If splitting fails, add the whole document as a single chunk
+                        docs_processed.append(cleaned_doc)
+
+                except Exception as e:
+                    logger.error(f"Error processing document: {str(e)}")
+                    logger.error(f"Document metadata: {doc.metadata}")
+                    # Add the original document as a fallback
+                    docs_processed.append(doc)
+                    continue
+
+            logger.debug(
+                f"Splitted {len(input_docs)} documents into {len(docs_processed)} chunks"
+            )
+
+            # Remove duplicates
+            unique_texts = {}
+            docs_processed_unique = []
+            for doc in tqdm(docs_processed, desc="Removing duplicates"):
+                if doc.page_content not in unique_texts:
+                    unique_texts[doc.page_content] = True
+                    docs_processed_unique.append(doc)
+
+            logger.debug(
+                f"Removed {len(docs_processed) - len(docs_processed_unique)} duplicates from {len(docs_processed)} chunks"
+            )
+
+            return docs_processed_unique
+
+        except Exception as e:
+            logger.error(f"Error in _split_documents: {str(e)}")
+            logger.error(f"Error details: {traceback.format_exc()}")
+            # Return original documents as fallback
+            return input_docs
 
     def load_and_split_document(
         self,
@@ -137,7 +222,7 @@ class DefaultParser(BaseModel):
             )
             docs = loader.lazy_load()
         else:  # .txt files
-            loader = TextLoader(filepath)
+            loader = TextLoader(filepath, encoding="utf-8")
             docs = loader.lazy_load()
 
         # Convert to LangchainDocuments
@@ -149,20 +234,28 @@ class DefaultParser(BaseModel):
                 total=total_pages,
                 desc=f"Loading pages from {filename}",
             ):
-                # logger.debug(f"Loading page {page_number} of {total_pages}")
-                metadata.update(doc.metadata)
-                metadata["source"] = f"{filename}:{page_number}"
-                doc_content = doc.page_content
-                # Call document curator if provided
-                if document_curator:
-                    doc_content = document_curator(doc_content, filepath)
+                try:
+                    # Ensure the text is properly encoded
+                    doc_content = doc.page_content.encode(
+                        "utf-8", errors="replace"
+                    ).decode("utf-8")
+                    metadata.update(doc.metadata)
+                    metadata["source"] = f"{filename}:{page_number}"
 
-                loaded_docs.append(
-                    LangchainDocument(
-                        page_content=doc_content,
-                        metadata=metadata,
+                    # Call document curator if provided
+                    if document_curator:
+                        doc_content = document_curator(doc_content, filepath)
+
+                    loaded_docs.append(
+                        LangchainDocument(
+                            page_content=doc_content,
+                            metadata=metadata,
+                        )
                     )
-                )
+                except Exception as e:
+                    logger.error(f"Error processing page {page_number}: {str(e)}")
+                    logger.error(f"Error details: {traceback.format_exc()}")
+                    continue
 
         # Split documents
         split_docs = self._split_documents(
@@ -237,7 +330,7 @@ import re
 from fitz import Document, Page
 
 
-class FrenchLawParser(BaseModel):
+class FrenchLawParser(DefaultParser):
 
     implementation: str = "FrenchLawParser"
 
@@ -399,6 +492,7 @@ class FrenchLawParser(BaseModel):
             # " ",
             # "",
         ]
+        # Analyze document chunks before splitting
 
         with track_time("Splitting documents"):
             text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
@@ -547,7 +641,7 @@ class RAGDataStore(BaseModel):
 
         if len(files) > 0:
             # Process each file individually
-            with track_time(f"{len(files)} document(s) loading into vector database"):
+            with track_time(f"Loading {len(files)} document(s) into vector database"):
                 for filename in files:
                     filepath = os.path.join(self.input_data_folder, filename)
                     logger.info(
@@ -830,7 +924,7 @@ def main():
 
     # print("FrenchLawParser" in globals())
 
-    config = RAG_AGENTS_CONFIG[1]
+    config = RAG_AGENTS_CONFIG[0]
 
     load_logger_config()
 

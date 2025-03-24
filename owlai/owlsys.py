@@ -105,4 +105,4 @@ def get_system_info():
 
 
 def encode_text(text: str) -> str:
-    return text.encode("utf-8", errors="ignore").decode("utf-8")
+    return text.encode("ascii", errors="replace").decode("utf-8")
