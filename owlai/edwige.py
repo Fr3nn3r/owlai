@@ -24,19 +24,18 @@ if __name__ == "__main__":
 
     from typing import List
 
-    from owlai.rag import RAGOwlAgent
+    from owlai.rag import RAGAgent
+    from owlai.core import OwlAgent
 
-    from .ttsengine import hoot
-    import importlib
+    from owlai.ttsengine import hoot
     from dotenv import load_dotenv
 
     from typing import Dict, Any
     from logging import Logger
 
     # Updated imports using the new structure
-    from owlai.db import CONFIG, RAG_AGENTS_CONFIG
+    from owlai.db import OWL_AGENTS_CONFIG, RAG_AGENTS_CONFIG
     from owlai.core import OwlAgent
-    from owlai.db import get_default_queries_by_role
     from owlai.tools import ToolBox
 
     from pydantic import ValidationError
@@ -61,7 +60,18 @@ if __name__ == "__main__":
 
             for iagent_config in RAG_AGENTS_CONFIG:
                 try:
-                    agent = RAGOwlAgent(**iagent_config)
+                    agent = RAGAgent(**iagent_config)
+                    agent.init_callable_tools(
+                        self.toolbox.get_tools(agent.llm_config.tools_names)
+                    )
+                    self.owls[agent.name] = agent
+                    self.names.append(agent.name)
+                except ValidationError as e:
+                    logger.error(f"Validation failed for {iagent_config}: {e}")
+
+            for iagent_config in OWL_AGENTS_CONFIG:
+                try:
+                    agent = OwlAgent(**iagent_config)
                     agent.init_callable_tools(
                         self.toolbox.get_tools(agent.llm_config.tools_names)
                     )

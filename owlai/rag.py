@@ -129,7 +129,8 @@ class DefaultParser(BaseModel):
                         page_content=content, metadata=doc.metadata.copy()
                     )
 
-                    # Split the document with error handling
+                    # Initialize tokens variable
+                    tokens = []
                     try:
                         # First try to split by tokens
                         tokens = tokenizer.encode(content)
@@ -308,9 +309,13 @@ class DefaultParser(BaseModel):
         # Analyze token lengths (should init tokenizer once... whatever)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         lengths = [len(tokenizer.encode(doc.page_content)) for doc in docs]
+        total_tokens = sum(lengths)
+        logger.info(f"Total token count in documents: {total_tokens}")
 
         fig = pd.Series(lengths).hist()
-        plt.title(f"Distribution of page lengths [tokens] for {source_doc_filename}")
+        plt.title(
+            f"Chunk lengths [tokens] for {source_doc_filename} total tokens: {total_tokens}"
+        )
         # Create a path for saving visualization images
         file_dir = os.path.join(self.output_data_folder, self._image_folder)
         file_path = os.path.join(
@@ -319,9 +324,7 @@ class DefaultParser(BaseModel):
         os.makedirs(file_dir, exist_ok=True)
         plt.savefig(file_path)
         plt.close()
-        logger.debug(
-            f"Distribution of document lengths (in count of tokens) saved to {file_path}"
-        )
+        logger.debug(f"Document lengths [tokens] saved to {file_path}")
         return file_path
 
 
@@ -535,8 +538,26 @@ class FrenchLawParser(DefaultParser):
         metadata_extractor: Optional[Callable] = None,
         document_curator: Optional[Callable] = None,
     ) -> List[LangchainDocument]:
+
         loaded_docs = self.load_fr_law_pdf(filepath)
-        return self.parse_fr_law_docs(loaded_docs)
+
+        self.analyze_chunk_size_distribution(
+            "pre-split-" + filename,
+            loaded_docs,
+            model_name,
+        )
+
+        parsed_docs = self.parse_fr_law_docs(loaded_docs)
+
+        self.analyze_chunk_size_distribution(
+            "post-split-" + filename,
+            parsed_docs,
+            model_name,
+        )
+
+        logger.info(f"Vector store contains {len(parsed_docs)} chunks")
+
+        return parsed_docs
 
 
 class RAGDataStore(BaseModel):
@@ -565,10 +586,12 @@ class RAGDataStore(BaseModel):
             )
 
         if self.parser.implementation == "DefaultParser":
-            logger.info(f"Using DefaultParser")
+            logger.debug(f"Using DefaultParser")
         else:
             logger.warning(f"Using custom parser: {self.parser.implementation}")
-            self.parser = create_instance(self.parser.implementation)
+            self.parser = create_instance(
+                self.parser.implementation, **kwargs["parser"]
+            )
             if self.parser is None:
                 raise Exception(f"{self.parser.implementation} is not a valid parser")
 
@@ -624,7 +647,9 @@ class RAGDataStore(BaseModel):
         vector_store = None
 
         if os.path.exists(vector_db_file_path):
-            logger.info(f"Loading existing vector database from: {vector_db_file_path}")
+            logger.debug(
+                f"Loading existing vector database from: {vector_db_file_path}"
+            )
             vector_store = self.load_vector_store(
                 self.input_data_folder, embedding_model
             )
@@ -635,7 +660,7 @@ class RAGDataStore(BaseModel):
             for f in os.listdir(self.input_data_folder)
             if f.endswith((".pdf", ".txt"))
         ]
-        logger.info(
+        logger.debug(
             f"Found {len(files)} new documents to process in {self.input_data_folder}"
         )
 
@@ -743,7 +768,6 @@ class RAGRetriever(BaseModel):
                 for i, doc in enumerate(retrieved_docs)
             }
             logger.debug(f"{len(retrieved_docs)} documents retrieved")
-            sprint(retrieved_docs[0])
 
         # If no reranker, just return top k docs
         if not reranker:
@@ -858,14 +882,14 @@ class RAGAgent(OwlAgent):
 
         with track_time("Model invocation with RAG context", metadata):
 
-            logger.debug(f"TOP RERANKED DOCS: {reranked_docs[0].page_content}")
+            # logger.debug(f"TOP RERANKED DOCS: {reranked_docs[0].page_content}")
             docs_content = "\n\n".join(
                 [
                     f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
                     for idx, doc in enumerate(reranked_docs)
                 ]
             )
-            logger.debug(f"DOCS CONTENT: {docs_content}")
+            # logger.debug(f"DOCS CONTENT: {docs_content}")
             if self._prompt is None:
                 raise Exception("Prompt is not set")
 
@@ -873,10 +897,10 @@ class RAGAgent(OwlAgent):
 
             # Add the RAG prompt to the metadata for debugging and analysis purposes
             metadata["rag_prompt"] = rag_prompt
-            logger.debug(f"Final prompt: {rag_prompt}")
+            # logger.debug(f"Final prompt: {rag_prompt}")
             message = SystemMessage(rag_prompt)
             messages = self.chat_model.invoke([message])
-            logger.debug(f"RAG answer: {messages.content}")
+            # logger.debug(f"RAG answer: {messages.content}")
 
         answer["answer"] = str(messages.content) if messages.content is not None else ""
         answer["metadata"] = metadata
@@ -913,9 +937,9 @@ class RAGAgent(OwlAgent):
 
 
 # Instantiate by class name string
-def create_instance(class_name):
+def create_instance(class_name, **kwargs):
     cls = globals()[class_name]
-    return cls()
+    return cls(**kwargs)
 
 
 def main():
@@ -924,7 +948,7 @@ def main():
 
     # print("FrenchLawParser" in globals())
 
-    config = RAG_AGENTS_CONFIG[0]
+    config = RAG_AGENTS_CONFIG[1]
 
     load_logger_config()
 
@@ -932,12 +956,9 @@ def main():
 
     rag_tool = RAGAgent(**config)
 
-    if hasattr(rag_tool, "default_queries") and rag_tool.default_queries:
-        for iq in rag_tool.default_queries:
-            print(iq)
-            print(rag_tool.invoke_rag(iq).get("answer"))
-            print("-" * 100)
-            break
+    vector_store: Optional[FAISS] = rag_tool._vector_store
+
+    sprint(vector_store)
 
 
 if __name__ == "__main__":

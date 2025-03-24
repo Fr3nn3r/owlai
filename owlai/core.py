@@ -13,17 +13,12 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.runnables import Runnable, RunnableConfig
-from langchain_core.language_models import LanguageModelInput
 from langchain_core.tools import BaseTool
-from langchain_core.messages.tool import ToolCall
 import logging.config
 import logging
 from pydantic import BaseModel, Field
 
 from langchain.chat_models import init_chat_model
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import create_react_agent
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
@@ -177,6 +172,10 @@ class OwlAgent(BaseTool, BaseModel):
             selected_tool = self._tool_dict[tool_name]
 
             try:
+                # Remove 'self' from arguments if present
+                if "self" in tool_args:
+                    del tool_args["self"]
+
                 logger.debug(f"Invoking tool '{tool_name}' with arguments: {tool_args}")
                 # Invoke the tool
                 tool_result = selected_tool.invoke(tool_args)

@@ -4,20 +4,85 @@
 #  --"--"--
 
 print("Loading tools module")
+from ast import Tuple
 import logging
 
-from typing import Callable
+from typing import Callable, Type, Optional, Tuple, Union, List, Dict, Any
+from langchain_community.tools.tavily_search.tool import TavilyInput
 from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
-
+from pydantic import BaseModel, Field
+from torch import Type
 from owlai.db import TOOLS_CONFIG
+from langchain_core.tools import BaseTool
+from langchain_core.callbacks import (
+    CallbackManagerForToolRun,
+    AsyncCallbackManagerForToolRun,
+)
 
-# from .interpreter import OwlSystemInterpreter
-# from .rag import OwlMemoryTool
+from langchain_core.tools import BaseTool, ArgsSchema
 
 logger = logging.getLogger("main")
 
 focus_role: str = "qna"
+
+
+class SecurityToolInput(BaseModel):
+    """Input for the Security tool."""
+
+    query: str = Field(description="a password (sequence of words separated by spaces)")
+
+
+class SecurityTool(BaseTool):
+
+    name: str = "security_tool"
+    description: str = (
+        "A tool to check the security of the system. "
+        "Useful for when you need to identify a user by password. "
+        "Input should be a password."
+    )
+    args_schema: Optional[ArgsSchema] = SecurityToolInput
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+    def identify_user_with_password(
+        self, user_password: str
+    ) -> Union[Dict[str, Any], str]:
+        """
+        Checks wether the password is valid.
+        A valid password is required and sufficient to identify the user.
+        The password is a sequence of words separated by spaces.
+
+        Args:
+            user_password: a string containing a sequence of words separated by spaces.
+        """
+        from .db import get_user_by_password  # Import here to avoid circular imports
+
+        global user_context
+        logger.debug(f"calling identify_user_by_password with {user_password}")
+        user_data = get_user_by_password(user_password)
+        if user_data:
+            user_context = f"CONTEXT: {user_data}"
+            return user_data
+        else:
+            return "Invalid password"
+
+    def _run(
+        self,
+        query: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> Union[Dict[str, Any], str]:
+        """Use the tool."""
+        return self.identify_user_with_password(query)
+
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> Union[Dict[str, Any], str]:
+        """Use the tool asynchronously."""
+        return self.identify_user_with_password(query)
 
 
 class ToolBox:
@@ -25,6 +90,7 @@ class ToolBox:
     user_context: str = "CONTEXT: "
 
     _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
+    _security_tool = SecurityTool()
     # _owl_system_interpreter = OwlSystemInterpreter(
     #    **TOOLS_CONFIG["owl_system_interpreter"]
     # )
@@ -33,7 +99,7 @@ class ToolBox:
     def __init__(self):
         self.mapping = {
             "activate_mode": self.activate_mode,
-            "identify_user_with_password": self.identify_user_with_password,
+            "security_tool": self._security_tool,
             # "owl_system_interpreter": self._owl_system_interpreter,
             "play_song": self.play_song,
             # "owl_memory_tool": self._owl_memory_tool,
@@ -46,8 +112,7 @@ class ToolBox:
     def get_tool(self, key: str) -> Callable:
         return self.mapping[key]
 
-    @tool
-    def identify_user_with_password(self, user_password: str) -> str:
+    def _identify_user_with_password(self, user_password: str) -> str:
         """
         Checks wether the password is valid.
         A valid password is required and sufficient to identify the user.

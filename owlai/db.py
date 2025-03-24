@@ -76,14 +76,6 @@ def get_user_by_password(password):
     return None  # Return None if password is not found
 
 
-def get_system_prompt_by_role(role: str) -> str:
-    return CONFIG[role]["system_prompt"]
-
-
-def get_default_queries_by_role(role: str) -> list[str]:
-    return CONFIG[role]["default_queries"]
-
-
 PROMPT_CONFIG = {
     "system-v1": "You are the local system agent.\n"
     "Your goal is to execute tasks assigned by the user on the local machine.\n"
@@ -297,15 +289,25 @@ TOOLS_CONFIG = {
     },
 }
 
-CONFIG = {
-    "system": {
-        "model_provider": "openai",
-        "model_name": "gpt-3.5-turbo",
-        "max_tokens": 200,
-        "temperature": 0.1,
-        "context_size": 4096,
-        "tools_names": ["activate_mode", "owl_system_interpreter", "play_song"],
+OWL_AGENTS_CONFIG = [
+    {
+        "name": "system-v0",
+        "description": "Agent controlling the local system",
         "system_prompt": PROMPT_CONFIG["system-v1"],
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "A request to execute a task or a question about the system expressed in english",
+            }
+        },
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-3.5-turbo",
+            "max_tokens": 200,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["owl_system_interpreter", "play_song"],
+        },
         "default_queries": [
             "list the current directory.",
             "welcome mode",
@@ -318,38 +320,25 @@ CONFIG = {
             "open the last txt file in the temp folder",
             "kill the notepad process",
         ],
-        "test_queries": [
-            "remove all txt files in the temp folder.",
-            "create a temp folder in the current directory if it does not exist.",
-            "you must always save files in the temp folder",  # Added to the toolsystem prompt for anthropic
-            "open an explorer in the temp folder",
-            "get some information about the network and put it into a .txt file",
-            "give me some information about the hardware and put it into a .txt file in the temp folder",
-            "open the last .txt file",
-            "open the bbc homepage",
-            "display an owl in ascii art",
-            "display an owl in ascii art and put it into a .txt file",
-            # "switch off the screen for 1 second and then back on", # TODO: retest blocking the execution
-            "set the brightness of the screen to 50/100",
-            "list the values of the PATH environement variable in a txt file one per line",
-            "open the last txt file",
-            "Report all of the USB devices installed into a file",
-            "print the file you saved with USB devices in the terminal",
-            "set the brightness of the screen back to 100",
-            "kill the notepad process",
-            "display information about my network connection",
-            "minimizes all windows",
-            "run the keyboard combination Ctlr + Win + -> ",
-        ],
     },
-    "identification": {
-        "model_provider": "openai",
-        "model_name": "gpt-4o-mini",
-        "max_tokens": 200,
-        "temperature": 0.1,
-        "context_size": 4096,
-        "tools_names": ["activate_mode", "identify_user_with_password"],
+    {
+        "name": "identification-v1",
+        "description": "Agent responsible for identifying the user",
         "system_prompt": PROMPT_CONFIG["identification-v1"],
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "A sentence from the user expressed in english",
+            }
+        },
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 200,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["security_tool"],
+        },
         "default_queries": [
             "hey hi",
             "who are you?",
@@ -366,14 +355,24 @@ CONFIG = {
         ],
         "test_queries": [],
     },
-    "welcome": {
-        "model_provider": "mistralai",
-        "model_name": "mistral-large-latest",
-        "max_tokens": 2048,
-        "temperature": 0.1,
-        "context_size": 4096,
-        "tools_names": ["activate_mode"],
+    {
+        "name": "welcome-v1",
+        "description": "Agent responsible for welcoming the user",
         "system_prompt": PROMPT_CONFIG["welcome-v1"],
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "A conversational sentence from the user expressed in english",
+            }
+        },
+        "llm_config": {
+            "model_provider": "mistralai",
+            "model_name": "mistral-large-latest",
+            "max_tokens": 2048,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["tavily_search_results_json", "security_tool"],
+        },
         "default_queries": [
             "system mode",
             "qna mode",
@@ -388,16 +387,25 @@ CONFIG = {
             "what is my favorite food?",
             "what is my favorite drink?",
         ],
-        "test_queries": [],
     },
-    "qna": {
-        "model_provider": "openai",
-        "model_name": "gpt-4o-mini",
-        "max_tokens": 2048,
-        "temperature": 0.1,
-        "context_size": 4096,
-        "tools_names": ["owl_memory_tool"],
+    {
+        "name": "qna-v2",
+        "description": "Agent responsible for answering questions",
         "system_prompt": PROMPT_CONFIG["qna-v2"],
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "A question from the user expressed in english",
+            }
+        },
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 2048,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["owl_memory_tool"],
+        },
         "default_queries": [
             "Who is Tsunade?",
             "Provide details about Orochimaru.",
@@ -420,9 +428,8 @@ CONFIG = {
             "How much was allocated to a implement a means-tested dental care program in the 2023 Canadian federal budget?",
             "What is the color of henry the fourth white horse?",
         ],
-        "test_queries": [],
     },
-}
+]
 
 RAG_AGENTS_CONFIG = [
     {
@@ -528,3 +535,30 @@ RAG_AGENTS_CONFIG = [
         },
     },
 ]
+
+
+TEST_QUERIES = {
+    "test_queries": [
+        "remove all txt files in the temp folder.",
+        "create a temp folder in the current directory if it does not exist.",
+        "you must always save files in the temp folder",  # Added to the toolsystem prompt for anthropic
+        "open an explorer in the temp folder",
+        "get some information about the network and put it into a .txt file",
+        "give me some information about the hardware and put it into a .txt file in the temp folder",
+        "open the last .txt file",
+        "open the bbc homepage",
+        "display an owl in ascii art",
+        "display an owl in ascii art and put it into a .txt file",
+        # "switch off the screen for 1 second and then back on", # TODO: retest blocking the execution
+        "set the brightness of the screen to 50/100",
+        "list the values of the PATH environement variable in a txt file one per line",
+        "open the last txt file",
+        "Report all of the USB devices installed into a file",
+        "print the file you saved with USB devices in the terminal",
+        "set the brightness of the screen back to 100",
+        "kill the notepad process",
+        "display information about my network connection",
+        "minimizes all windows",
+        "run the keyboard combination Ctlr + Win + -> ",
+    ]
+}
