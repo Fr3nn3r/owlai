@@ -30,6 +30,7 @@ class AgentManager:
         self.names: List[str] = []
         self.toolbox = ToolBox()
 
+        # Initialize RAG agents
         for iagent_config in RAG_AGENTS_CONFIG:
             try:
                 agent = RAGAgent(**iagent_config)
@@ -38,9 +39,11 @@ class AgentManager:
                 )
                 self.owls[agent.name] = agent
                 self.names.append(agent.name)
+                logging.debug(f"Initialized RAG agent: {agent.name}")
             except ValidationError as e:
-                logger.error(f"Validation failed for {iagent_config}: {e}")
+                logging.error(f"Validation failed for {iagent_config}: {e}")
 
+        # Initialize Owl agents
         for iagent_config in OWL_AGENTS_CONFIG:
             try:
                 agent = OwlAgent(**iagent_config)
@@ -49,10 +52,15 @@ class AgentManager:
                 )
                 self.owls[agent.name] = agent
                 self.names.append(agent.name)
+                logging.debug(f"Initialized Owl agent: {agent.name}")
             except ValidationError as e:
-                logger.error(f"Validation failed for {iagent_config}: {e}")
+                logging.error(f"Validation failed for {iagent_config}: {e}")
+
+        if not self.names:
+            raise RuntimeError("No agents were successfully initialized")
 
         self.focus_agent = self.owls[self.names[0]]
+        logging.info(f"AgentManager initialized with {len(self.names)} agents")
 
     def get_focus_owl(self) -> OwlAgent:
         logger.debug(f"Focus agent: {self.focus_agent.name}")
@@ -81,6 +89,12 @@ class AgentManager:
 
     def get_agents_info(self) -> List[str]:
         return [f"{agent.name}: {agent.description}" for agent in self.owls.values()]
+
+    def get_agents_default_queries(self) -> List[str]:
+        return [
+            f"{agent.name}: {', '.join(agent.default_queries) if agent.default_queries else 'No default queries'}"
+            for agent in self.owls.values()
+        ]
 
     def invoke_agent(self, agent_name: str, message: str):
         if agent_name not in self.names:
