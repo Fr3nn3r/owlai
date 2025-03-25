@@ -25,3 +25,5 @@ logs
 orch/
 .vscode/
 owlai.egg-info/
+dist/
+build/

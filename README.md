@@ -9,6 +9,7 @@ An intelligent AI agent system with RAG (Retrieval Augmented Generation) capabil
 - **Text-to-Speech**: Multiple TTS engines (Coqui-TTS, Edge TTS, ElevenLabs, etc.)
 - **Spotify Integration**: Control Spotify playback
 - **Extensible Tool Framework**: Easy to add new capabilities
+- **REST API**: FastAPI-based REST API for programmatic access
 
 ## Installation
 
@@ -65,6 +66,8 @@ $env:PYTHONPATH = "C:\Users\fbrun\Documents\GitHub\owlai\src"
 
 ## Usage
 
+### Python API
+
 Basic usage example:
 
 ```python
@@ -81,6 +84,37 @@ agent = OwlAgent(
 response = agent.run("Tell me about quantum computing")
 print(response)
 ```
+
+### REST API
+
+OwlAI provides a FastAPI-based REST API for programmatic access. To start the API server:
+
+```bash
+python main.py
+```
+
+The API will be available at `http://localhost:8000` with the following endpoints:
+
+#### List Available Agents
+```bash
+curl http://localhost:8000/agents
+```
+
+#### Get Agent Information
+```bash
+curl http://localhost:8000/agents/info
+```
+
+#### Invoke an Agent
+```bash
+curl -X POST http://localhost:8000/agents/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "agent_name", "message": "Hello, how are you?"}'
+```
+
+You can also access the interactive API documentation at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ## Development
 
