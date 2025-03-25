@@ -10,6 +10,7 @@ import logging.config
 import yaml
 from typing import List
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from multiprocessing import freeze_support
@@ -25,13 +26,21 @@ class AgentInfo(BaseModel):
     description: str
 
 
-class AgentInvokeRequest(BaseModel):
-    agent_name: str
-    message: str
+class AgentResponse(BaseModel):
+    id: str
+    name: str
+    description: str
 
 
-class AgentInvokeResponse(BaseModel):
-    response: str
+class QueryRequest(BaseModel):
+    agent_id: str
+    question: str
+
+
+class QueryResponse(BaseModel):
+    agent_id: str
+    question: str
+    answer: str
 
 
 # Global agent manager instance
@@ -65,11 +74,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins during development
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers
+    max_age=3600,  # Cache preflight requests for 1 hour
+)
 
-@app.get("/agents", response_model=List[str])
+
+@app.get("/agents", response_model=List[AgentResponse])
 async def list_agents():
-    """Get list of available agent names"""
-    return agent_manager.get_agents_names()
+    """Get list of available agents with their details"""
+    agents_info = agent_manager.get_agents_info()
+    return [
+        AgentResponse(
+            id=f"agent{i+1}", name=info.split(": ")[0], description=info.split(": ")[1]
+        )
+        for i, info in enumerate(agents_info)
+    ]
 
 
 @app.get("/agents/info", response_model=List[AgentInfo])
@@ -82,19 +108,36 @@ async def get_agents_info():
     ]
 
 
-@app.post("/agents/invoke", response_model=AgentInvokeResponse)
-async def invoke_agent(request: AgentInvokeRequest):
-    """Invoke an agent with a message"""
-    if request.agent_name not in agent_manager.get_agents_names():
+@app.post("/query", response_model=QueryResponse)
+async def query_agent(payload: QueryRequest):
+    """Query an agent with a question"""
+    logging.info(
+        f"Received query request from agent {payload.agent_id}: {payload.question}"
+    )
+
+    # Extract agent name from agent_id (e.g., "agent1" -> "French Law Agent Alpha")
+    agent_index = int(payload.agent_id.replace("agent", "")) - 1
+    agents_info = agent_manager.get_agents_info()
+
+    if agent_index < 0 or agent_index >= len(agents_info):
+        logging.error(f"Agent {payload.agent_id} not found")
         raise HTTPException(
-            status_code=404, detail=f"Agent {request.agent_name} not found"
+            status_code=404, detail=f"Agent {payload.agent_id} not found"
         )
 
-    response = agent_manager.invoke_agent(request.agent_name, request.message)
+    agent_name = agents_info[agent_index].split(": ")[0]
+    logging.info(f"Invoking agent: {agent_name}")
+
+    response = agent_manager.invoke_agent(agent_name, payload.question)
+
     if response is None:
+        logging.error(f"Failed to get response from agent {agent_name}")
         raise HTTPException(status_code=500, detail="Failed to get response from agent")
 
-    return AgentInvokeResponse(response=response)
+    logging.info(f"Successfully got response from agent {agent_name}")
+    return QueryResponse(
+        agent_id=payload.agent_id, question=payload.question, answer=response
+    )
 
 
 def main():

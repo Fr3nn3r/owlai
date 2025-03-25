@@ -87,7 +87,7 @@ class AgentManager:
             logger.warning(f"Agent {agent_name} not found")
             return
         self.focus_agent = self.owls[agent_name]
-        return self.focus_agent.invoke(message)
+        return self.focus_agent.message_invoke(message)
 
     def set_focus_agent(self, agent_name: str):
         if agent_name not in self.names:
@@ -212,4 +212,4 @@ list     - list all agents
             edwige.set_focus_agent(user_message)
             continue
 
-        focus_agent.invoke(user_message)
+        print(focus_agent.message_invoke(user_message))
