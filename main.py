@@ -311,7 +311,7 @@ def main():
         raise RuntimeError("Missing required OPENAI_API_KEY environment variable")
 
     # Determine if we're in development mode
-    is_development = os.getenv("OWLAI_ENV", "production").lower() == "development"
+    is_development = os.getenv("OWL_ENV", "production").lower() == "development"
 
     # Run the FastAPI server
     uvicorn.run(
