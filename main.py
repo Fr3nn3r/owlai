@@ -306,6 +306,10 @@ def main():
     # Load environment variables
     load_dotenv()
 
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    if not OPENAI_API_KEY:
+        raise RuntimeError("Missing required OPENAI_API_KEY environment variable")
+
     # Determine if we're in development mode
     is_development = os.getenv("OWLAI_ENV", "production").lower() == "development"
 

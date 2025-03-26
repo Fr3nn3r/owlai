@@ -20,7 +20,7 @@ def load_logger_config():
     # Only load config if not already configured
     if not logging.getLogger().handlers:
         # Get environment from ENV variable, default to 'development'
-        env = os.getenv("OWL_ENV", "development")
+        env = os.getenv("OWLAI_ENV", "development")
         config_path = os.path.join("config", f"logging.{env}.yaml")
 
         if os.path.exists(config_path):
