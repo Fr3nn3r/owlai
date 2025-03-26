@@ -17,13 +17,12 @@ from transformers import (
 )
 import transformers
 import torch
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
 import pacmap
 import numpy as np
 import plotly.express as px
-from ragatouille import RAGPretrainedModel
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from transformers import PreTrainedTokenizer
 
@@ -36,6 +35,8 @@ from tqdm import tqdm
 
 from owlai.tools import OwlMemoryTool
 from owlai.db import TOOLS_CONFIG
+
+from sentence_transformers import SentenceTransformer
 
 
 def load_logger_config():
@@ -104,9 +105,6 @@ def main():
             processed_docs: Documents after splitting
             model_name: Name of the embedding model to use
         """
-        from sentence_transformers import SentenceTransformer
-        from transformers import AutoTokenizer
-
         # Get max sequence length from SentenceTransformer
         max_seq_len = SentenceTransformer(model_name).max_seq_length
         info_message = (

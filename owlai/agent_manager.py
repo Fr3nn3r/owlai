@@ -32,11 +32,11 @@ class AgentManager:
         for iagent_config in RAG_AGENTS_CONFIG:
             try:
                 # Import RAG components only when needed
-                from owlai.rag import RAGAgent
+                from owlai.rag import create_rag_agent
 
-                agent = RAGAgent(**iagent_config)
+                agent = create_rag_agent(**iagent_config)
                 agent.init_callable_tools(
-                    self.toolbox.get_tools(agent.llm_config.tools_names)
+                    self.toolbox.get_tools(iagent_config["llm_config"]["tools_names"])
                 )
                 self.owls[agent.name] = agent
                 self.names.append(agent.name)
