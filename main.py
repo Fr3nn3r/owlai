@@ -17,6 +17,8 @@ from multiprocessing import freeze_support
 import uvicorn
 from contextlib import asynccontextmanager
 import os
+import json
+from fastapi.responses import StreamingResponse
 
 from owlai.agent_manager import AgentManager
 from owlai.db import RAG_AGENTS_CONFIG, OWL_AGENTS_CONFIG
@@ -124,8 +126,8 @@ FRONTEND_AGENT_DATA = {
         "default_queries": get_rag_agent_default_queries("rag-naruto-v1"),
         "image_url": "Kiyomi.jpg",
         "color_theme": {
-            "primary": "#4A90E2",
-            "secondary": "#F5A623",
+            "primary": "#000000",
+            "secondary": "#FF0000",
         },
         "welcome_title": "Ask me about Naruto (spoiler alert!)",
     },
@@ -135,8 +137,8 @@ FRONTEND_AGENT_DATA = {
         "default_queries": get_rag_agent_default_queries("rag-fr-general-law-v1"),
         "image_url": "Marianne.jpg",
         "color_theme": {
-            "primary": "#4A90E2",
-            "secondary": "#F5A623",
+            "primary": "#0055A4",  # French blue
+            "secondary": "#FFFFFF",  # White
         },
         "welcome_title": "Experte en droit français",
     },
@@ -146,8 +148,8 @@ FRONTEND_AGENT_DATA = {
         "default_queries": get_rag_agent_default_queries("rag-fr-tax-law-v1"),
         "image_url": "Marine.jpg",
         "color_theme": {
-            "primary": "#4A90E2",
-            "secondary": "#F5A623",
+            "primary": "#FFFFFF",  # White
+            "secondary": "#FF0000",  # Red
         },
         "welcome_title": "Experte en droit fiscal français",
     },
@@ -168,29 +170,38 @@ FRONTEND_AGENT_DATA = {
 @app.get("/agents", response_model=List[AgentDetails])
 async def list_agents():
     """Get list of available agents with their details"""
-    agents_info = agent_manager.get_agents_info()
-    return [
-        AgentDetails(
-            id=f"agent{i+1}",
-            name=info.split(": ")[0],
-            description=info.split(": ")[1],
-            welcome_title=f"Welcome to {info.split(': ')[0]}",
-            owl_image_url=f"/public/{info.split(': ')[0]}.png",
-            color_theme=ColorTheme(primary="#4A90E2", secondary="#F5A623"),
-            default_queries=agent_manager.owls[info.split(": ")[0]].default_queries
-            or [],
-        )
-        for i, info in enumerate(agents_info)
-    ]
+    agent_names = agent_manager.get_agents_names()
+    agents = []
+
+    for agent_name in agent_names:
+        if agent_name in FRONTEND_AGENT_DATA:
+            agent_data = FRONTEND_AGENT_DATA[agent_name]
+            agents.append(
+                AgentDetails(
+                    id=agent_name,
+                    name=agent_data["name"],
+                    description=agent_data["description"],
+                    welcome_title=agent_data["welcome_title"],
+                    owl_image_url=f"/public/{agent_data['image_url']}",
+                    color_theme=ColorTheme(**agent_data["color_theme"]),
+                    default_queries=agent_data["default_queries"],
+                )
+            )
+
+    return agents
 
 
 @app.get("/agents/info", response_model=List[AgentInfo])
 async def get_agents_info():
     """Get detailed information about all agents"""
-    agents_info = agent_manager.get_agents_info()
+    agent_names = agent_manager.get_agents_names()
     return [
-        AgentInfo(name=info.split(": ")[0], description=info.split(": ")[1])
-        for info in agents_info
+        AgentInfo(
+            name=FRONTEND_AGENT_DATA[agent_name]["name"],
+            description=FRONTEND_AGENT_DATA[agent_name]["description"],
+        )
+        for agent_name in agent_names
+        if agent_name in FRONTEND_AGENT_DATA
     ]
 
 
@@ -201,26 +212,20 @@ async def query_agent(payload: QueryRequest):
         f"Received query request from agent {payload.agent_id}: {payload.question}"
     )
 
-    # Extract agent name from agent_id (e.g., "agent1" -> "French Law Agent Alpha")
-    agent_index = int(payload.agent_id.replace("agent", "")) - 1
-    agents_info = agent_manager.get_agents_info()
-
-    if agent_index < 0 or agent_index >= len(agents_info):
+    if payload.agent_id not in FRONTEND_AGENT_DATA:
         logging.error(f"Agent {payload.agent_id} not found")
         raise HTTPException(
             status_code=404, detail=f"Agent {payload.agent_id} not found"
         )
 
-    agent_name = agents_info[agent_index].split(": ")[0]
-    logging.info(f"Invoking agent: {agent_name}")
-
-    response = agent_manager.invoke_agent(agent_name, payload.question)
+    logging.info(f"Invoking agent: {payload.agent_id}")
+    response = agent_manager.invoke_agent(payload.agent_id, payload.question)
 
     if response is None:
-        logging.error(f"Failed to get response from agent {agent_name}")
+        logging.error(f"Failed to get response from agent {payload.agent_id}")
         raise HTTPException(status_code=500, detail="Failed to get response from agent")
 
-    logging.info(f"Successfully got response from agent {agent_name}")
+    logging.info(f"Successfully got response from agent {payload.agent_id}")
     return QueryResponse(
         agent_id=payload.agent_id, question=payload.question, answer=response
     )
@@ -229,39 +234,65 @@ async def query_agent(payload: QueryRequest):
 @app.get("/agents/{agent_id}/details", response_model=AgentDetails)
 async def get_agent_details(agent_id: str):
     """Get detailed information about a specific agent"""
-    agent_index = int(agent_id.replace("agent", "")) - 1
-    agents_info = agent_manager.get_agents_info()
-
-    if agent_index < 0 or agent_index >= len(agents_info):
+    if agent_id not in FRONTEND_AGENT_DATA:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    agent_name = agents_info[agent_index].split(": ")[0]
-    agent = agent_manager.owls[agent_name]
-
+    agent_data = FRONTEND_AGENT_DATA[agent_id]
     return AgentDetails(
         id=agent_id,
-        name=agent.name,
-        description=agent.description,
-        welcome_title=f"Welcome to {agent.name}",
-        owl_image_url=f"/public/{agent.name}.png",  # You'll need to add this static file
-        color_theme=ColorTheme(primary="#4A90E2", secondary="#F5A623"),
-        default_queries=agent.default_queries or [],
+        name=agent_data["name"],
+        description=agent_data["description"],
+        welcome_title=agent_data["welcome_title"],
+        owl_image_url=f"/public/{agent_data['image_url']}",
+        color_theme=ColorTheme(**agent_data["color_theme"]),
+        default_queries=agent_data["default_queries"],
     )
 
 
 @app.get("/agents/{agent_id}/default-queries", response_model=List[str])
 async def get_default_queries(agent_id: str) -> List[str]:
     """Get default queries for a specific agent"""
-    agent_index = int(agent_id.replace("agent", "")) - 1
-    agents_info = agent_manager.get_agents_info()
-
-    if agent_index < 0 or agent_index >= len(agents_info):
+    if agent_id not in FRONTEND_AGENT_DATA:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    agent_name = agents_info[agent_index].split(": ")[0]
-    agent = agent_manager.owls[agent_name]
+    return FRONTEND_AGENT_DATA[agent_id]["default_queries"]
 
-    return agent.default_queries or []
+
+@app.post("/stream-query")
+async def stream_query(payload: QueryRequest):
+    """Stream a response from an agent"""
+    logging.info(
+        f"Received streaming query request from agent {payload.agent_id}: {payload.question}"
+    )
+
+    # Verify agent exists
+    if payload.agent_id not in FRONTEND_AGENT_DATA:
+        logging.error(f"Agent {payload.agent_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Agent {payload.agent_id} not found"
+        )
+
+    async def generate():
+        try:
+            # Get the agent instance
+            agent = agent_manager.owls[payload.agent_id]
+
+            # Stream the response
+            async for chunk in agent.stream_message(payload.question):
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+
+        except Exception as e:
+            logging.error(f"Error streaming response: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 def main():

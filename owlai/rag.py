@@ -935,6 +935,38 @@ class RAGAgent(OwlAgent):
             raise Exception("No answer found")
         return answer.get("answer", "?????")
 
+    async def stream_message(self, message: str):
+        """Stream a response from the RAG agent"""
+        logger.debug(
+            f"[RAGOwlAgent.stream_message] Called from {self.name} with message: {message}"
+        )
+
+        # Get relevant documents (synchronous)
+        reranked_docs, metadata = self.retriever.retrieve_relevant_chunks(
+            query=message,
+            knowledge_base=self._vector_store,
+            reranker=self._reranker,
+        )
+
+        # Format documents content
+        docs_content = "\n\n".join(
+            [
+                f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
+                for idx, doc in enumerate(reranked_docs)
+            ]
+        )
+
+        if self._prompt is None:
+            raise Exception("Prompt is not set")
+
+        # Create the RAG prompt
+        rag_prompt = self._prompt.format(question=message, context=docs_content)
+
+        # Stream the response
+        async for chunk in self.chat_model.astream([SystemMessage(rag_prompt)]):
+            if chunk.content:
+                yield chunk.content
+
 
 # Instantiate by class name string
 def create_instance(class_name, **kwargs):

@@ -225,9 +225,6 @@ class OwlAgent(BaseTool, BaseModel):
         """
         Base implementation of message_invoke that can be overridden by subclasses.
         """
-        # logger.debug(
-        #    f"[BASE OwlAgent.message_invoke] Called from {self.name} with message: {message}"
-        # )
         try:
             # update system prompt with latestcontext
             system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
@@ -249,7 +246,6 @@ class OwlAgent(BaseTool, BaseModel):
                 ):  # If tools were called, invoke the model again
                     response = self.chat_model.invoke(self._message_history)
                     self.append_message(response)  # Add model response to history
-                    # logger.debug(response.content)  # Log the model response
 
                 self._total_tokens = self._token_count(response)
 
@@ -259,6 +255,44 @@ class OwlAgent(BaseTool, BaseModel):
             logger.error(f"Error invoking model '{self.llm_config.model_name}': '{e}'")
             logger.error(f"Stack trace: '{traceback.format_exc()}'")
             return f"Error: {str(e)}"
+
+    async def stream_message(self, message: str):
+        """
+        Stream a response from the agent. This is the base implementation that can be overridden by subclasses.
+        """
+        try:
+            # update system prompt with latestcontext
+            system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
+            if len(self._message_history) == 0:
+                self._message_history.append(system_message)
+            else:
+                self._message_history[0] = system_message
+
+            self.append_message(HumanMessage(message))  # Add user message to history
+
+            # Stream the response
+            async for chunk in self.chat_model.astream(self._message_history):
+                if chunk.content:
+                    yield chunk.content
+
+            # Get the final response for history and tool processing
+            response = self.chat_model.invoke(self._message_history)
+            self.append_message(response)
+
+            # Process tool calls if needed
+            if isinstance(response, AIMessage):
+                self._process_tool_calls(response)
+                if hasattr(response, "tool_calls") and response.tool_calls:
+                    response = self.chat_model.invoke(self._message_history)
+                    self.append_message(response)
+                self._total_tokens = self._token_count(response)
+
+        except Exception as e:
+            logger.error(
+                f"Error streaming from model '{self.llm_config.model_name}': '{e}'"
+            )
+            logger.error(f"Stack trace: '{traceback.format_exc()}'")
+            yield f"Error: {str(e)}"
 
     def print_message_history(self):
         sprint(self._message_history)
