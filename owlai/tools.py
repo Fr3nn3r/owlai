@@ -4,6 +4,15 @@
 #  --"--"--
 
 print("Loading tools module")
+
+# Guard against duplicate module loading
+import sys
+
+_TOOLS_MODULE_LOADED = False
+if not _TOOLS_MODULE_LOADED:
+    _TOOLS_MODULE_LOADED = True
+    # Continue with imports below
+
 from ast import Tuple
 import logging
 

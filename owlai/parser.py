@@ -10,7 +10,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from transformers import AutoTokenizer
 
-from owlai.owlsys import track_time
+from owlai.owlsys import track_time, setup_logging, sprint
 import warnings
 from tqdm import tqdm
 
@@ -31,11 +31,9 @@ import traceback
 from pydantic import BaseModel
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from sentence_transformers import SentenceTransformer
-import pandas as pd
+import pandas as pds
 import matplotlib.pyplot as plt
 
 warnings.simplefilter("ignore", category=FutureWarning)
-
-from owlai.owlsys import load_logger_config, sprint
 
 logger = logging.getLogger("main")

@@ -17,13 +17,12 @@ from transformers import (
 )
 import transformers
 import torch
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
 import pacmap
 import numpy as np
 import plotly.express as px
-from ragatouille import RAGPretrainedModel
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from transformers import PreTrainedTokenizer
 
@@ -33,6 +32,8 @@ import yaml
 import json
 
 from tqdm import tqdm
+
+from sentence_transformers import SentenceTransformer
 
 
 def load_logger_config():
@@ -101,9 +102,6 @@ def main():
             processed_docs: Documents after splitting
             model_name: Name of the embedding model to use
         """
-        from sentence_transformers import SentenceTransformer
-        from transformers import AutoTokenizer
-
         # Get max sequence length from SentenceTransformer
         max_seq_len = SentenceTransformer(model_name).max_seq_length
         info_message = (
@@ -498,9 +496,9 @@ Question: {question}""",
                 "Comment fonctionne le système judiciaire en France et quels sont les principaux types de tribunaux ?",
                 "Quels sont les principes clés du droit des contrats en France ?",
                 "Quels sont les droits des employés en vertu du droit du travail français ?",
-                "Comment fonctionne le droit pénal en France et quels sont les principaux types d’infractions ?",
+                "Comment fonctionne le droit pénal en France et quels sont les principaux types d'infractions ?",
                 "Quelles sont les règles essentielles régissant la propriété en France ?",
-                "Comment le système juridique français protège-t-il les droits de l’homme et les libertés fondamentales ?",
+                "Comment le système juridique français protège-t-il les droits de l'homme et les libertés fondamentales ?",
             ],
         },
     ]

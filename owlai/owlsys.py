@@ -10,72 +10,92 @@ from typing import Optional, Dict, Any
 from rich.console import Console
 import yaml
 import os
+import codecs
+import sys
+
+
+def set_cuda_device():
+    """Set CUDA device based on availability"""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            device = "cuda"
+            env = os.getenv("OWL_ENV", "development")
+            print(f"Using CUDA device in {env} environment")
+        else:
+            device = "cpu"
+            print("CUDA not available, falling back to CPU")
+    except ImportError:
+        device = "cpu"
+        print("PyTorch not available, using CPU")
+
+    return device
+
+
+class UnicodeStreamHandler(logging.StreamHandler):
+    """Custom StreamHandler that handles Unicode properly"""
+
+    def __init__(self, stream=None):
+        super().__init__(stream)
+        self.stream = stream or sys.stdout
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            # Use codecs to handle Unicode properly
+            stream = codecs.getwriter("utf-8")(stream.buffer)
+            stream.write(msg + self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
+
+def setup_logging():
+    """Setup logging configuration"""
+    # Create logs directory if it doesn't exist
+    os.makedirs("logs", exist_ok=True)
+
+    # Configure logging
+    logging_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "standard": {
+                "format": "%(asctime)s - %(levelname)s - %(message)s",
+            },
+        },
+        "handlers": {
+            "console": {
+                "class": "owlai.owlsys.UnicodeStreamHandler",
+                "formatter": "standard",
+                "stream": "ext://sys.stdout",
+            },
+            "file": {
+                "class": "logging.FileHandler",
+                "formatter": "standard",
+                "filename": "logs/owlai.log",
+                "encoding": "utf-8",
+            },
+        },
+        "loggers": {
+            "": {  # Root logger
+                "handlers": ["console", "file"],
+                "level": "INFO",
+                "propagate": True,
+            },
+        },
+    }
+
+    logging.config.dictConfig(logging_config)
 
 
 # Create a basic logger first
 logger = logging.getLogger("main")
 
-
-def set_cuda_device():
-    """Set CUDA device based on environment"""
-    env = os.getenv("OWL_ENV", "development")
-    if env == "production":
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                device = "cuda"
-                logger.info("Using CUDA device for production environment")
-            else:
-                device = "cpu"
-                logger.warning("CUDA not available, falling back to CPU in production")
-        except ImportError:
-            device = "cpu"
-            logger.warning("PyTorch not available, using CPU in production")
-    else:
-        device = "cpu"
-        logger.info("Using CPU for development environment")
-
-    return device
-
-
-def load_logger_config():
-    # Only load config if not already configured
-    if not logging.getLogger().handlers:
-        # Get environment from ENV variable, default to 'development'
-        env = os.getenv("OWL_ENV", "development")
-        config_path = os.path.join("config", f"logging.{env}.yaml")
-
-        if os.path.exists(config_path):
-            with open(config_path, "r") as logger_config:
-                config = yaml.safe_load(logger_config)
-
-                # Create log directories if they don't exist
-                if "handlers" in config:
-                    for handler_name, handler_config in config["handlers"].items():
-                        if "filename" in handler_config:
-                            log_dir = os.path.dirname(handler_config["filename"])
-                            if log_dir and not os.path.exists(log_dir):
-                                os.makedirs(log_dir)
-
-                logging.config.dictConfig(config)
-                logger.info(f"Loaded logging configuration from {config_path}")
-        else:
-            # Fallback configuration if yaml file not found
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-            )
-            logger.warning(
-                f"No configuration file found at {config_path}, using default configuration"
-            )
-
-    # Set CUDA device based on environment
-    return set_cuda_device()
-
-
-# Load logging config and get device
-device = load_logger_config()
+# Set CUDA device immediately
+device = set_cuda_device()
 
 
 @contextmanager

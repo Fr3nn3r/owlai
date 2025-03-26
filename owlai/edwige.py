@@ -14,7 +14,7 @@ from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
 from owlai.agent_manager import AgentManager
-from owlai.owlsys import load_logger_config
+from owlai.owlsys import setup_logging
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     print(f"Application loading please wait...")
 
     # Load logging config using the shared function
-    load_logger_config()
+    setup_logging()
     logger = logging.getLogger("main")
     logger.info(f"Application started in {time.time() - start_time} seconds")
 
@@ -119,7 +119,7 @@ list     - list all agents
             continue
 
         if user_message.lower() == "log":
-            load_logger_config()
+            setup_logging()
             continue
 
         if user_message.lower() == "list":

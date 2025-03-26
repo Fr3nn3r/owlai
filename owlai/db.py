@@ -6,8 +6,15 @@
 import os
 from owlai.owlsys import device
 
-
 print("Loading db module")
+
+# Guard against duplicate module loading
+import sys
+
+_DB_MODULE_LOADED = False
+if not _DB_MODULE_LOADED:
+    _DB_MODULE_LOADED = True
+    # Continue with imports below
 
 is_prod = os.environ.get("OWL_ENV", "development").lower() == "production"
 
@@ -486,7 +493,7 @@ RAG_AGENTS_CONFIG = [
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
             "embeddings_model_name": "thenlper/gte-small",
-            "reranker_name": "colbert-ir/colbertv2.0",
+            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": True,
@@ -542,7 +549,7 @@ RAG_AGENTS_CONFIG = [
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
             "embeddings_model_name": "thenlper/gte-small",
-            "reranker_name": "colbert-ir/colbertv2.0",
+            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": True,
@@ -596,7 +603,7 @@ RAG_AGENTS_CONFIG = [
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
             "embeddings_model_name": "thenlper/gte-small",
-            "reranker_name": "colbert-ir/colbertv2.0",
+            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": True,
@@ -650,7 +657,7 @@ RAG_AGENTS_CONFIG = [
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
             "embeddings_model_name": "thenlper/gte-small",
-            "reranker_name": "colbert-ir/colbertv2.0",
+            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": True,

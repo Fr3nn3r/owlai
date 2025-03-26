@@ -18,11 +18,15 @@ import uvicorn
 from contextlib import asynccontextmanager
 import os
 import json
+import sys
 from fastapi.responses import StreamingResponse
 
 from owlai.agent_manager import AgentManager
 from owlai.db import RAG_AGENTS_CONFIG, OWL_AGENTS_CONFIG
-from owlai.owlsys import load_logger_config
+from owlai.owlsys import setup_logging
+import owlai.rag as rag_module
+
+logger = logging.getLogger(__name__)
 
 
 # Pydantic models for API
@@ -71,7 +75,7 @@ agent_manager = None
 async def lifespan(app: FastAPI):
     """Lifespan events for FastAPI application"""
     # Startup
-    load_logger_config()
+    setup_logging()
     global agent_manager
     if agent_manager is None:
         agent_manager = AgentManager()
@@ -290,28 +294,19 @@ async def stream_query(payload: QueryRequest):
 
 
 def main():
-    """Main entry point for OwlAI"""
-    # Load environment variables
-    load_dotenv()
-
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    if not OPENAI_API_KEY:
-        raise RuntimeError("Missing required OPENAI_API_KEY environment variable")
-
-    # Determine if we're in development mode
-    is_development = os.getenv("OWL_ENV", "production").lower() == "development"
-
-    # Run the FastAPI server
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=is_development,  # Enable auto-reload only in development
-        workers=1,  # Single worker to prevent module reloading
-    )
+    """Main entry point for the application."""
+    try:
+        # Initialize the agent manager
+        edwige = AgentManager()
+    except KeyboardInterrupt:
+        logger.info("Application terminated by the user")
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}")
+        logger.exception(e)
 
 
 if __name__ == "__main__":
     # Required for Windows multiprocessing
     freeze_support()
+    setup_logging()
     main()
