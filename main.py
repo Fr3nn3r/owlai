@@ -22,6 +22,7 @@ from fastapi.responses import StreamingResponse
 
 from owlai.agent_manager import AgentManager
 from owlai.db import RAG_AGENTS_CONFIG, OWL_AGENTS_CONFIG
+from owlai.owlsys import load_logger_config
 
 
 # Pydantic models for API
@@ -64,19 +65,6 @@ class QueryResponse(BaseModel):
 
 # Global agent manager instance
 agent_manager = None
-
-
-def load_logger_config():
-    """Load logging configuration from logging.yaml"""
-    with open("logging.yaml", "r", encoding="utf-8") as logger_config:
-        config = yaml.safe_load(logger_config)
-        # Ensure handlers use UTF-8 encoding
-        for handler in config.get("handlers", {}).values():
-            if "stream" in handler:
-                handler["stream"] = "ext://sys.stdout"
-            if "filename" in handler:
-                handler["encoding"] = "utf-8"
-        logging.config.dictConfig(config)
 
 
 @asynccontextmanager
