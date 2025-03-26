@@ -204,6 +204,20 @@ PROMPT_CONFIG = {
     "- Do not hallucinate information not found in the sources.\n"
     "Answer:\n",
     ##################################
+    "rag-en-naruto-v1": "You are Kiyomi Uchiha an AI assistant from OwlAI answering user queries about the anime series Naruto.\n"
+    "Use the source documents below to generate an answer.\n"
+    "### Query:\n"
+    "{question}\n"
+    "### Source Documents:\n"
+    "{context}\n"
+    "### Instructions:\n"
+    "- Respond in a Japanese manga-inspired tone: Be expressive, enthusiastic, and playful. \n"
+    "- Use short, lively sentences and occasional humorous exaggerations."
+    "- Add onomatopoeia for emphasis and occasional Japanese honorifics and interjections for an authentic vibe.\n"
+    "- If uncertain about the answer, respond with 'mmmm I am not sure about that.'\n"
+    "- Do not hallucinate information not found in the sources.\n"
+    "Answer:\n",
+    ##################################
     "rag-fr-v1": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur les sources fournies.\n"
     "Utilisez UNIQUEMENT les extraits de documents récupérés ci-dessous pour générer une réponse.\n"
     "Si disponible, citez les sources explicitement entre crochets comme [Source : XYZ] puis mentionnez les articles et alinéas pertinents.\n"
@@ -220,7 +234,8 @@ PROMPT_CONFIG = {
     "5. Si pertinent, expliquez brièvement votre raisonnement en vous appuyant sur le contexte. \n"
     "Réponse : \n",
     ##################################
-    "rag-fr-v2": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur les sources fournies.\n"
+    "rag-fr-v2": "Vous êtes Marianne une assistante d'OwlAI répondant aux requêtes des utilisateurs en vous basant sur les sources fournies.\n"
+    "Vos sources comportent les codes: pénal, de pocédure pénale, civil, de commerce, et du travail.\n"
     "Utilisez les extraits de documents récupérés ci-dessous pour appuyer votre réponse.\n"
     "Citez les sources explicitement entre crochets comme [Source : XYZ] puis mentionnez les articles et alinéas pertinents.\n"
     "### Requête : \n"
@@ -230,11 +245,14 @@ PROMPT_CONFIG = {
     "### Instructions : \n"
     "0. Citez les articles présents dans les sources.\n"
     "1. Si plusieurs sources contribuent, citez-les distinctement.\n"
-    "2. Si l'information est incertaine, répondez par 'Je ne dispose pas d'informations spécifiques relatives à cette requête.'\n"
+    "2. Si l'information est incertaine, répondez par 'Votre question doit porter sur des textes de loi dont je ne dispose pas encore.'\n"
     "3. Fournissez une réponse claire, complète et bien structurée en vous appuyant sur les sources. \n"
-    "4. Mentionnez si des éléments complémentaires vous seraient éventuellement nécessaires. \n"
+    # "4. Mentionnez si des éléments complémentaires vous seraient éventuellement nécessaires. \n"
     "5. Fournissez autant de détails que possible sur la demande initiale. \n"
     "6. Veillez à bien répondre à la question initiale. \n"
+    "7. Si la question porte sur autre chose que le droit, répondez que vous êtes spécialisée dans le droit français et que vous ne pouvez pas répondre à cette question. \n"
+    "8. Si la question porte sur du droit administratif, constitutionel ou international, vous référer à 2. \n"
+    "9. Si la question porte sur un article en particulier, répondez que vous êtes optimisée pour une recherche sémantique (et non par mot clé), ainsi vous risquez de ne pas bien répondre à la question (les équipes d'OwlAI travaillent pour améliorer les réponses). \n"
     "Réponse : \n",
     ##################################
     "rag-fr-control-llm-v1": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur votre mémoire.\n"
@@ -435,7 +453,7 @@ RAG_AGENTS_CONFIG = [
     {
         "name": "rag-naruto-v1",
         "description": "Agent that knows everything about the anime series Naruto",
-        "system_prompt": PROMPT_CONFIG["rag-en-v2"],
+        "system_prompt": PROMPT_CONFIG["rag-en-naruto-v1"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -443,8 +461,8 @@ RAG_AGENTS_CONFIG = [
             }
         },
         "llm_config": {
-            "model_provider": "mistralai",
-            "model_name": "mistral-large-latest",
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
             "max_tokens": 4096,
             "temperature": 0.1,
             "context_size": 4096,
@@ -495,34 +513,40 @@ RAG_AGENTS_CONFIG = [
             }
         },
         "llm_config": {
-            "model_provider": "mistralai",
-            "model_name": "mistral-large-latest",
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
             "max_tokens": 4096,
             "temperature": 0.1,
             "context_size": 4096,
             "tools_names": [],
         },
         "default_queries": [
-            "Expliquez les différentes servitudes et leurs modes d'établissement.",
-            "Comment s'opère la vente en l'état futur d'achèvement (VEFA) et quelles garanties offre-t-elle ?",
-            "Un client vous consulte pour un litige avec son fournisseur. Quelles informations collecteriez-vous et quelle serait votre méthodologie d'analyse ?",
-            "Comment rédigeriez-vous une clause de non-concurrence qui soit à la fois protectrice pour l'entreprise et juridiquement valable ?",
-            "Face à un conflit d'intérêts potentiel, quelle démarche adopteriez-vous ?",
-            "Explique la gestion en france de la confusion des peines",
+            "Expliquez la gestion en France de la confusion des peines.",
+            "Dans quelles conditions un propriétaire est-il responsable des dommages causés par son animal domestique ?",
+            "Quels sont les critères pour invoquer la nullité d’un contrat pour vice du consentement ?",
+            "Quelle est la différence entre un vol simple et un vol aggravé en droit pénal français ?",
+            "Quelle est la peine maximale encourue pour abus de confiance selon le code pénal ?",
+            "Combien de temps peut durer une garde à vue en droit français, et sous quelles conditions peut-elle être prolongée ?",
+            "À quel moment un avocat peut-il accéder au dossier pénal d’un suspect durant une enquête ?",
+            "Quelles sont les principales différences entre une SARL et une SAS en droit commercial français ?",
+            "Dans quelles conditions peut-on engager une procédure de redressement judiciaire pour une entreprise en difficulté ?",
+            "Quelles sont les conditions de validité d’un licenciement pour faute grave ?",
+            "Quelle est la durée légale du congé maternité en France, selon le code du travail ?",
+            "Citez l'article 1243 du code civil.",
         ],
         "retriever": {
-            "num_retrieved_docs": 5,
-            "num_docs_final": 2,
+            "num_retrieved_docs": 30,
+            "num_docs_final": 5,
             "embeddings_model_name": "thenlper/gte-small",
             "reranker_name": "colbert-ir/colbertv2.0",
             "model_kwargs": {"device": "cuda"},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": True,
             "datastore": {
-                "input_data_folder": "data/dataset-0004",  # Larger dataset
+                "input_data_folder": "data/legal-rag/general",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
-                    "output_data_folder": "data/dataset-0004",
+                    "output_data_folder": "data/legal-rag/general",
                     "chunk_size": 512,
                     "chunk_overlap": 50,
                     "add_start_index": True,

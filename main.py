@@ -103,6 +103,30 @@ app.add_middleware(
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
+FRONTEND_AGENT_DATA = {
+    "rag-naruto-v1": {
+        "name": "Kiyomi Uchiha",
+        "description": "Fan of the anime series Naruto.",
+        "default_queries": [
+            "Who is Tsunade?",
+            "Tell me about Orochimaru's powers.",
+            "Who is the Hokage of Konoha?",
+            "Tell me about sasuke's personality",
+            "Who is the first sensei of naruto?",
+            "what happens to the Uchiha clan?",
+            "What is a sharingan?",
+            "What is the akatsuki?",
+            "Who is the first Hokage?",
+        ],
+        "image_url": "Kiyomi.jpg",
+        "color_theme": {
+            "primary": "#4A90E2",
+            "secondary": "#F5A623",
+        },
+        "welcome_title": "Ask me about Naruto (spoiler alert!)",
+    }
+}
+
 
 @app.get("/agents", response_model=List[AgentDetails])
 async def list_agents():

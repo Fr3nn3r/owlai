@@ -24,15 +24,25 @@ class AgentManager:
     """OwlAI agent manager"""
 
     focus_agent: OwlAgent
+    _initialized = False
 
     def __init__(self):
         self.owls: Dict[str, OwlAgent] = {}
         self.names: List[str] = []
         self.toolbox = ToolBox()
+        self._lazy_init()
+
+    def _lazy_init(self):
+        """Lazy initialization of agents to prevent module reloading"""
+        if self._initialized:
+            return
 
         # Initialize RAG agents
         for iagent_config in RAG_AGENTS_CONFIG:
             try:
+                # Import RAG components only when needed
+                from owlai.rag import RAGAgent
+
                 agent = RAGAgent(**iagent_config)
                 agent.init_callable_tools(
                     self.toolbox.get_tools(agent.llm_config.tools_names)
@@ -46,6 +56,9 @@ class AgentManager:
         # Initialize Owl agents
         for iagent_config in OWL_AGENTS_CONFIG:
             try:
+                # Import Owl components only when needed
+                from owlai.core import OwlAgent
+
                 agent = OwlAgent(**iagent_config)
                 agent.init_callable_tools(
                     self.toolbox.get_tools(agent.llm_config.tools_names)
@@ -60,6 +73,7 @@ class AgentManager:
             raise RuntimeError("No agents were successfully initialized")
 
         self.focus_agent = self.owls[self.names[0]]
+        self._initialized = True
         logging.info(f"AgentManager initialized with {len(self.names)} agents")
 
     def get_focus_owl(self) -> OwlAgent:
