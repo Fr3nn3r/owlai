@@ -68,8 +68,14 @@ agent_manager = None
 
 def load_logger_config():
     """Load logging configuration from logging.yaml"""
-    with open("logging.yaml", "r") as logger_config:
+    with open("logging.yaml", "r", encoding="utf-8") as logger_config:
         config = yaml.safe_load(logger_config)
+        # Ensure handlers use UTF-8 encoding
+        for handler in config.get("handlers", {}).values():
+            if "stream" in handler:
+                handler["stream"] = "ext://sys.stdout"
+            if "filename" in handler:
+                handler["encoding"] = "utf-8"
         logging.config.dictConfig(config)
 
 
@@ -122,14 +128,14 @@ def get_rag_agent_default_queries(agent_name: str) -> List[str]:
 FRONTEND_AGENT_DATA = {
     "rag-naruto-v1": {
         "name": "Kiyomi Uchiha",
-        "description": "Fan of the anime series Naruto.",
+        "description": "Ask me about Naruto (spoiler alert!)",
         "default_queries": get_rag_agent_default_queries("rag-naruto-v1"),
         "image_url": "Kiyomi.jpg",
         "color_theme": {
             "primary": "#000000",
             "secondary": "#FF0000",
         },
-        "welcome_title": "Ask me about Naruto (spoiler alert!)",
+        "welcome_title": "Fan of the anime series Naruto.",
     },
     "rag-fr-general-law-v1": {
         "name": "Marianne",

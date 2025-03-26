@@ -12,25 +12,35 @@ import yaml
 import os
 
 
+# Create a basic logger first
+logger = logging.getLogger("main")
+
+
 def load_logger_config():
     # Only load config if not already configured
     if not logging.getLogger().handlers:
-        config_path = "logging.yaml"
+        # Get environment from ENV variable, default to 'development'
+        env = os.getenv("OWL_ENV", "development")
+        config_path = os.path.join("config", f"logging.{env}.yaml")
+
         if os.path.exists(config_path):
             with open(config_path, "r") as logger_config:
                 config = yaml.safe_load(logger_config)
                 logging.config.dictConfig(config)
+                logger.info(f"Loaded logging configuration from {config_path}")
         else:
             # Fallback configuration if yaml file not found
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
             )
+            logger.warning(
+                f"No configuration file found at {config_path}, using default configuration"
+            )
 
 
-# Load logging config before getting logger
+# Load logging config
 load_logger_config()
-logger = logging.getLogger("main")
 
 
 @contextmanager

@@ -1,0 +1,59 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  json:
+    class: pythonjsonlogger.jsonlogger.JsonFormatter
+    format: '%(asctime)s %(levelname)s %(name)s %(process)d %(thread)d %(message)s'
+  standard:
+    format: '%(asctime)s - %(levelname)s - %(name)s - %(process)d - %(thread)d - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S UTC'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: standard
+    stream: ext://sys.stdout
+
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: json
+    filename: logs/owlai.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+    encoding: utf8
+
+  error_file:
+    class: logging.handlers.RotatingFileHandler
+    level: ERROR
+    formatter: json
+    filename: logs/owlai.error.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+    encoding: utf8
+
+  access_file:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: json
+    filename: logs/owlai.access.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+    encoding: utf8
+
+loggers:
+  main:
+    level: INFO
+    handlers: [console, file, error_file]
+    propagate: false
+
+  access:
+    level: INFO
+    handlers: [access_file]
+    propagate: false
+
+root:
+    level: INFO
+    handlers: [console, file, error_file] 

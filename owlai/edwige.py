@@ -6,6 +6,7 @@
 import logging
 import logging.config
 import yaml
+import os
 from typing import List, Dict, Any
 from logging import Logger
 from pydantic import ValidationError
@@ -13,6 +14,7 @@ from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
 from owlai.agent_manager import AgentManager
+from owlai.owlsys import load_logger_config
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -23,11 +25,7 @@ if __name__ == "__main__":
     start_time = time.time()
     print(f"Application loading please wait...")
 
-    def load_logger_config():
-        with open("logging.yaml", "r") as logger_config:
-            config = yaml.safe_load(logger_config)
-            logging.config.dictConfig(config)
-
+    # Load logging config using the shared function
     load_logger_config()
     logger = logging.getLogger("main")
     logger.info(f"Application started in {time.time() - start_time} seconds")
