@@ -16,6 +16,29 @@ import os
 logger = logging.getLogger("main")
 
 
+def set_cuda_device():
+    """Set CUDA device based on environment"""
+    env = os.getenv("OWL_ENV", "development")
+    if env == "production":
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                device = "cuda"
+                logger.info("Using CUDA device for production environment")
+            else:
+                device = "cpu"
+                logger.warning("CUDA not available, falling back to CPU in production")
+        except ImportError:
+            device = "cpu"
+            logger.warning("PyTorch not available, using CPU in production")
+    else:
+        device = "cpu"
+        logger.info("Using CPU for development environment")
+
+    return device
+
+
 def load_logger_config():
     # Only load config if not already configured
     if not logging.getLogger().handlers:
@@ -26,6 +49,15 @@ def load_logger_config():
         if os.path.exists(config_path):
             with open(config_path, "r") as logger_config:
                 config = yaml.safe_load(logger_config)
+
+                # Create log directories if they don't exist
+                if "handlers" in config:
+                    for handler_name, handler_config in config["handlers"].items():
+                        if "filename" in handler_config:
+                            log_dir = os.path.dirname(handler_config["filename"])
+                            if log_dir and not os.path.exists(log_dir):
+                                os.makedirs(log_dir)
+
                 logging.config.dictConfig(config)
                 logger.info(f"Loaded logging configuration from {config_path}")
         else:
@@ -38,9 +70,12 @@ def load_logger_config():
                 f"No configuration file found at {config_path}, using default configuration"
             )
 
+    # Set CUDA device based on environment
+    return set_cuda_device()
 
-# Load logging config
-load_logger_config()
+
+# Load logging config and get device
+device = load_logger_config()
 
 
 @contextmanager
