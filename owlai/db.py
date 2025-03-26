@@ -245,15 +245,12 @@ PROMPT_CONFIG = {
     "### Instructions : \n"
     "0. Citez les articles présents dans les sources.\n"
     "1. Si plusieurs sources contribuent, citez-les distinctement.\n"
-    "2. Si l'information est incertaine, répondez par 'Votre question doit porter sur des textes de loi dont je ne dispose pas encore.'\n"
+    "2. Si l'information est incertaine, répondez par 'Votre question doit porter sur des textes de loi dont je ne dispose pas encore ou sur un article en particulier, or vous êtes optimisée pour une recherche sémantique (et non par mot clé). Les équipes d'OwlAI travaillent pour améliorer les réponses'\n"
     "3. Fournissez une réponse claire, complète et bien structurée en vous appuyant sur les sources. \n"
     # "4. Mentionnez si des éléments complémentaires vous seraient éventuellement nécessaires. \n"
     "5. Fournissez autant de détails que possible sur la demande initiale. \n"
     "6. Veillez à bien répondre à la question initiale. \n"
-    "7. Si la question porte sur autre chose que le droit, répondez que vous êtes spécialisée dans le droit français et que vous ne pouvez pas répondre à cette question. \n"
-    "8. Si la question porte sur du droit administratif, constitutionel ou international, vous référer à 2. \n"
-    "9. Si la question porte sur un article en particulier, répondez que vous êtes optimisée pour une recherche sémantique (et non par mot clé), ainsi vous risquez de ne pas bien répondre à la question (les équipes d'OwlAI travaillent pour améliorer les réponses). \n"
-    "Réponse : \n",
+    "7. Si la question porte sur autre chose que le droit, répondez que vous êtes spécialisée dans le droit français et que vous ne pouvez pas répondre à cette question. \n",
     ##################################
     "rag-fr-control-llm-v1": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur votre mémoire.\n"
     "### Requête : \n"
@@ -470,10 +467,11 @@ RAG_AGENTS_CONFIG = [
         },
         "default_queries": [
             "Who is Tsunade?",
-            "Provide details about Orochimaru.",
+            "Tell me about Orochimaru's powers.",
             "Who is the Hokage of Konoha?",
             "Tell me about sasuke's personality",
             "Who is the first sensei of naruto?",
+            "what happens to the Uchiha clan?",
             "What is a sharingan?",
             "What is the akatsuki?",
             "Who is the first Hokage?",
@@ -503,13 +501,13 @@ RAG_AGENTS_CONFIG = [
         },
     },
     {
-        "name": "rag-fr-law-v1",
-        "description": "Agent expecting a french law question",
+        "name": "rag-fr-general-law-v1",
+        "description": "Agent expecting a general question about french law",
         "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
         "args_schema": {
             "query": {
                 "type": "string",
-                "description": "Any question about french law expressed in french",
+                "description": "Any general question about french law expressed in french",
             }
         },
         "llm_config": {
@@ -547,6 +545,114 @@ RAG_AGENTS_CONFIG = [
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/general",
+                    "chunk_size": 512,
+                    "chunk_overlap": 50,
+                    "add_start_index": True,
+                    "strip_whitespace": True,
+                    "separators": ["\n\n", "\n", " ", ""],
+                    "extract_images": False,
+                    "extraction_mode": "plain",
+                },
+            },
+        },
+    },
+    {
+        "name": "rag-fr-tax-law-v1",
+        "description": "Agent expecting a question about french tax law",
+        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "Any question about french tax law expressed in french",
+            }
+        },
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": [],
+        },
+        "default_queries": [
+            "Quels revenus sont exonérés d'impôt sur le revenu selon le Code général des impôts ?",
+            "Quelle est la procédure à suivre en cas de désaccord avec un redressement fiscal notifié par l’administration fiscale ?",
+            "Quels taux de TVA s'appliquent à la restauration en France ?",
+            "Dans quelles conditions peut-on bénéficier d’un crédit d'impôt pour travaux de rénovation énergétique ?",
+            "Quelle est la différence entre l’évasion fiscale et la fraude fiscale en droit français ?",
+            "Quelles sont les principales obligations fiscales d'une entreprise française qui exporte hors de l'Union européenne ?",
+            "Quel est le délai de prescription en matière de contrôle fiscal des particuliers ?",
+            "Comment se calcule la Contribution Sociale Généralisée (CSG) sur les revenus du patrimoine ?",
+            "Quelles collectivités locales sont habilitées à prélever une taxe foncière, selon le Code général des collectivités territoriales ?",
+            "Quelles taxes spécifiques s'appliquent sur les carburants selon le Code des impositions sur les biens et services ?",
+        ],
+        "retriever": {
+            "num_retrieved_docs": 30,
+            "num_docs_final": 5,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "colbert-ir/colbertv2.0",
+            "model_kwargs": {"device": "cuda"},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": True,
+            "datastore": {
+                "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
+                "parser": {
+                    "implementation": "FrenchLawParser",
+                    "output_data_folder": "data/legal-rag/fiscal",
+                    "chunk_size": 512,
+                    "chunk_overlap": 50,
+                    "add_start_index": True,
+                    "strip_whitespace": True,
+                    "separators": ["\n\n", "\n", " ", ""],
+                    "extract_images": False,
+                    "extraction_mode": "plain",
+                },
+            },
+        },
+    },
+    {
+        "name": "rag-fr-admin-law-v1",
+        "description": "Agent expecting a question about french administrative law",
+        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "args_schema": {
+            "query": {
+                "type": "string",
+                "description": "Any question about french administrative law expressed in french",
+            }
+        },
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": [],
+        },
+        "default_queries": [
+            "Quelle juridiction administrative est compétente en première instance pour contester un permis de construire ?",
+            "Quelles sont les principales étapes d'une procédure devant le tribunal administratif ?",
+            "Sous quelles conditions une collectivité territoriale peut-elle conclure un marché public sans mise en concurrence préalable ?",
+            "Quelle procédure doit suivre une commune pour vendre un bien immobilier lui appartenant ?",
+            "Quels documents sont nécessaires pour obtenir un permis d’aménager selon le Code de l’urbanisme ?",
+            "Dans quels cas une étude d’impact environnementale est-elle obligatoire pour un projet d’infrastructure publique ?",
+            "Quelles sont les conditions légales pour qu'une expropriation pour cause d’utilité publique soit valide ?",
+            "Quels délais doit respecter une collectivité pour répondre à une demande d’accès à un document administratif ?",
+            "Dans quel cas une décision administrative peut-elle faire l'objet d'un référé-suspension devant le juge administratif ?",
+            "Quelles sanctions administratives une entreprise encourt-elle en cas de manquement grave à un marché public ?",
+        ],
+        "retriever": {
+            "num_retrieved_docs": 30,
+            "num_docs_final": 5,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "colbert-ir/colbertv2.0",
+            "model_kwargs": {"device": "cuda"},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": True,
+            "datastore": {
+                "input_data_folder": "data/legal-rag/admin",  # Larger dataset
+                "parser": {
+                    "implementation": "FrenchLawParser",
+                    "output_data_folder": "data/legal-rag/admin",
                     "chunk_size": 512,
                     "chunk_overlap": 50,
                     "add_start_index": True,

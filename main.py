@@ -18,7 +18,8 @@ import uvicorn
 from contextlib import asynccontextmanager
 import os
 
-from owlai.edwige import AgentManager
+from owlai.agent_manager import AgentManager
+from owlai.db import RAG_AGENTS_CONFIG, OWL_AGENTS_CONFIG
 
 
 # Pydantic models for API
@@ -103,28 +104,64 @@ app.add_middleware(
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
+
+def get_rag_agent_default_queries(agent_name: str) -> List[str]:
+    """Get default queries for a specific agent from RAG_AGENTS_CONFIG"""
+    return next(
+        (
+            config["default_queries"]
+            for config in RAG_AGENTS_CONFIG
+            if config["name"] == agent_name
+        ),
+        [],
+    )
+
+
 FRONTEND_AGENT_DATA = {
     "rag-naruto-v1": {
         "name": "Kiyomi Uchiha",
         "description": "Fan of the anime series Naruto.",
-        "default_queries": [
-            "Who is Tsunade?",
-            "Tell me about Orochimaru's powers.",
-            "Who is the Hokage of Konoha?",
-            "Tell me about sasuke's personality",
-            "Who is the first sensei of naruto?",
-            "what happens to the Uchiha clan?",
-            "What is a sharingan?",
-            "What is the akatsuki?",
-            "Who is the first Hokage?",
-        ],
+        "default_queries": get_rag_agent_default_queries("rag-naruto-v1"),
         "image_url": "Kiyomi.jpg",
         "color_theme": {
             "primary": "#4A90E2",
             "secondary": "#F5A623",
         },
         "welcome_title": "Ask me about Naruto (spoiler alert!)",
-    }
+    },
+    "rag-fr-general-law-v1": {
+        "name": "Marianne",
+        "description": "Une question générale sur le droit français ? (attention je ne retiens pas encore le contexte de la conversation)",
+        "default_queries": get_rag_agent_default_queries("rag-fr-general-law-v1"),
+        "image_url": "Marianne.jpg",
+        "color_theme": {
+            "primary": "#4A90E2",
+            "secondary": "#F5A623",
+        },
+        "welcome_title": "Experte en droit français",
+    },
+    "rag-fr-tax-law-v1": {
+        "name": "Marine",
+        "description": "Une question sur le droit fiscal français ? (attention je ne retiens pas encore le contexte de la conversation)",
+        "default_queries": get_rag_agent_default_queries("rag-fr-tax-law-v1"),
+        "image_url": "Marine.jpg",
+        "color_theme": {
+            "primary": "#4A90E2",
+            "secondary": "#F5A623",
+        },
+        "welcome_title": "Experte en droit fiscal français",
+    },
+    "rag-fr-admin-law-v1": {
+        "name": "Nathalie",
+        "description": "Une question sur le droit administratif français ? (attention je ne retiens pas encore le contexte de la conversation)",
+        "default_queries": get_rag_agent_default_queries("rag-fr-admin-law-v1"),
+        "image_url": "Nathalie.jpg",
+        "color_theme": {
+            "primary": "#4A90E2",
+            "secondary": "#F5A623",
+        },
+        "welcome_title": "Experte en droit administratif français",
+    },
 }
 
 
