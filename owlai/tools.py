@@ -99,21 +99,17 @@ class ToolBox:
 
     user_context: str = "CONTEXT: "
 
-    _tavily_tool = TavilySearchResults(**_TOOLS_CONFIG["tavily_search_results_json"])
-    _security_tool = SecurityTool()
-    # _owl_system_interpreter = OwlSystemInterpreter(
-    #    **TOOLS_CONFIG["owl_system_interpreter"]
-    # )
-    # _owl_memory_tool = OwlMemoryTool(**TOOLS_CONFIG["owl_memory_tool"])
+    # _tavily_tool = TavilySearchResults(**_TOOLS_CONFIG["tavily_search_results_json"])
+    # _security_tool = SecurityTool()
 
     def __init__(self):
         self.mapping = {
             "activate_mode": self.activate_mode,
-            "security_tool": self._security_tool,
+            # "security_tool": self._security_tool,
             # "owl_system_interpreter": self._owl_system_interpreter,
             "play_song": self.play_song,
             # "owl_memory_tool": self._owl_memory_tool,
-            "tavily_search_results_json": self._tavily_tool,
+            # "tavily_search_results_json": self._tavily_tool,
         }
 
     def get_tools(self, keys: list[str]) -> list[Callable]:
