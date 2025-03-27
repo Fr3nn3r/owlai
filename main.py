@@ -23,8 +23,7 @@ from fastapi.responses import StreamingResponse
 
 from owlai.agent_manager import AgentManager
 from owlai.db import RAG_AGENTS_CONFIG, OWL_AGENTS_CONFIG
-from owlai.owlsys import setup_logging
-import owlai.rag as rag_module
+from owlai.owlsys import is_dev
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +74,6 @@ agent_manager = None
 async def lifespan(app: FastAPI):
     """Lifespan events for FastAPI application"""
     # Startup
-    setup_logging()
     global agent_manager
     if agent_manager is None:
         agent_manager = AgentManager()
@@ -107,14 +105,12 @@ app.add_middleware(
 
 def get_rag_agent_default_queries(agent_name: str) -> List[str]:
     """Get default queries for a specific agent from RAG_AGENTS_CONFIG"""
-    return next(
-        (
-            config["default_queries"]
-            for config in RAG_AGENTS_CONFIG
-            if config["name"] == agent_name
-        ),
-        [],
-    )
+    from owlai.db import RAG_AGENTS_CONFIG
+
+    for config in RAG_AGENTS_CONFIG:
+        if config["name"] == agent_name:
+            return config.get("default_queries", [])
+    return []
 
 
 FRONTEND_AGENT_DATA = {
@@ -272,8 +268,11 @@ async def stream_query(payload: QueryRequest):
 
     async def generate():
         try:
+            logger.info(f"Streaming query for agent {payload.agent_id}")
             # Get the agent instance
             agent = agent_manager.owls[payload.agent_id]
+
+            logger.info(f"Agent {payload.agent_id} found")
 
             # Stream the response
             async for chunk in agent.stream_message(payload.question):
@@ -295,18 +294,36 @@ async def stream_query(payload: QueryRequest):
 
 def main():
     """Main entry point for the application."""
+    server = None
     try:
         # Initialize the agent manager
         edwige = AgentManager()
+
+        # Run the FastAPI server
+        config = uvicorn.Config(
+            "main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=is_dev,  # Enable auto-reload only in development
+            workers=1,  # Single worker to prevent module reloading
+        )
+        server = uvicorn.Server(config)
+        server.run()
+
     except KeyboardInterrupt:
         logger.info("Application terminated by the user")
+        if server:
+            server.should_exit = True
     except Exception as e:
         logger.error(f"An error occurred: {str(e)}")
         logger.exception(e)
+    finally:
+        if server:
+            server.should_exit = True
 
 
 if __name__ == "__main__":
     # Required for Windows multiprocessing
+
     freeze_support()
-    setup_logging()
     main()

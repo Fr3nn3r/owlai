@@ -7,7 +7,8 @@ import logging.config
 import logging
 import yaml
 
-logger = logging.getLogger("main")
+# Get logger using the module name
+logger = logging.getLogger(__name__)
 
 ################################# TTS
 

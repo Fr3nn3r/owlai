@@ -8,3 +8,17 @@ alwaysApply: true
 
 - You can @ files here
 - You can use markdown but dont have to
+
+# Code Change Process
+1. First analyze the problem and explain the root cause
+2. Propose a simple solution with minimal changes
+3. Wait for explicit confirmation before making any changes
+4. Avoid complex refactoring unless specifically requested
+5. Keep solutions focused on the immediate problem
+6. If multiple solutions exist, explain the trade-offs
+
+# Code Change Guidelines
+- Maximum 10 lines of code changes per edit unless explicitly approved
+- No new dependencies without clear benefit explanation
+- No refactoring without explicit confirmation
+- Focus on fixing the immediate issue rather than improving the codebase

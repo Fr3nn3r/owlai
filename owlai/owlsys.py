@@ -1,3 +1,5 @@
+print("loading owlsys module")
+
 import platform
 import psutil
 import json
@@ -12,6 +14,12 @@ import yaml
 import os
 import codecs
 import sys
+from pythonjsonlogger import jsonlogger  # Import JSON formatter
+from dotenv import load_dotenv
+
+
+# Create a basic logger first
+logger = logging.getLogger(__name__)
 
 
 def set_cuda_device():
@@ -21,14 +29,14 @@ def set_cuda_device():
 
         if torch.cuda.is_available():
             device = "cuda"
-            env = os.getenv("OWL_ENV", "development")
-            print(f"Using CUDA device in {env} environment")
+            logger.info(f"Using CUDA device")
         else:
             device = "cpu"
-            print("CUDA not available, falling back to CPU")
+            logger.info("CUDA not available, falling back to CPU")
+
     except ImportError:
         device = "cpu"
-        print("PyTorch not available, using CPU")
+        logger.info("PyTorch not available, using CPU")
 
     return device
 
@@ -53,49 +61,43 @@ class UnicodeStreamHandler(logging.StreamHandler):
 
 
 def setup_logging():
-    """Setup logging configuration"""
+    """Setup logging configuration based on environment"""
     # Create logs directory if it doesn't exist
     os.makedirs("logs", exist_ok=True)
 
-    # Configure logging
-    logging_config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "standard": {
-                "format": "%(asctime)s - %(levelname)s - %(message)s",
-            },
-        },
-        "handlers": {
-            "console": {
-                "class": "owlai.owlsys.UnicodeStreamHandler",
-                "formatter": "standard",
-                "stream": "ext://sys.stdout",
-            },
-            "file": {
-                "class": "logging.FileHandler",
-                "formatter": "standard",
-                "filename": "logs/owlai.log",
-                "encoding": "utf-8",
-            },
-        },
-        "loggers": {
-            "": {  # Root logger
-                "handlers": ["console", "file"],
-                "level": "INFO",
-                "propagate": True,
-            },
-        },
-    }
+    # Map environment to config file
+    config_file = f"config/logging.{env}.yaml"
 
-    logging.config.dictConfig(logging_config)
+    if not os.path.exists(config_file):
+        raise FileNotFoundError(f"Logging config file {config_file} not found")
+
+    try:
+        with open(config_file, "r") as f:
+            logging_config = yaml.safe_load(f)
+
+        # Ensure logs directory exists for file handlers
+        for handler in logging_config.get("handlers", {}).values():
+            if "filename" in handler:
+                os.makedirs(os.path.dirname(handler["filename"]), exist_ok=True)
+
+        logging.config.dictConfig(logging_config)
+        logger.info(f"Logging configured from {config_file}")
+
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to initialize logging from {config_file}: {str(e)}"
+        ) from e
 
 
-# Create a basic logger first
-logger = logging.getLogger("main")
+def set_env():
+    # Check if OWLAI_ENV environment variable is set
+    owlai_env = os.getenv("OWLAI_ENV")
+    if owlai_env:
+        logging.debug(f"OWLAI_ENV environment variable is set to: {owlai_env}")
+    else:
+        raise ValueError("OWLAI_ENV environment variable is not set")
 
-# Set CUDA device immediately
-device = set_cuda_device()
+    return owlai_env
 
 
 @contextmanager
@@ -171,3 +173,18 @@ def get_system_info():
 
 def encode_text(text: str) -> str:
     return text.encode("ascii", errors="replace").decode("utf-8")
+
+
+load_dotenv()
+
+device = set_cuda_device()
+
+env = set_env()
+
+setup_logging()
+
+is_prod = env == "production"
+is_dev = env == "development"
+is_test = env == "test"
+
+logger.info(f"System initialized for '{env}' environment, CUDA device: '{device}'")

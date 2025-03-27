@@ -4,19 +4,10 @@
 #  VV-VV
 
 import os
-from owlai.owlsys import device
+from owlai.owlsys import device, env, is_prod, is_dev, is_test
 
 print("Loading db module")
 
-# Guard against duplicate module loading
-import sys
-
-_DB_MODULE_LOADED = False
-if not _DB_MODULE_LOADED:
-    _DB_MODULE_LOADED = True
-    # Continue with imports below
-
-is_prod = os.environ.get("OWL_ENV", "development").lower() == "production"
 
 USER_DATABASE = {
     "user_id_4385972043572": {
@@ -89,7 +80,7 @@ def get_user_by_password(password):
     return None  # Return None if password is not found
 
 
-PROMPT_CONFIG = {
+_PROMPT_CONFIG = {
     "system-v1": "You are the local system agent.\n"
     "Your goal is to execute tasks assigned by the user on the local machine.\n"
     "You can activate any mode.\n"
@@ -276,7 +267,7 @@ PROMPT_CONFIG = {
 }
 
 
-TOOLS_CONFIG = {
+_TOOLS_CONFIG = {
     "owl_system_interpreter": {
         "model_provider": "openai",
         "model_name": "gpt-4o-mini",
@@ -284,7 +275,7 @@ TOOLS_CONFIG = {
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
-        "system_prompt": PROMPT_CONFIG["python-interpreter-v1"],
+        "system_prompt": _PROMPT_CONFIG["python-interpreter-v1"],
         "default_queries": None,
         "test_queries": [],
     },
@@ -295,7 +286,7 @@ TOOLS_CONFIG = {
         "temperature": 0.1,
         "context_size": 4096,
         "tools_names": [],
-        "system_prompt": PROMPT_CONFIG["rag-en-v2"],
+        "system_prompt": _PROMPT_CONFIG["rag-en-v2"],
         "default_queries": None,
         "test_queries": [],
         "embeddings_model_name": "thenlper/gte-small",
@@ -317,11 +308,12 @@ TOOLS_CONFIG = {
     },
 }
 
-OWL_AGENTS_CONFIG = [
+
+_OWL_AGENTS_BASE_CONFIG = [
     {
         "name": "system-v0",
         "description": "Agent controlling the local system",
-        "system_prompt": PROMPT_CONFIG["system-v1"],
+        "system_prompt": _PROMPT_CONFIG["system-v1"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -352,7 +344,7 @@ OWL_AGENTS_CONFIG = [
     {
         "name": "identification-v1",
         "description": "Agent responsible for identifying the user",
-        "system_prompt": PROMPT_CONFIG["identification-v1"],
+        "system_prompt": _PROMPT_CONFIG["identification-v1"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -386,7 +378,7 @@ OWL_AGENTS_CONFIG = [
     {
         "name": "welcome-v1",
         "description": "Agent responsible for welcoming the user",
-        "system_prompt": PROMPT_CONFIG["welcome-v1"],
+        "system_prompt": _PROMPT_CONFIG["welcome-v1"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -419,7 +411,7 @@ OWL_AGENTS_CONFIG = [
     {
         "name": "qna-v2",
         "description": "Agent responsible for answering questions",
-        "system_prompt": PROMPT_CONFIG["qna-v2"],
+        "system_prompt": _PROMPT_CONFIG["qna-v2"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -459,11 +451,12 @@ OWL_AGENTS_CONFIG = [
     },
 ]
 
-RAG_AGENTS_CONFIG = [
+
+_RAG_AGENTS_BASE_CONFIG = [
     {
         "name": "rag-naruto-v1",
         "description": "Agent that knows everything about the anime series Naruto",
-        "system_prompt": PROMPT_CONFIG["rag-en-naruto-v1"],
+        "system_prompt": _PROMPT_CONFIG["rag-en-naruto-v1"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -516,7 +509,7 @@ RAG_AGENTS_CONFIG = [
     {
         "name": "rag-fr-general-law-v1",
         "description": "Agent expecting a general question about french law",
-        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "system_prompt": _PROMPT_CONFIG["rag-fr-v2"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -552,7 +545,7 @@ RAG_AGENTS_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": True,
+            "multi_process": is_dev,
             "datastore": {
                 "input_data_folder": "data/legal-rag/general",  # Larger dataset
                 "parser": {
@@ -572,7 +565,7 @@ RAG_AGENTS_CONFIG = [
     {
         "name": "rag-fr-tax-law-v1",
         "description": "Agent expecting a question about french tax law",
-        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "system_prompt": _PROMPT_CONFIG["rag-fr-v2"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -606,7 +599,7 @@ RAG_AGENTS_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": True,
+            "multi_process": is_dev,
             "datastore": {
                 "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
                 "parser": {
@@ -626,7 +619,7 @@ RAG_AGENTS_CONFIG = [
     {
         "name": "rag-fr-admin-law-v1",
         "description": "Agent expecting a question about french administrative law",
-        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "system_prompt": _PROMPT_CONFIG["rag-fr-v2"],
         "args_schema": {
             "query": {
                 "type": "string",
@@ -660,7 +653,7 @@ RAG_AGENTS_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": True,
+            "multi_process": is_dev,
             "datastore": {
                 "input_data_folder": "data/legal-rag/admin",  # Larger dataset
                 "parser": {
@@ -679,6 +672,19 @@ RAG_AGENTS_CONFIG = [
     },
 ]
 
+_OWL_AGENTS_CONFIG_ENV = {
+    "development": _OWL_AGENTS_BASE_CONFIG,
+    "production": [],
+}
+
+_RAG_AGENTS_CONFIG_ENV = {
+    "development": _RAG_AGENTS_BASE_CONFIG,
+    "production": _RAG_AGENTS_BASE_CONFIG,
+}
+
+# this is the hooks imported by consumers
+OWL_AGENTS_CONFIG = _OWL_AGENTS_CONFIG_ENV[env]
+RAG_AGENTS_CONFIG = _RAG_AGENTS_CONFIG_ENV[env]
 
 TEST_QUERIES = {
     "test_queries": [
@@ -705,3 +711,10 @@ TEST_QUERIES = {
         "run the keyboard combination Ctlr + Win + -> ",
     ]
 }
+
+
+def get_rag_agent_default_queries(agent_name: str):
+    for config in RAG_AGENTS_CONFIG:
+        if config["name"] == agent_name:
+            return config.get("default_queries", [])
+    return []

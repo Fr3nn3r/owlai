@@ -36,4 +36,5 @@ import matplotlib.pyplot as plt
 
 warnings.simplefilter("ignore", category=FutureWarning)
 
-logger = logging.getLogger("main")
+# Get logger using the module name
+logger = logging.getLogger(__name__)

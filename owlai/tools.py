@@ -22,7 +22,7 @@ from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 from pydantic import BaseModel, Field
 from torch import Type
-from owlai.db import TOOLS_CONFIG
+from owlai.db import _TOOLS_CONFIG
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,
@@ -31,7 +31,8 @@ from langchain_core.callbacks import (
 
 from langchain_core.tools import BaseTool, ArgsSchema
 
-logger = logging.getLogger("main")
+# Get logger using the module name
+logger = logging.getLogger(__name__)
 
 focus_role: str = "qna"
 
@@ -98,7 +99,7 @@ class ToolBox:
 
     user_context: str = "CONTEXT: "
 
-    _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
+    _tavily_tool = TavilySearchResults(**_TOOLS_CONFIG["tavily_search_results_json"])
     _security_tool = SecurityTool()
     # _owl_system_interpreter = OwlSystemInterpreter(
     #    **TOOLS_CONFIG["owl_system_interpreter"]

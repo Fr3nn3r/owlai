@@ -13,7 +13,8 @@ from typing import List
 import os
 import logging
 
-logger = logging.getLogger("main")
+# Get logger using the module name
+logger = logging.getLogger(__name__)
 
 
 def extract_footer(doc):
