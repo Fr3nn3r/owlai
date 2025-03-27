@@ -12,7 +12,7 @@ models/
 scripts/
 data
 logs
-.env
+.env*
 *.log
 *.wav
 *.pyc
