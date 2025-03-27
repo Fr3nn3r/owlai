@@ -1,6 +1,6 @@
 print("Loading rag module")
 
-from typing import Optional, List, Tuple, Any, Callable
+from typing import Optional, List, Tuple, Any, Callable, Dict, Literal
 import os
 import logging
 from langchain.docstore.document import Document as LangchainDocument
@@ -10,7 +10,6 @@ from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
-from typing import Dict, List, Optional, Tuple, Literal
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
@@ -28,77 +27,12 @@ import fitz
 import re
 import traceback
 from owlai.owlsys import encode_text, track_time, setup_logging, sprint
+from owlai.core import OwlAgent
 
 warnings.simplefilter("ignore", category=FutureWarning)
 
-logger = logging.getLogger("main")
-
-# Add console handler to display logs in stdout
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-# Global initialization flag to prevent multiple initializations
-_initialized = False
-
-# Forward declarations for circular imports
-OwlAgent = None
-TOOLS_CONFIG = None
-RAG_AGENTS_CONFIG = None
-
-logger.info("Starting rag module initialization")
-logger.debug(f"Initial state - OwlAgent: {OwlAgent}, _initialized: {_initialized}")
-
-
-def initialize_module():
-    """Initialize the module and import dependencies that may cause circular imports"""
-    global _initialized, OwlAgent, TOOLS_CONFIG, RAG_AGENTS_CONFIG
-
-    logger.debug("Entering initialize_module()")
-    logger.debug(f"Current state - OwlAgent: {OwlAgent}, _initialized: {_initialized}")
-
-    if _initialized:
-        logger.debug("Module already initialized, returning early")
-        return
-
-    try:
-        # Import potentially circular dependencies
-        logger.debug("Attempting to import OwlAgent from owlai.core")
-        from owlai.core import OwlAgent as _OwlAgent
-
-        logger.debug(f"Successfully imported OwlAgent: {_OwlAgent}")
-
-        logger.debug("Attempting to import configs from owlai.db")
-        from owlai.db import (
-            TOOLS_CONFIG as _TOOLS_CONFIG,
-            RAG_AGENTS_CONFIG as _RAG_AGENTS_CONFIG,
-        )
-
-        logger.debug(
-            f"Successfully imported configs: TOOLS_CONFIG={_TOOLS_CONFIG}, RAG_AGENTS_CONFIG={_RAG_AGENTS_CONFIG}"
-        )
-
-        # Assign to module-level variables
-        OwlAgent = _OwlAgent
-        TOOLS_CONFIG = _TOOLS_CONFIG
-        RAG_AGENTS_CONFIG = _RAG_AGENTS_CONFIG
-
-        _initialized = True
-        logger.info("Module initialization completed successfully")
-        logger.debug(
-            f"Final state - OwlAgent: {OwlAgent}, _initialized: {_initialized}"
-        )
-    except Exception as e:
-        logger.error(f"Error during module initialization: {str(e)}")
-        logger.error(f"Error details: {traceback.format_exc()}")
-        raise
-
-
-# Call initialize_module at module level
-logger.debug("Calling initialize_module() at module level")
-initialize_module()
+# Get logger using the module name
+logger = logging.getLogger(__name__)
 
 
 # Implementation starts here
@@ -399,8 +333,9 @@ import re
 try:
     from fitz import Document as PyMuPDFDocument, Page as PyMuPDFPage
 
-    Document = PyMuPDFDocument  # type: ignore
-    Page = PyMuPDFPage  # type: ignore
+    # Type aliases for type checking
+    Document = PyMuPDFDocument  # type: ignore[assignment]
+    Page = PyMuPDFPage  # type: ignore[assignment]
 except ImportError:
     # For type hinting only
     class Document:
@@ -505,8 +440,8 @@ class FrenchLawParser(DefaultParser):
 
         logger.debug(f"Loading French law PDF from: {pdf_path}")
 
-        # type: ignore
-        doc: Document = fitz.open(pdf_path)
+        # Open document with proper type handling
+        doc: Document = fitz.open(pdf_path)  # type: ignore[assignment]
 
         if not doc or doc is None:
             raise ValueError(f"Failed to load document from {pdf_path}")
@@ -655,11 +590,9 @@ def create_instance(class_name: str, **kwargs):
         cls = globals()[class_name]
         return cls(**kwargs)
     except KeyError:
-        logger.error(f"Class {class_name} not found in globals")
-        return None
+        raise Exception(f"Class {class_name} not found in globals")
     except Exception as e:
-        logger.error(f"Error creating instance of {class_name}: {str(e)}")
-        return None
+        raise Exception(f"Error creating instance of {class_name}: {str(e)}")
 
 
 class RAGDataStore(BaseModel):
@@ -886,11 +819,6 @@ class RAGRetriever(BaseModel):
         return self.datastore.load_dataset(embeddings)
 
 
-# Move RAGAgent class definition to module level
-logger.debug("Defining RAGAgent class")
-logger.debug(f"OwlAgent state before RAGAgent definition: {OwlAgent}")
-
-
 class RAGAgent(OwlAgent):
     """
     RAG Agent implementation that extends OwlAgent with RAG capabilities
@@ -905,7 +833,7 @@ class RAGAgent(OwlAgent):
 
     def __init__(self, *args, **kwargs):
         try:
-            logger.info(f"Starting RAGAgent initialization with config: {kwargs}")
+            logger.info(f"Starting RAGAgent initialization")
 
             # Initialize the base class (OwlAgent)
             logger.debug("Initializing base class")
@@ -1117,6 +1045,7 @@ class RAGAgent(OwlAgent):
                 yield chunk.content
 
 
+# DO WE NEED THIS???
 def create_rag_agent(*args, **kwargs):
     """Factory function to create a RAGAgent instance"""
     try:
@@ -1124,7 +1053,6 @@ def create_rag_agent(*args, **kwargs):
         logger.debug(f"Current OwlAgent state: {OwlAgent}")
 
         # Ensure module is initialized
-        initialize_module()
         logger.debug(f"OwlAgent state after initialization: {OwlAgent}")
 
         # Create and return an instance
@@ -1139,39 +1067,7 @@ def create_rag_agent(*args, **kwargs):
 
 
 def main():
-    try:
-        logger.info("Starting main function")
-        logger.debug(f"Initial OwlAgent state in main: {OwlAgent}")
-
-        # Get configuration
-        logger.debug("Getting RAG_AGENTS_CONFIG")
-        if RAG_AGENTS_CONFIG is None:
-            logger.error("RAG_AGENTS_CONFIG is None")
-            return
-        config = RAG_AGENTS_CONFIG[1]
-        logger.debug(f"Using config: {config}")
-
-        # Setup logging
-        logger.debug("Setting up logging")
-        setup_logging()
-        logger.debug("Logging setup completed")
-
-        # Create RAG agent
-        logger.info("Creating RAG agent")
-        rag_tool = create_rag_agent(**config)
-        logger.debug("RAG agent created successfully")
-
-        # Get vector store
-        logger.debug("Getting vector store")
-        vector_store: Optional[FAISS] = rag_tool._vector_store
-        logger.debug(f"Vector store: {vector_store}")
-
-        logger.info("Main function completed successfully")
-
-    except Exception as e:
-        logger.error(f"Error in main function: {str(e)}")
-        logger.error(f"Error details: {traceback.format_exc()}")
-        raise
+    logger.info("Starting main function")
 
 
 if __name__ == "__main__":

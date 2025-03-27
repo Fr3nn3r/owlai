@@ -31,18 +31,18 @@ class AgentManager:
         # Initialize RAG agents
         for iagent_config in RAG_AGENTS_CONFIG:
             try:
-                # Import RAG components only when needed
-                from owlai.rag import create_rag_agent
 
-                agent = create_rag_agent(**iagent_config)
-                agent.init_callable_tools(
-                    self.toolbox.get_tools(iagent_config["llm_config"]["tools_names"])
+                # RAG_AGENTS_CONFIG is a dictionary, not a list, so we need to use the value
+                rag_agent: RAGAgent = RAGAgent(**iagent_config)
+                rag_agent.init_callable_tools(
+                    self.toolbox.get_tools(rag_agent.llm_config.tools_names)
                 )
-                self.owls[agent.name] = agent
-                self.names.append(agent.name)
-                logging.debug(f"Initialized RAG agent: {agent.name}")
-            except ValidationError as e:
-                logging.error(f"Validation failed for {iagent_config}: {e}")
+                self.owls[rag_agent.name] = rag_agent
+                self.names.append(rag_agent.name)
+                logger.debug(f"Initialized RAG agent: {rag_agent.name}")
+                print(f"Initialized RAG agent: {rag_agent.name}")
+            except (ValidationError, KeyError, TypeError) as e:
+                logger.error(f"Failed to initialize RAG agent {iagent_config}: {e}")
 
         # Initialize Owl agents
         for iagent_config in OWL_AGENTS_CONFIG:
@@ -50,13 +50,14 @@ class AgentManager:
                 # Import Owl components only when needed
                 from owlai.core import OwlAgent
 
-                agent = OwlAgent(**iagent_config)
+                agent: OwlAgent = OwlAgent(**iagent_config)
                 agent.init_callable_tools(
                     self.toolbox.get_tools(agent.llm_config.tools_names)
                 )
                 self.owls[agent.name] = agent
                 self.names.append(agent.name)
                 logging.debug(f"Initialized Owl agent: {agent.name}")
+                print(f"Initialized Owl agent: {agent.name}")
             except ValidationError as e:
                 logging.error(f"Validation failed for {iagent_config}: {e}")
 

@@ -37,7 +37,8 @@ import traceback
 from owlai.owlsys import sprint
 from langchain_core.tools import BaseTool, ArgsSchema
 
-logger = logging.getLogger("main")
+# Get logger using the module name
+logger = logging.getLogger(__name__)
 
 user_context: str = "CONTEXT: "
 
@@ -269,6 +270,7 @@ class OwlAgent(BaseTool, BaseModel):
         Stream a response from the agent. This is the base implementation that can be overridden by subclasses.
         """
         try:
+            logger.info(f"Streaming message for agent {self.name}")
             # update system prompt with latestcontext
             system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
             if len(self._message_history) == 0:

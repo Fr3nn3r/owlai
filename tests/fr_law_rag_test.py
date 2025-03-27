@@ -33,7 +33,8 @@ if __name__ == "__main__":
 
     load_logger_config()
 
-    logger = logging.getLogger("main")
+    # Get logger using the module name
+    logger = logging.getLogger(__name__)
 
     def extract_footer(doc):
         footers = []

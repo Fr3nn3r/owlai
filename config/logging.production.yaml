@@ -8,12 +8,21 @@ formatters:
   standard:
     format: '%(asctime)s - %(levelname)s - %(name)s - %(process)d - %(thread)d - %(message)s'
     datefmt: '%Y-%m-%d %H:%M:%S UTC'
+  stdout:
+    (): colorlog.ColoredFormatter
+    format: "%(log_color)s[%(filename)s:%(lineno)d] %(levelname)s | %(message)s"
+    log_colors:
+      DEBUG: "cyan"
+      INFO: "green"
+      WARNING: "yellow"
+      ERROR: "red"
+      CRITICAL: "bold_red"
 
 handlers:
   console:
     class: logging.StreamHandler
-    level: INFO
-    formatter: standard
+    level: DEBUG
+    formatter: stdout
     stream: ext://sys.stdout
 
   file:
