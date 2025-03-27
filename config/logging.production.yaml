@@ -54,9 +54,9 @@ handlers:
 
 loggers:
   main:
-    level: INFO
+    level: DEBUG
     handlers: [console, file, error_file]
-    propagate: false
+    propagate: true
 
   access:
     level: INFO

@@ -296,9 +296,6 @@ def main():
     """Main entry point for the application."""
     server = None
     try:
-        # Initialize the agent manager
-        edwige = AgentManager()
-
         # Run the FastAPI server
         config = uvicorn.Config(
             "main:app",

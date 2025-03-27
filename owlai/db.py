@@ -489,7 +489,7 @@ _RAG_AGENTS_BASE_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": True,
+            "multi_process": is_dev,
             "datastore": {
                 "input_data_folder": "data/dataset-0001",  # Larger dataset
                 "parser": {
