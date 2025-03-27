@@ -40,7 +40,6 @@ class AgentManager:
                 self.owls[rag_agent.name] = rag_agent
                 self.names.append(rag_agent.name)
                 logger.debug(f"Initialized RAG agent: {rag_agent.name}")
-                print(f"Initialized RAG agent: {rag_agent.name}")
             except (ValidationError, KeyError, TypeError) as e:
                 logger.error(f"Failed to initialize RAG agent {iagent_config}: {e}")
 

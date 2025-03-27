@@ -842,7 +842,7 @@ class RAGAgent(OwlAgent):
 
             # Initialize embeddings
             logger.debug(
-                f"Initializing embeddings with model: {self.retriever.embeddings_model_name}"
+                f"Initializing embeddings with model: '{self.retriever.embeddings_model_name}' multi_process: '{self.retriever.multi_process}'"
             )
             self._embeddings = HuggingFaceEmbeddings(
                 model_name=self.retriever.embeddings_model_name,
@@ -925,6 +925,8 @@ class RAGAgent(OwlAgent):
             for i, (score, doc) in enumerate(scored_docs[:k]):
                 doc.metadata["rerank_score"] = float(score)
                 doc.metadata["rerank_position"] = i + 1
+
+            logger.debug(f"Reranking completed for {len(scored_docs)} documents")
 
             return [doc for _, doc in scored_docs[:k]]
 

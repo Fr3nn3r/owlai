@@ -27,5 +27,5 @@ orch/
 owlai.egg-info/
 dist/
 build/
-cleanenv/
+cleanenv*/
 used_imports.txt

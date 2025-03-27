@@ -3,7 +3,7 @@ print("loading owlsys module")
 import platform
 import psutil
 import json
-import GPUtil
+
 import time
 import logging
 import logging.config
@@ -154,17 +154,20 @@ def get_system_info():
     }
 
     try:
-        gpus = GPUtil.getGPUs()
-        for gpu in gpus:
-            system_info["GPU"].append(
-                {
-                    "Name": gpu.name,
-                    "Memory Total (GB)": round(gpu.memoryTotal, 2),
-                    "Memory Free (GB)": round(gpu.memoryFree, 2),
-                    "Memory Used (GB)": round(gpu.memoryUsed, 2),
-                    "Load (%)": gpu.load * 100,
-                }
-            )
+        if device == "cuda":
+            import GPUtil
+
+            gpus = GPUtil.getGPUs()
+            for gpu in gpus:
+                system_info["GPU"].append(
+                    {
+                        "Name": gpu.name,
+                        "Memory Total (GB)": round(gpu.memoryTotal, 2),
+                        "Memory Free (GB)": round(gpu.memoryFree, 2),
+                        "Memory Used (GB)": round(gpu.memoryUsed, 2),
+                        "Load (%)": gpu.load * 100,
+                    }
+                )
     except Exception as e:
         system_info["GPU"].append({"Error": str(e)})
 
