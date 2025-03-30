@@ -392,7 +392,7 @@ _OWL_AGENTS_BASE_CONFIG = [
             "max_tokens": 2048,
             "temperature": 0.1,
             "context_size": 4096,
-            "tools_names": ["tavily_search_results_json", "security_tool"],
+            "tools_names": ["tavily_search_results_json"],
         },
         "default_queries": [
             "system mode",
@@ -425,7 +425,7 @@ _OWL_AGENTS_BASE_CONFIG = [
             "max_tokens": 2048,
             "temperature": 0.1,
             "context_size": 4096,
-            "tools_names": ["owl_memory_tool"],
+            "tools_names": ["rag-naruto-v1"],
         },
         "default_queries": [
             "Who is Tsunade?",
@@ -458,12 +458,12 @@ _RAG_AGENTS_BASE_CONFIG = [
         "name": "rag-naruto-v1",
         "description": "Agent that knows everything about the anime series Naruto",
         "system_prompt": _PROMPT_CONFIG["rag-en-naruto-v1"],
-        "args_schema": {
-            "query": {
-                "type": "string",
-                "description": "Any question about the anime series Naruto expressed in english",
-            }
-        },
+        # "args_schema": {
+        #    "query": {
+        #        "type": "string",
+        #        "description": "Any question about the anime series Naruto expressed in english",
+        #    }
+        # },
         "llm_config": {
             "model_provider": "openai",
             "model_name": "gpt-4o-mini",
@@ -686,6 +686,24 @@ _RAG_AGENTS_CONFIG_ENV = {
 # this is the hooks imported by consumers
 OWL_AGENTS_CONFIG = _OWL_AGENTS_CONFIG_ENV[env]
 RAG_AGENTS_CONFIG = _RAG_AGENTS_CONFIG_ENV[env]
+
+
+TOOLBOX_CONFIG = {
+    "tavily_search_results_json": {
+        "max_results": 2,
+    },
+    "security_tool": {
+        "name": "security_tool",
+        "description": "A tool to check the security of the system. "
+        "Useful for when you need to identify a user by password. "
+        "Input should be a password.",
+        "schema_params": {
+            "query": "A password (sequence of words separated by spaces)"
+        },
+    },
+    "rag-naruto-v1": RAG_AGENTS_CONFIG[0],  # TODO: this should be a key in the config
+}
+
 
 TEST_QUERIES = {
     "test_queries": [
