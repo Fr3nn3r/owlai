@@ -182,6 +182,8 @@ load_dotenv()
 
 device = set_cuda_device()
 
+device = "cpu"  # disable GPU for now
+
 env = set_env()
 
 setup_logging()
@@ -191,3 +193,4 @@ is_dev = env == "development"
 is_test = env == "test"
 
 logger.info(f"System initialized for '{env}' environment, CUDA device: '{device}'")
+print(f"System initialized for '{env}' environment, CUDA device: '{device}'")

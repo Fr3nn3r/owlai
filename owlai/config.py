@@ -6,8 +6,9 @@
 import os
 from owlai.owlsys import device, env, is_prod, is_dev, is_test
 
-print("Loading db module")
+print("Loading config module")
 
+enable_multi_process = device == "cuda"
 
 USER_DATABASE = {
     "user_id_4385972043572": {
@@ -489,7 +490,7 @@ _RAG_AGENTS_BASE_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": is_dev,
+            "multi_process": enable_multi_process,
             "datastore": {
                 "input_data_folder": "data/dataset-0001",  # Larger dataset
                 "parser": {
@@ -545,7 +546,7 @@ _RAG_AGENTS_BASE_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": is_dev,
+            "multi_process": enable_multi_process,
             "datastore": {
                 "input_data_folder": "data/legal-rag/general",  # Larger dataset
                 "parser": {
@@ -599,7 +600,7 @@ _RAG_AGENTS_BASE_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": is_dev,
+            "multi_process": enable_multi_process,
             "datastore": {
                 "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
                 "parser": {
@@ -653,7 +654,7 @@ _RAG_AGENTS_BASE_CONFIG = [
             "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": device},
             "encode_kwargs": {"normalize_embeddings": True},
-            "multi_process": is_dev,
+            "multi_process": enable_multi_process,
             "datastore": {
                 "input_data_folder": "data/legal-rag/admin",  # Larger dataset
                 "parser": {
