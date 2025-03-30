@@ -62,6 +62,7 @@ ELEVENLABS_API_KEY=your_elevenlabs_api_key
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 $env:PYTHONPATH = "C:\Users\fbrun\Documents\GitHub\owlai\src"
+echo $env:OWLAI_ENV
 ```
 
 ## Usage

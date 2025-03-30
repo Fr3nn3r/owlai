@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from owlai.rag import RAGAgent
 from owlai.core import OwlAgent
-from owlai.db import OWL_AGENTS_CONFIG, RAG_AGENTS_CONFIG
+from owlai.config import OWL_AGENTS_CONFIG, RAG_AGENTS_CONFIG
 from owlai.tools import ToolBox
 
 logger: Logger = logging.getLogger(__name__)
@@ -56,7 +56,6 @@ class AgentManager:
                 self.owls[agent.name] = agent
                 self.names.append(agent.name)
                 logging.debug(f"Initialized Owl agent: {agent.name}")
-                print(f"Initialized Owl agent: {agent.name}")
             except ValidationError as e:
                 logging.error(f"Validation failed for {iagent_config}: {e}")
 

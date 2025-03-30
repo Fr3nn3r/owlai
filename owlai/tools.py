@@ -5,14 +5,6 @@
 
 print("Loading tools module")
 
-# Guard against duplicate module loading
-import sys
-
-_TOOLS_MODULE_LOADED = False
-if not _TOOLS_MODULE_LOADED:
-    _TOOLS_MODULE_LOADED = True
-    # Continue with imports below
-
 from ast import Tuple
 import logging
 
@@ -22,7 +14,7 @@ from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 from pydantic import BaseModel, Field
 from torch import Type
-from owlai.db import _TOOLS_CONFIG
+from owlai.config import _TOOLS_CONFIG
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,
@@ -67,7 +59,9 @@ class SecurityTool(BaseTool):
         Args:
             user_password: a string containing a sequence of words separated by spaces.
         """
-        from .db import get_user_by_password  # Import here to avoid circular imports
+        from .config import (
+            get_user_by_password,
+        )  # Import here to avoid circular imports
 
         global user_context
         logger.debug(f"calling identify_user_by_password with {user_password}")
@@ -127,7 +121,9 @@ class ToolBox:
         Args:
             user_password: a string containing a sequence of words separated by spaces.
         """
-        from .db import get_user_by_password  # Import here to avoid circular imports
+        from .config import (
+            get_user_by_password,
+        )  # Import here to avoid circular imports
 
         global user_context
         logger.debug(f"calling identify_user_by_password with {user_password}")

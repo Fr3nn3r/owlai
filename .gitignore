@@ -3,9 +3,8 @@ media/
 temp/
 models/
 .cache
-.venv/
-.venv2/
-.venv-eval
+.venv*/
+
 .pytest_cache/
 .idea/
 .vscode/
@@ -21,11 +20,8 @@ logs
 *.pyw
 *.prof
 .DS_Store
-.venv_old/
 orch/
 .vscode/
 owlai.egg-info/
 dist/
 build/
-cleanenv*/
-used_imports.txt

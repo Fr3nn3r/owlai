@@ -7,11 +7,6 @@ print("Loading core module")
 # Guard against duplicate module loading
 import sys
 
-_CORE_MODULE_LOADED = False
-if not _CORE_MODULE_LOADED:
-    _CORE_MODULE_LOADED = True
-    # Continue with imports below
-
 from typing import List, Dict, Any, Optional, Union, cast
 from langchain_core.messages import (
     BaseMessage,

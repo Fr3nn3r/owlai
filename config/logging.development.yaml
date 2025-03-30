@@ -1,9 +1,13 @@
 version: 1
-disable_existing_loggers: False
+disable_existing_loggers: false
 
 formatters:
-  simple:
-    format: "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+  json:
+    class: pythonjsonlogger.jsonlogger.JsonFormatter
+    format: '%(asctime)s %(levelname)s %(name)s %(process)d %(thread)d %(message)s'
+  standard:
+    format: '%(asctime)s - %(levelname)s - %(name)s - %(process)d - %(thread)d - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S UTC'
   stdout:
     (): colorlog.ColoredFormatter
     format: "%(log_color)s[%(filename)s:%(lineno)d] %(levelname)s | %(message)s"
@@ -22,17 +26,48 @@ handlers:
     stream: ext://sys.stdout
 
   file:
-    class: logging.FileHandler
-    level: DEBUG
-    formatter: simple
-    filename: logs/edwige.log
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: json
+    filename: logs/owlai.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+    encoding: utf8
+
+  error_file:
+    class: logging.handlers.RotatingFileHandler
+    level: ERROR
+    formatter: json
+    filename: logs/owlai.error.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+    encoding: utf8
+
+  access_file:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: json
+    filename: logs/owlai.access.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+    encoding: utf8
 
 loggers:
   main:
     level: DEBUG
-    handlers: [console, file]
-    propagate: no
-    
+    handlers: [console, file, error_file]
+    propagate: true
+
+  access:
+    level: INFO
+    handlers: [access_file]
+    propagate: false
+
+  owlai:
+    level: DEBUG
+    handlers: [console, file, error_file]
+    propagate: false
+
 root:
-  level: DEBUG
-  handlers: [file]
+    level: INFO
+    handlers: [console, file, error_file] 
