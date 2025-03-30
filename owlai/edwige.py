@@ -94,11 +94,15 @@ if __name__ == "__main__":
                 continue
 
             if user_message.lower() == "focus":
-                logger.info(f"Focus agent: {focus_agent.name}")
+                logger.info(
+                    f"Focus agent: {focus_agent.name} Model: {focus_agent.llm_config.model_name}"
+                )
                 continue
 
             if user_message.lower() == "model":
-                logger.info(f"Model: {focus_agent.llm_config.model_name}")
+                from owlai.owlsys import sprint
+
+                sprint(focus_agent.chat_model)
                 continue
 
             if user_message.lower() == "reload":
