@@ -5,11 +5,13 @@
     "**/__pycache__",
     ".venv",
     "temp",
+    "scripts",
     "tmp",
     "logs",
-    ".cursorrules"
+    ".cursorrules",
+    "*.log"
   ],
-  "ignore": ["tests"],
+  "ignore": ["tests" ,"scripts"],
   "defineConstant": {
     "DEBUG": true
   },
