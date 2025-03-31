@@ -1,3 +1,11 @@
+"""
+OwlAI Parser Module
+
+Note: We are using Pydantic v1 because it's required by langchain-core and other LangChain components.
+This is a temporary solution until LangChain fully supports Pydantic v2.
+The deprecation warnings are suppressed in pytest configuration.
+"""
+
 print("Loading parser module")
 from typing import Optional, List, Tuple, Any, Callable
 import os

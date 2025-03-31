@@ -1,3 +1,11 @@
+"""
+OwlAI Core Module
+
+Note: We are using Pydantic v1 because it's required by langchain-core and other LangChain components.
+This is a temporary solution until LangChain fully supports Pydantic v2.
+The deprecation warnings are suppressed in pytest configuration.
+"""
+
 #  ,_,
 # (O,O)
 # (   )
@@ -35,16 +43,29 @@ from langchain_core.tools import BaseTool, ArgsSchema
 # Get logger using the module name
 logger = logging.getLogger(__name__)
 
-user_context: str = "CONTEXT: "
-
 
 class DefaultAgentInput(BaseModel):
-    """Input schema for DefaultOwlAgent."""
+    """Input schema for DefaultOwlAgent.
+
+    Attributes:
+        query (str): Natural language input to the agent
+    """
 
     query: str = Field(description="some natural language input to the agent")
 
 
 class LLMConfig(BaseModel):
+    """Configuration for Language Model settings.
+
+    Attributes:
+        model_provider (str): Provider of the language model (e.g., 'openai', 'anthropic')
+        model_name (str): Name of the specific model to use
+        temperature (float): Sampling temperature (default: 0.1)
+        max_tokens (int): Maximum tokens per response (default: 2048)
+        context_size (int): Maximum context window size (default: 4096)
+        tools_names (List[str]): List of available tool names
+    """
+
     model_provider: str
     model_name: str
     temperature: float = 0.1
@@ -54,6 +75,11 @@ class LLMConfig(BaseModel):
 
 
 class OwlAgent(BaseTool, BaseModel):
+    """Base agent class that implements core functionality for interacting with LLMs.
+
+    This class combines LangChain's BaseTool and Pydantic's BaseModel to provide
+    a flexible agent that can be easily configured and used as both a tool and an LLM.
+    """
 
     # JSON defined properties
     name: str = "sad_unamed_owl_agent"
@@ -68,13 +94,18 @@ class OwlAgent(BaseTool, BaseModel):
     fifo_message_mode: bool = False
     callable_tools: List[BaseTool] = []
 
-    # Private attribute
+    # Private attributes
     _chat_model_cache: Any = None
     _tool_dict: Dict[str, BaseTool] = {}
     _message_history: List[BaseMessage] = []
 
     @property
     def chat_model(self) -> BaseChatModel:
+        """Lazy initialization of the chat model.
+
+        Returns:
+            BaseChatModel: The initialized chat model
+        """
         if self._chat_model_cache is None:
             self._chat_model_cache = init_chat_model(
                 model=self.llm_config.model_name,
@@ -88,7 +119,14 @@ class OwlAgent(BaseTool, BaseModel):
         return self._chat_model_cache
 
     def init_callable_tools(self, tools: List[Any]):
-        """Initialize callable tools with the provided tools list."""
+        """Initialize callable tools with the provided tools list.
+
+        Args:
+            tools (List[Any]): List of tools to initialize
+
+        Returns:
+            BaseChatModel: The chat model with bound tools
+        """
         self.callable_tools = tools
         self._chat_model_cache = self.chat_model.bind_tools(tools)
         for tool in tools:
@@ -96,6 +134,14 @@ class OwlAgent(BaseTool, BaseModel):
         return self._chat_model_cache
 
     def _token_count(self, message: Union[AIMessage, BaseMessage]):
+        """Count tokens in a message based on the model provider. Should get rid of model_provider dependend code ------------- should be a util function outside owlagent
+
+        Args:
+            message (Union[AIMessage, BaseMessage]): Message to count tokens for
+
+        Returns:
+            int: Number of tokens in the message, or -1 if unsupported
+        """
         if not isinstance(message, AIMessage) or not hasattr(
             message, "response_metadata"
         ):
@@ -105,7 +151,6 @@ class OwlAgent(BaseTool, BaseModel):
             return 0
 
         metadata = message.response_metadata
-        # Should get rid of model_provider dependend code ------------- should be a util function outside owlagent
         if (
             self.llm_config.model_provider == "openai"
             or self.llm_config.model_provider == "mistralai"
@@ -123,6 +168,11 @@ class OwlAgent(BaseTool, BaseModel):
             return -1
 
     def append_message(self, message: BaseMessage):
+        """Append a message to history with FIFO mode if context size is exceeded.
+
+        Args:
+            message (BaseMessage): Message to append
+        """
         if type(message) == AIMessage:
             self.total_tokens = self._token_count(message)
         if (self.total_tokens > self.llm_config.context_size) and (
@@ -142,7 +192,11 @@ class OwlAgent(BaseTool, BaseModel):
         self._message_history.append(message)
 
     def _process_tool_calls(self, model_response: AIMessage) -> None:
-        """Process tool calls from the model response and add results to chat history."""
+        """Process tool calls from the model response and add results to chat history.
+
+        Args:
+            model_response (AIMessage): Response containing tool calls to process
+        """
         if not hasattr(model_response, "tool_calls") or not model_response.tool_calls:
             logger.debug("No tool calls in response")
             return
@@ -213,8 +267,15 @@ class OwlAgent(BaseTool, BaseModel):
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
-        """Use the tool. This is called by BaseTool.invoke()"""
-        # logger.debug(f"[BASE OwlAgent._run] Called with query: {query}")
+        """Use the tool. This is called by BaseTool.invoke()
+
+        Args:
+            query (str): The input query
+            run_manager (Optional[CallbackManagerForToolRun]): Optional callback manager
+
+        Returns:
+            str: The response from message_invoke
+        """
         return self.message_invoke(query)
 
     async def _arun(
@@ -222,16 +283,29 @@ class OwlAgent(BaseTool, BaseModel):
         query: str,
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
-        """Use the tool asynchronously."""
+        """Use the tool asynchronously.
+
+        Args:
+            query (str): The input query
+            run_manager (Optional[AsyncCallbackManagerForToolRun]): Optional callback manager
+
+        Returns:
+            str: The response from message_invoke
+        """
         return self.message_invoke(query)
 
     def message_invoke(self, message: str) -> str:
-        """
-        Base implementation of message_invoke that can be overridden by subclasses.
+        """Process a message and return the model's response.
+
+        Args:
+            message (str): The input message
+
+        Returns:
+            str: The model's response or error message
         """
         try:
             # update system prompt with latestcontext
-            system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
+            system_message = SystemMessage(f"{self.system_prompt}")
             if len(self._message_history) == 0:
                 self._message_history.append(system_message)
             else:
@@ -261,13 +335,18 @@ class OwlAgent(BaseTool, BaseModel):
             return f"Error: {str(e)}"
 
     async def stream_message(self, message: str):
-        """
-        Stream a response from the agent. This is the base implementation that can be overridden by subclasses.
+        """Stream a response from the agent.
+
+        Args:
+            message (str): The input message
+
+        Yields:
+            str: Chunks of the model's response
         """
         try:
             logger.info(f"Streaming message for agent {self.name}")
             # update system prompt with latestcontext
-            system_message = SystemMessage(f"{self.system_prompt}\n{user_context}")
+            system_message = SystemMessage(f"{self.system_prompt}")
             if len(self._message_history) == 0:
                 self._message_history.append(system_message)
             else:
@@ -300,9 +379,11 @@ class OwlAgent(BaseTool, BaseModel):
             yield f"Error: {str(e)}"
 
     def print_message_history(self):
+        """Print the current message history."""
         sprint(self._message_history)
 
     def print_message_metadata(self):
+        """Print metadata for all messages in history."""
         for index, message in enumerate(self._message_history):
             if message.response_metadata:
                 logger.info(
@@ -310,20 +391,24 @@ class OwlAgent(BaseTool, BaseModel):
                 )
 
     def print_system_prompt(self):
+        """Print the current system prompt."""
         if len(self._message_history) > 0:
             logger.info(f"System prompt: '{self._message_history[0].content}'")
         else:
             logger.info(f"System prompt: '{self.system_prompt}'")
 
     def reset_message_history(self):
+        """Reset message history while preserving system message."""
         if len(self._message_history) > 0:
             self._message_history = [self._message_history[0]]
             self.fifo_message_mode = False
 
     def print_info(self):
+        """Print agent information."""
         sprint(self)
 
     def print_model_info(self):
+        """Print model configuration information."""
         logger.debug(
             f"Chat model: {self.llm_config.model_name} {self.llm_config.model_provider} {self.llm_config.temperature} {self.llm_config.max_tokens}"
         )
