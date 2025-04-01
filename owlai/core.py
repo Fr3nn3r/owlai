@@ -131,6 +131,7 @@ class OwlAgent(BaseTool, BaseModel):
         self._chat_model_cache = self.chat_model.bind_tools(tools)
         for tool in tools:
             self._tool_dict[tool.name] = tool
+            logger.debug(f"Initialized tool: {tool.name} for agent {self.name}")
         return self._chat_model_cache
 
     def _token_count(self, message: Union[AIMessage, BaseMessage]):
@@ -185,7 +186,7 @@ class OwlAgent(BaseTool, BaseModel):
         if self.fifo_message_mode:
             self._message_history.pop(1)  # Remove the oldest message
             if (
-                self._message_history[-1].type == "tool"
+                self._message_history[1].type == "tool"
             ):  # Remove the tool message if any
                 self._message_history.pop(1)
 
@@ -200,6 +201,11 @@ class OwlAgent(BaseTool, BaseModel):
         if not hasattr(model_response, "tool_calls") or not model_response.tool_calls:
             logger.debug("No tool calls in response")
             return
+
+        if len(model_response.tool_calls) > 1:
+            raise Exception(
+                f"Multiple tool calls in response is not supported: {model_response.tool_calls}"
+            )
 
         for tool_call in model_response.tool_calls:
             # Loop over tool calls
@@ -413,6 +419,28 @@ class OwlAgent(BaseTool, BaseModel):
             f"Chat model: {self.llm_config.model_name} {self.llm_config.model_provider} {self.llm_config.temperature} {self.llm_config.max_tokens}"
         )
         sprint(self.chat_model)
+
+
+class MessageManager:
+    """Manage message history and system prompt."""
+
+    def __init__(self, system_prompt: str):
+        self.system_prompt = system_prompt
+        self.message_history = []
+
+
+class ToolManager:
+    """Manage tools."""
+
+    def __init__(self):
+        self.tools = []
+
+
+class ModelManager:
+    """Manage model."""
+
+    def __init__(self):
+        self.model = None
 
 
 def main():

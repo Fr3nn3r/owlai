@@ -37,10 +37,18 @@ from owlai.owlsys import encode_text, track_time, setup_logging, sprint
 from owlai.core import OwlAgent
 from owlai.parser import DefaultParser, create_instance
 from owlai.data import RAGDataStore
+from langchain_core.tools import BaseTool, ArgsSchema
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 warnings.simplefilter("ignore", category=FutureWarning)
+
+
+class DefaultToolInput(BaseModel):
+    """Input for tool."""
+
+    query: str = Field(description="A query to the tool")
 
 
 class RAGRetriever(BaseModel):
@@ -114,12 +122,15 @@ class RAGRetriever(BaseModel):
         return self.datastore.load_dataset(embeddings)
 
 
-class RAGAgent(OwlAgent):
+class RAGTool(BaseTool):
     """
     RAG Agent implementation that extends OwlAgent with RAG capabilities
     """
 
-    # RAG specific properties
+    name: str = "sad_unamed_rag_tool"
+    description: str
+    args_schema: Optional[ArgsSchema] = DefaultToolInput
+
     retriever: RAGRetriever
     _vector_store: Optional[FAISS] = None
     _embeddings: Optional[HuggingFaceEmbeddings] = None
@@ -163,11 +174,6 @@ class RAGAgent(OwlAgent):
                 logger.warning(f"Failed to initialize reranker model: {str(e)}")
                 logger.warning("Falling back to basic retrieval without reranking")
                 self._reranker = None
-
-            # Initialize prompt template
-            logger.debug("Initializing prompt template")
-            self._prompt = PromptTemplate.from_template(self.system_prompt)
-            logger.debug("Prompt template initialization completed")
 
             # Load vector store
             logger.debug("Loading vector store")
@@ -230,7 +236,7 @@ class RAGAgent(OwlAgent):
             logger.warning("Falling back to original document order")
             return documents[:k]
 
-    def invoke_rag(self, question: str) -> Dict[str, Any]:
+    def get_rag_sources(self, question: str) -> Dict[str, Any]:
         """
         Runs the RAG query against the vector store and returns an answer to the question.
         Args:
@@ -263,16 +269,97 @@ class RAGAgent(OwlAgent):
                 ]
             )
 
+        answer["answer"] = docs_content
+        answer["metadata"] = metadata
+
+        return answer
+
+    def _run(
+        self,
+        query: str,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Override BaseTool._run to ensure we use our implementation"""
+        logger.debug(f"[RqAGTool._run] Called with query: {query}")
+        return self.message_invoke(query)
+
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        """Override BaseTool._arun to ensure we use our implementation"""
+        return self.message_invoke(query)
+
+    def message_invoke(self, message: str) -> str:
+        """Override OwlAgent.message_invoke with RAG specific implementation"""
+        logger.debug(
+            f"[RAGTool.message_invoke] Called from {self.name} with message: {message}"
+        )
+        logger.debug(f"RAG engine not keeping context for now")
+        answer = self.get_rag_sources(message)
+        if "answer" not in answer or answer["answer"] == "":
+            raise Exception("No answer found")
+        return answer.get("answer", "?????")
+
+
+class RAGAgent(OwlAgent, RAGTool):
+    """
+    RAG Agent implementation that extends OwlAgent with RAG capabilities
+    (now direct tool invocation is preferred for performance reasons)
+    """
+
+    # RAG specific properties
+    retriever: RAGRetriever
+    _vector_store: Optional[FAISS] = None
+    _embeddings: Optional[HuggingFaceEmbeddings] = None
+    _reranker: Optional[Any] = None
+    _prompt: Optional[PromptTemplate] = None
+
+    def __init__(self, *args, **kwargs):
+        try:
+            logger.warning(f"Starting RAGAgent initialization (deprecated)")
+
+            # Initialize the base class (OwlAgent)
+            logger.debug("Initializing base class")
+            super().__init__(**kwargs)
+            logger.debug("Base class initialization completed")
+
+            # Initialize prompt template
+            logger.debug("Initializing prompt template")
+            self._prompt = PromptTemplate.from_template(self.system_prompt)
+            logger.debug("Prompt template initialization completed")
+
+        except Exception as e:
+            logger.error(f"Error during RAGAgent initialization: {str(e)}")
+            logger.error(f"Error details: {traceback.format_exc()}")
+            raise
+
+    def invoke_rag(self, question: str) -> Dict[str, Any]:
+        """
+        Runs the RAG query against the vector store and returns an answer to the question.
+        Args:
+            question: a string containing the question to answer.
+
+        Returns:
+            A dictionary containing the question, answer, and metadata.
+        """
+        logger.debug(f"Running RAG query: '{question}'")
+
+        answer: Dict[str, Any] = {"question": question}
+
+        docs_content = self.get_rag_sources(question)["answer"]
+
+        with track_time("Model invocation with RAG context"):
+
             if self._prompt is None:
                 raise Exception("Prompt is not set")
 
             rag_prompt = self._prompt.format(question=question, context=docs_content)
-            metadata["rag_prompt"] = rag_prompt
             message = SystemMessage(rag_prompt)
             messages = self.chat_model.invoke([message])
 
         answer["answer"] = str(messages.content) if messages.content is not None else ""
-        answer["metadata"] = metadata
 
         return answer
 
@@ -323,12 +410,7 @@ class RAGAgent(OwlAgent):
         )
 
         # Format documents content
-        docs_content = "\n\n".join(
-            [
-                f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
-                for idx, doc in enumerate(reranked_docs)
-            ]
-        )
+        docs_content = self.get_rag_sources(message)["answer"]
 
         if self._prompt is None:
             raise Exception("Prompt is not set")

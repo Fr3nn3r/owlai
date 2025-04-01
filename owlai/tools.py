@@ -11,23 +11,23 @@ import logging
 from typing import Callable, Type, Optional, Tuple, Union, List, Dict, Any
 from langchain_community.tools.tavily_search import TavilySearchResults
 from pydantic import BaseModel, Field
-from owlai.config import TOOLBOX_CONFIG, get_user_by_password
+from owlai.config import TOOLS_CONFIG, get_user_by_password
 from langchain_core.tools import BaseTool, ArgsSchema
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,
     AsyncCallbackManagerForToolRun,
 )
 
-from owlai.rag import RAGAgent
+from owlai.rag import RAGTool
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)
 
 
-class SecurityToolInput(BaseModel):
-    """Input for the Security tool."""
+class DefaultToolInput(BaseModel):
+    """Input for tool."""
 
-    query: str = Field(description="a password (sequence of words separated by spaces)")
+    query: str = Field(description="A query to the tool")
 
 
 class SecurityTool(BaseTool):  # type: ignore[override, override]
@@ -38,7 +38,7 @@ class SecurityTool(BaseTool):  # type: ignore[override, override]
         "Useful for when you need to identify a user by password. "
         "Input should be a password."
     )
-    args_schema: Type[BaseModel] = SecurityToolInput  # type: ignore
+    args_schema: Type[BaseModel] = DefaultToolInput  # type: ignore
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -80,16 +80,24 @@ class SecurityTool(BaseTool):  # type: ignore[override, override]
 
 
 class ToolBox:
+    """Toolbox for tools."""
 
-    _tavily_tool = TavilySearchResults(**TOOLBOX_CONFIG["tavily_search_results_json"])
-    _security_tool = SecurityTool(**TOOLBOX_CONFIG["security_tool"])
-    _naruto_search = RAGAgent(**TOOLBOX_CONFIG["rag-naruto-v1"])
+    # Eventually the class tool should be in config to have true plugins
+    _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
+    _security_tool = SecurityTool(**TOOLS_CONFIG["security_tool"])
+    _naruto_search = RAGTool(**TOOLS_CONFIG["rag-naruto-v1"])
+    _fr_general_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"])
+    _fr_tax_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"])
+    _fr_admin_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"])
 
     def __init__(self):
         self.mapping = {
             "security_tool": self._security_tool,
             "tavily_search_results_json": self._tavily_tool,
             "rag-naruto-v1": self._naruto_search,
+            "rag-fr-general-law-v1": self._fr_general_law_search,
+            "rag-fr-tax-law-v1": self._fr_tax_law_search,
+            "rag-fr-admin-law-v1": self._fr_admin_law_search,
         }
 
     def get_tools(self, keys: list[str]) -> list[Callable]:
