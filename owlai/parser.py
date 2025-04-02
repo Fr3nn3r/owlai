@@ -79,13 +79,13 @@ class DefaultParser(BaseModel):
     """
 
     implementation: str = "DefaultParser"
-    output_data_folder: str
-    chunk_size: float
-    chunk_overlap: float
-    add_start_index: bool
-    strip_whitespace: bool
-    separators: List[str]
-    extract_images: bool
+    output_data_folder: str = "data/dataset-0001"
+    chunk_size: float = 512
+    chunk_overlap: float = 50
+    add_start_index: bool = True
+    strip_whitespace: bool = True
+    separators: List[str] = ["\n\n", "\n", " ", ""]
+    extract_images: bool = False
     extraction_mode: Literal["plain", "layout"] = "plain"
 
     _image_folder: str = "images"
