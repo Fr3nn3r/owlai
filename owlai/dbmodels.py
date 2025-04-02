@@ -33,6 +33,10 @@ class Message(Base):
     source = Column(String, nullable=False)  # e.g., 'human', 'agent', 'tool'
     content = Column(Text, nullable=False)
     timestamp = Column(TIMESTAMP, default=datetime.utcnow)
+    message_metadata = Column(
+        Text, nullable=True
+    )  # Store additional JSON or text data about the message
+    tool_calls = Column(Text, nullable=True)
 
     agent = relationship("Agent", back_populates="messages")
     conversation = relationship("Conversation", back_populates="messages")
@@ -63,3 +67,23 @@ class Context(Base):
     message = relationship(
         "Message", foreign_keys=[message_id], back_populates="context_links"
     )
+
+
+def main():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    DATABASE_URL = "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
+
+    engine = create_engine(DATABASE_URL)
+    Session = sessionmaker(bind=engine)
+
+    # Drop and recreate all tables (dev-only)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+
+    print("Database tables created")
+
+
+if __name__ == "__main__":
+    main()

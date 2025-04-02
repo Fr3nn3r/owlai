@@ -197,20 +197,14 @@ class OwlAgent(BaseTool, BaseModel):
             if not self._conversation_id:
                 self._start_new_conversation()
 
-            # Map message types to sources
-            source_map = {
-                "human": "user",
-                "ai": "assistant",
-                "system": "system",
-                "tool": "tool",
-            }
-
             # Log the message
             self._memory.log_message(
                 agent_id=self._agent_id,
                 conversation_id=self._conversation_id,
-                source=source_map.get(message.type, "unknown"),
+                source=message.type,
                 content=str(message.content),
+                metadata=message.response_metadata,
+                tool_calls=getattr(message, "tool_calls", None),
             )
 
     def _token_count(self, message: Union[AIMessage, BaseMessage]):

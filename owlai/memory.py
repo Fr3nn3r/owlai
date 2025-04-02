@@ -12,14 +12,18 @@ from owlai.dbmodels import Agent, Conversation, Message, Feedback, Context
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID as SQLUUID
 from sqlalchemy.orm import relationship
+import json
 
 
 class MessageDict(TypedDict):
+    """Dictionary representation of a message."""
+
     id: UUID
     agent_id: UUID
     source: str
     content: str
     timestamp: datetime
+    metadata: Optional[Dict[str, Any]]
     feedback: List[dict]
 
 
@@ -82,9 +86,10 @@ class Memory(ABC):
         self,
         agent_id: UUID,
         conversation_id: UUID,
-        source: str,  # 'human', 'agent', 'tool'
+        source: str,
         content: str,
         metadata: Optional[Dict[str, Any]] = None,
+        tool_calls: Optional[Dict[str, Any]] = None,
     ) -> UUID:
         """
         Log a message in a conversation.
@@ -243,12 +248,27 @@ class SQLAlchemyMemory(Memory):
         source: str,
         content: str,
         metadata: Optional[Dict[str, Any]] = None,
+        tool_calls: Optional[Dict[str, Any]] = None,
     ) -> UUID:
+        """Log a message to memory.
+
+        Args:
+            agent_id (UUID): ID of the agent
+            conversation_id (UUID): ID of the conversation
+            source (str): Source of the message (e.g., 'user', 'assistant', 'system', 'tool')
+            content (str): Content of the message
+            metadata (Optional[Dict[str, Any]]): Additional metadata about the message
+            tool_calls (Optional[Dict[str, Any]]): Additional tool calls about the message
+        Returns:
+            UUID: ID of the created message
+        """
         message = Message(
             agent_id=agent_id,
             conversation_id=conversation_id,
             source=source,
             content=content,
+            message_metadata=json.dumps(metadata) if metadata else None,
+            tool_calls=json.dumps(tool_calls) if tool_calls else None,
             timestamp=datetime.now(timezone.utc),
         )
         self.session.add(message)
@@ -278,18 +298,19 @@ class SQLAlchemyMemory(Memory):
         limit: Optional[int] = None,
         before: Optional[datetime] = None,
     ) -> List[MessageDict]:
-        query = select(Message).where(Message.conversation_id == conversation_id)
+        query = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(desc(Message.timestamp))
+        )
 
         if before:
             query = query.where(Message.timestamp < before)
 
-        query = query.order_by(desc(Message.timestamp))
-
         if limit:
             query = query.limit(limit)
 
-        result = self.session.execute(query)
-        messages = result.scalars().all()
+        messages = self.session.execute(query).scalars().all()
 
         return [
             MessageDict(
@@ -299,6 +320,11 @@ class SQLAlchemyMemory(Memory):
                 content=str(msg.content),
                 timestamp=datetime.fromtimestamp(
                     msg.timestamp.timestamp(), timezone.utc
+                ),
+                metadata=(
+                    json.loads(str(msg.message_metadata))
+                    if msg.message_metadata
+                    else None
                 ),
                 feedback=[
                     {
@@ -365,8 +391,7 @@ class SQLAlchemyMemory(Memory):
             .where(Context.message_id == message_id)
         )
 
-        result = self.session.execute(query)
-        context_messages = result.scalars().all()
+        context_messages = self.session.execute(query).scalars().all()
 
         return [
             MessageDict(
@@ -376,6 +401,11 @@ class SQLAlchemyMemory(Memory):
                 content=str(msg.content),
                 timestamp=datetime.fromtimestamp(
                     msg.timestamp.timestamp(), timezone.utc
+                ),
+                metadata=(
+                    json.loads(str(msg.message_metadata))
+                    if msg.message_metadata
+                    else None
                 ),
                 feedback=[],  # Context messages don't need feedback
             )
@@ -397,8 +427,7 @@ class SQLAlchemyMemory(Memory):
         if limit:
             stmt = stmt.limit(limit)
 
-        result = self.session.execute(stmt)
-        messages = result.scalars().all()
+        messages = self.session.execute(stmt).scalars().all()
 
         return [
             MessageDict(
@@ -408,6 +437,11 @@ class SQLAlchemyMemory(Memory):
                 content=str(msg.content),
                 timestamp=datetime.fromtimestamp(
                     msg.timestamp.timestamp(), timezone.utc
+                ),
+                metadata=(
+                    json.loads(str(msg.message_metadata))
+                    if msg.message_metadata
+                    else None
                 ),
                 feedback=[],  # Search results don't need feedback
             )
