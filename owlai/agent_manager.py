@@ -2,11 +2,13 @@ import logging
 from typing import List, Dict, Any
 from logging import Logger
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
 from owlai.rag import RAGAgent
 from owlai.core import OwlAgent
-from owlai.config import OWL_AGENTS_CONFIG, RAG_AGENTS_CONFIG
+from owlai.config import OWL_AGENTS_CONFIG
 from owlai.tools import ToolBox
+from owlai.memory import SQLAlchemyMemory
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -17,10 +19,11 @@ class AgentManager:
     focus_agent: OwlAgent
     _initialized = False
 
-    def __init__(self):
+    def __init__(self, db_session: Session):
         self.owls: Dict[str, OwlAgent] = {}
         self.names: List[str] = []
         self.toolbox = ToolBox()
+        self.memory = SQLAlchemyMemory(db_session)
         self._lazy_init()
 
     def _lazy_init(self):
@@ -28,43 +31,26 @@ class AgentManager:
         if self._initialized:
             return
 
-        # Initialize RAG agents
-        for iagent_config in RAG_AGENTS_CONFIG:
-            try:
-
-                # RAG_AGENTS_CONFIG is a dictionary, not a list, so we need to use the value
-                rag_agent: RAGAgent = RAGAgent(**iagent_config)
-                rag_agent.init_callable_tools(
-                    self.toolbox.get_tools(rag_agent.llm_config.tools_names)
-                )
-                self.owls[rag_agent.name] = rag_agent
-                self.names.append(rag_agent.name)
-                logger.debug(f"Initialized RAG agent: {rag_agent.name}")
-            except (ValidationError, KeyError, TypeError) as e:
-                logger.error(f"Failed to initialize RAG agent {iagent_config}: {e}")
-
         # Initialize Owl agents
         for iagent_config in OWL_AGENTS_CONFIG:
             try:
-                # Import Owl components only when needed
-                from owlai.core import OwlAgent
-
                 agent: OwlAgent = OwlAgent(**iagent_config)
                 agent.init_callable_tools(
                     self.toolbox.get_tools(agent.llm_config.tools_names)
                 )
+                agent.init_memory(self.memory)
                 self.owls[agent.name] = agent
                 self.names.append(agent.name)
-                logging.debug(f"Initialized Owl agent: {agent.name}")
+                logger.debug(f"Initialized Owl agent: {agent.name}")
             except ValidationError as e:
-                logging.error(f"Validation failed for {iagent_config}: {e}")
+                logger.error(f"Failed to initialize Owl agent {iagent_config}: {e}")
 
         if not self.names:
             raise RuntimeError("No agents were successfully initialized")
 
         self.focus_agent = self.owls[self.names[0]]
         self._initialized = True
-        logging.info(f"AgentManager initialized with {len(self.names)} agents")
+        logger.info(f"AgentManager initialized with {len(self.names)} agents")
 
     def get_focus_owl(self) -> OwlAgent:
         logger.debug(f"Focus agent: {self.focus_agent.name}")

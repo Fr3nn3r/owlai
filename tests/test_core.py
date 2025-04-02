@@ -18,7 +18,6 @@ from owlai.core import (
     DefaultAgentInput,
     LLMConfig,
     OwlAgent,
-    user_context,
 )
 
 
@@ -66,6 +65,7 @@ def owl_agent():
         description="Test agent",
         llm_config=config,
         system_prompt="You are a test agent.",
+        version="1.0",
     )
     return agent
 
@@ -111,6 +111,7 @@ def test_owl_agent_initialization():
         description="Test agent",
         llm_config=config,
         system_prompt="You are a test agent.",
+        version="1.0",
     )
     assert agent.name == "test_agent"
     assert agent.description == "Test agent"
