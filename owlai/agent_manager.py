@@ -10,6 +10,19 @@ from owlai.config import OWL_AGENTS_CONFIG
 from owlai.tools import ToolBox
 from owlai.memory import SQLAlchemyMemory
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import os
+
+# Replace with your actual DB URI
+# DATABASE_URL = "postgresql://postgres:dev@localhost:5432/owlai_dev"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
+)
+
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+
 logger: Logger = logging.getLogger(__name__)
 
 
@@ -19,11 +32,12 @@ class AgentManager:
     focus_agent: OwlAgent
     _initialized = False
 
-    def __init__(self, db_session: Session):
+    def __init__(self):
         self.owls: Dict[str, OwlAgent] = {}
         self.names: List[str] = []
         self.toolbox = ToolBox()
-        self.memory = SQLAlchemyMemory(db_session)
+        self.db_session = Session()
+        self.memory = SQLAlchemyMemory(self.db_session)
         self._lazy_init()
 
     def _lazy_init(self):
@@ -32,9 +46,9 @@ class AgentManager:
             return
 
         # Initialize Owl agents
-        for iagent_config in OWL_AGENTS_CONFIG:
+        for iagent_key in OWL_AGENTS_CONFIG.keys():
             try:
-                agent: OwlAgent = OwlAgent(**iagent_config)
+                agent: OwlAgent = OwlAgent(**OWL_AGENTS_CONFIG[iagent_key])
                 agent.init_callable_tools(
                     self.toolbox.get_tools(agent.llm_config.tools_names)
                 )
@@ -43,7 +57,7 @@ class AgentManager:
                 self.names.append(agent.name)
                 logger.debug(f"Initialized Owl agent: {agent.name}")
             except ValidationError as e:
-                logger.error(f"Failed to initialize Owl agent {iagent_config}: {e}")
+                logger.error(f"Failed to initialize Owl agent {iagent_key}: {e}")
 
         if not self.names:
             raise RuntimeError("No agents were successfully initialized")
