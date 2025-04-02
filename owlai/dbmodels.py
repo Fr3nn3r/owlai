@@ -22,6 +22,8 @@ class Conversation(Base):
     title = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
 
+    messages = relationship("Message", back_populates="conversation")
+
 
 class Message(Base):
     __tablename__ = "messages"
@@ -33,7 +35,7 @@ class Message(Base):
     timestamp = Column(TIMESTAMP, default=datetime.utcnow)
 
     agent = relationship("Agent", back_populates="messages")
-    conversation = relationship("Conversation")
+    conversation = relationship("Conversation", back_populates="messages")
     feedback = relationship("Feedback", back_populates="message")
     context_links = relationship(
         "Context", foreign_keys="[Context.message_id]", back_populates="message"

@@ -3,9 +3,31 @@ Memory interface for OwlAI agents to store and retrieve conversations and intera
 """
 
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any, List, TypedDict, cast
 from uuid import UUID
+from sqlalchemy import select, desc
+from sqlalchemy.orm import Session
+from owlai.dbmodels import Agent, Conversation, Message, Feedback, Context
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import UUID as SQLUUID
+from sqlalchemy.orm import relationship
+
+
+class MessageDict(TypedDict):
+    id: UUID
+    agent_id: UUID
+    source: str
+    content: str
+    timestamp: datetime
+    feedback: List[dict]
+
+
+class ConversationDict(TypedDict):
+    id: UUID
+    title: Optional[str]
+    created_at: datetime
+    message_count: int
 
 
 class Memory(ABC):
@@ -62,7 +84,7 @@ class Memory(ABC):
         conversation_id: UUID,
         source: str,  # 'human', 'agent', 'tool'
         content: str,
-        metadata: Optional[Dict[Any, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> UUID:
         """
         Log a message in a conversation.
@@ -104,7 +126,7 @@ class Memory(ABC):
         conversation_id: UUID,
         limit: Optional[int] = None,
         before: Optional[datetime] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[MessageDict]:
         """
         Retrieve conversation history.
 
@@ -121,7 +143,7 @@ class Memory(ABC):
     @abstractmethod
     def get_agent_conversations(
         self, agent_id: UUID, limit: Optional[int] = None, offset: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[ConversationDict]:
         """
         Get all conversations involving an agent.
 
@@ -147,7 +169,7 @@ class Memory(ABC):
         pass
 
     @abstractmethod
-    def get_message_context(self, message_id: UUID) -> List[Dict[str, Any]]:
+    def get_message_context(self, message_id: UUID) -> List[MessageDict]:
         """
         Get all context messages used for a given message.
 
@@ -162,7 +184,7 @@ class Memory(ABC):
     @abstractmethod
     def search_conversations(
         self, query: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[MessageDict]:
         """
         Search through conversation history.
 
@@ -174,3 +196,220 @@ class Memory(ABC):
             List of matching messages with their metadata
         """
         pass
+
+
+class SQLAlchemyMemory(Memory):
+    """
+    SQLAlchemy implementation of the Memory interface.
+    Uses the existing database models to store conversation history.
+    """
+
+    def __init__(self, session: Session):
+        """
+        Initialize with a SQLAlchemy session.
+
+        Args:
+            session: SQLAlchemy session for database operations
+        """
+        self.session = session
+
+    def create_agent(self, name: str, version: str) -> UUID:
+        agent = Agent(name=name, version=version)
+        self.session.add(agent)
+        self.session.commit()
+        return agent.id  # type: ignore
+
+    def get_or_create_agent(self, name: str, version: str) -> UUID:
+        # Try to find existing agent
+        stmt = select(Agent).where(Agent.name == name, Agent.version == version)
+        agent = self.session.execute(stmt).scalar_one_or_none()
+
+        if agent is None:
+            # Create new agent if not found
+            return self.create_agent(name, version)
+
+        return agent.id  # type: ignore
+
+    def create_conversation(self, title: Optional[str] = None) -> UUID:
+        conversation = Conversation(title=title, created_at=datetime.now(timezone.utc))
+        self.session.add(conversation)
+        self.session.commit()
+        return conversation.id  # type: ignore
+
+    def log_message(
+        self,
+        agent_id: UUID,
+        conversation_id: UUID,
+        source: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> UUID:
+        message = Message(
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            source=source,
+            content=content,
+            timestamp=datetime.now(timezone.utc),
+        )
+        self.session.add(message)
+        self.session.commit()
+        return message.id  # type: ignore
+
+    def log_feedback(
+        self,
+        message_id: UUID,
+        score: int,
+        comments: Optional[str] = None,
+        user_id: Optional[UUID] = None,
+    ) -> None:
+        feedback = Feedback(
+            message_id=message_id,
+            score=score,
+            comments=comments,
+            user_id=user_id,
+            timestamp=datetime.now(timezone.utc),
+        )
+        self.session.add(feedback)
+        self.session.commit()
+
+    def get_conversation_history(
+        self,
+        conversation_id: UUID,
+        limit: Optional[int] = None,
+        before: Optional[datetime] = None,
+    ) -> List[MessageDict]:
+        query = select(Message).where(Message.conversation_id == conversation_id)
+
+        if before:
+            query = query.where(Message.timestamp < before)
+
+        query = query.order_by(desc(Message.timestamp))
+
+        if limit:
+            query = query.limit(limit)
+
+        result = self.session.execute(query)
+        messages = result.scalars().all()
+
+        return [
+            MessageDict(
+                id=cast(UUID, msg.id),
+                agent_id=cast(UUID, msg.agent_id),
+                source=str(msg.source),
+                content=str(msg.content),
+                timestamp=datetime.fromtimestamp(
+                    msg.timestamp.timestamp(), timezone.utc
+                ),
+                feedback=[
+                    {
+                        "score": fb.score,
+                        "comments": fb.comments,
+                        "user_id": fb.user_id,
+                        "timestamp": datetime.fromtimestamp(
+                            fb.timestamp.timestamp(), timezone.utc
+                        ),
+                    }
+                    for fb in msg.feedback
+                ],
+            )
+            for msg in messages
+        ]
+
+    def get_agent_conversations(
+        self,
+        agent_id: UUID,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[ConversationDict]:
+        query = (
+            select(Message.conversation_id)
+            .where(Message.agent_id == agent_id)
+            .group_by(Message.conversation_id)
+            .order_by(desc(Message.timestamp))
+        )
+
+        if limit:
+            query = query.limit(limit)
+        if offset:
+            query = query.offset(offset)
+
+        result = self.session.execute(query)
+        conversation_ids = result.scalars().all()
+
+        conversations: List[ConversationDict] = []
+        for conv_id in conversation_ids:
+            conv = self.session.get(Conversation, conv_id)
+            if conv:
+                conversations.append(
+                    ConversationDict(
+                        id=cast(UUID, conv.id),
+                        title=str(conv.title) if conv.title else None,
+                        created_at=datetime.fromtimestamp(
+                            conv.created_at.timestamp(), timezone.utc
+                        ),
+                        message_count=len(conv.messages),
+                    )
+                )
+
+        return conversations
+
+    def add_context(self, message_id: UUID, context_message_id: UUID) -> None:
+        context = Context(message_id=message_id, context_id=context_message_id)
+        self.session.add(context)
+        self.session.commit()
+
+    def get_message_context(self, message_id: UUID) -> List[MessageDict]:
+        query = (
+            select(Message)
+            .join(Context, Context.context_id == Message.id)
+            .where(Context.message_id == message_id)
+        )
+
+        result = self.session.execute(query)
+        context_messages = result.scalars().all()
+
+        return [
+            MessageDict(
+                id=cast(UUID, msg.id),
+                agent_id=cast(UUID, msg.agent_id),
+                source=str(msg.source),
+                content=str(msg.content),
+                timestamp=datetime.fromtimestamp(
+                    msg.timestamp.timestamp(), timezone.utc
+                ),
+                feedback=[],  # Context messages don't need feedback
+            )
+            for msg in context_messages
+        ]
+
+    def search_conversations(
+        self,
+        query: str,
+        limit: Optional[int] = None,
+    ) -> List[MessageDict]:
+        search_query = f"%{query}%"
+        stmt = (
+            select(Message)
+            .where(Message.content.ilike(search_query))
+            .order_by(desc(Message.timestamp))
+        )
+
+        if limit:
+            stmt = stmt.limit(limit)
+
+        result = self.session.execute(stmt)
+        messages = result.scalars().all()
+
+        return [
+            MessageDict(
+                id=cast(UUID, msg.id),
+                agent_id=cast(UUID, msg.agent_id),
+                source=str(msg.source),
+                content=str(msg.content),
+                timestamp=datetime.fromtimestamp(
+                    msg.timestamp.timestamp(), timezone.utc
+                ),
+                feedback=[],  # Search results don't need feedback
+            )
+            for msg in messages
+        ]
