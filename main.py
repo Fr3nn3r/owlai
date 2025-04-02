@@ -20,9 +20,10 @@ import os
 import json
 import sys
 from fastapi.responses import StreamingResponse
+from typing import Optional
 
 from owlai.agent_manager import AgentManager
-from owlai.db import RAG_AGENTS_CONFIG, OWL_AGENTS_CONFIG
+from owlai.config import OWL_AGENTS_CONFIG
 from owlai.owlsys import is_dev
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,16 @@ class AgentInfo(BaseModel):
     name: str
     description: str
 
+    class Config:
+        orm_mode = True
+
 
 class ColorTheme(BaseModel):
     primary: str
     secondary: str
+
+    class Config:
+        orm_mode = True
 
 
 class AgentDetails(BaseModel):
@@ -48,16 +55,26 @@ class AgentDetails(BaseModel):
     color_theme: ColorTheme
     default_queries: List[str]
 
+    class Config:
+        orm_mode = True
+
 
 class AgentResponse(BaseModel):
     id: str
     name: str
     description: str
 
+    class Config:
+        orm_mode = True
+
 
 class QueryRequest(BaseModel):
     agent_id: str
     question: str
+    query_id: str
+
+    class Config:
+        orm_mode = True
 
 
 class QueryResponse(BaseModel):
@@ -77,7 +94,7 @@ async def lifespan(app: FastAPI):
     global agent_manager
     if agent_manager is None:
         agent_manager = AgentManager()
-        logging.info("AgentManager initialized successfully")
+        logger.info("AgentManager initialized successfully")
     yield
     # Shutdown
     agent_manager = None
@@ -102,22 +119,11 @@ app.add_middleware(
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
-
-def get_rag_agent_default_queries(agent_name: str) -> List[str]:
-    """Get default queries for a specific agent from RAG_AGENTS_CONFIG"""
-    from owlai.db import RAG_AGENTS_CONFIG
-
-    for config in RAG_AGENTS_CONFIG:
-        if config["name"] == agent_name:
-            return config.get("default_queries", [])
-    return []
-
-
 FRONTEND_AGENT_DATA = {
-    "rag-naruto-v1": {
+    "rag-naruto": {
         "name": "Kiyomi Uchiha",
         "description": "Ask me about Naruto (spoiler alert!)",
-        "default_queries": get_rag_agent_default_queries("rag-naruto-v1"),
+        "default_queries": OWL_AGENTS_CONFIG["rag-naruto"]["default_queries"],
         "image_url": "Kiyomi.jpg",
         "color_theme": {
             "primary": "#000000",
@@ -125,10 +131,32 @@ FRONTEND_AGENT_DATA = {
         },
         "welcome_title": "Fan of the anime series Naruto.",
     },
-    "rag-fr-general-law-v1": {
+    "rag-droit-fiscal": {
+        "name": "Marine",
+        "description": "Posez vos questions sur le droit fiscal",
+        "default_queries": OWL_AGENTS_CONFIG["rag-droit-fiscal"]["default_queries"],
+        "image_url": "Nathalie.jpg",
+        "color_theme": {
+            "primary": "#000000",
+            "secondary": "#FF0000",
+        },
+        "welcome_title": "Expert en droit fiscal",
+    },
+    "rag-droit-admin": {
+        "name": "Nathalie",
+        "description": "Posez vos questions sur le droit administratif",
+        "default_queries": OWL_AGENTS_CONFIG["rag-droit-admin"]["default_queries"],
+        "image_url": "Nathalie.jpg",
+        "color_theme": {
+            "primary": "#000000",
+            "secondary": "#FF0000",
+        },
+        "welcome_title": "Expert en droit administratif",
+    },
+    "fr-law-qna": {
         "name": "Marianne",
-        "description": "Une question générale sur le droit français ? (attention je ne retiens pas encore le contexte de la conversation)",
-        "default_queries": get_rag_agent_default_queries("rag-fr-general-law-v1"),
+        "description": "Une question sur le droit français ?",
+        "default_queries": OWL_AGENTS_CONFIG["fr-law-qna"]["default_queries"],
         "image_url": "Marianne.jpg",
         "color_theme": {
             "primary": "#0055A4",  # French blue
@@ -136,90 +164,44 @@ FRONTEND_AGENT_DATA = {
         },
         "welcome_title": "Experte en droit français",
     },
-    "rag-fr-tax-law-v1": {
-        "name": "Marine",
-        "description": "Une question sur le droit fiscal français ? (attention je ne retiens pas encore le contexte de la conversation)",
-        "default_queries": get_rag_agent_default_queries("rag-fr-tax-law-v1"),
-        "image_url": "Marine.jpg",
-        "color_theme": {
-            "primary": "#FFFFFF",  # White
-            "secondary": "#FF0000",  # Red
-        },
-        "welcome_title": "Experte en droit fiscal français",
-    },
-    "rag-fr-admin-law-v1": {
-        "name": "Nathalie",
-        "description": "Une question sur le droit administratif français ? (attention je ne retiens pas encore le contexte de la conversation)",
-        "default_queries": get_rag_agent_default_queries("rag-fr-admin-law-v1"),
-        "image_url": "Nathalie.jpg",
-        "color_theme": {
-            "primary": "#4A90E2",
-            "secondary": "#F5A623",
-        },
-        "welcome_title": "Experte en droit administratif français",
-    },
 }
-
-
-@app.get("/agents", response_model=List[AgentDetails])
-async def list_agents():
-    """Get list of available agents with their details"""
-    agent_names = agent_manager.get_agents_names()
-    agents = []
-
-    for agent_name in agent_names:
-        if agent_name in FRONTEND_AGENT_DATA:
-            agent_data = FRONTEND_AGENT_DATA[agent_name]
-            agents.append(
-                AgentDetails(
-                    id=agent_name,
-                    name=agent_data["name"],
-                    description=agent_data["description"],
-                    welcome_title=agent_data["welcome_title"],
-                    owl_image_url=f"/public/{agent_data['image_url']}",
-                    color_theme=ColorTheme(**agent_data["color_theme"]),
-                    default_queries=agent_data["default_queries"],
-                )
-            )
-
-    return agents
 
 
 @app.get("/agents/info", response_model=List[AgentInfo])
 async def get_agents_info():
     """Get detailed information about all agents"""
-    agent_names = agent_manager.get_agents_names()
+    agent_keys = agent_manager.get_agents_keys()
     return [
         AgentInfo(
-            name=FRONTEND_AGENT_DATA[agent_name]["name"],
-            description=FRONTEND_AGENT_DATA[agent_name]["description"],
+            name=FRONTEND_AGENT_DATA[agent_key]["name"],
+            description=FRONTEND_AGENT_DATA[agent_key]["description"],
         )
-        for agent_name in agent_names
-        if agent_name in FRONTEND_AGENT_DATA
+        for agent_key in agent_keys
+        if agent_key in FRONTEND_AGENT_DATA
     ]
 
 
 @app.post("/query", response_model=QueryResponse)
 async def query_agent(payload: QueryRequest):
     """Query an agent with a question"""
-    logging.info(
+    logger.info(
         f"Received query request from agent {payload.agent_id}: {payload.question}"
     )
 
     if payload.agent_id not in FRONTEND_AGENT_DATA:
-        logging.error(f"Agent {payload.agent_id} not found")
+        logger.error(f"Agent {payload.agent_id} not found")
         raise HTTPException(
             status_code=404, detail=f"Agent {payload.agent_id} not found"
         )
 
-    logging.info(f"Invoking agent: {payload.agent_id}")
+    logger.info(f"Invoking agent: {payload.agent_id}")
     response = agent_manager.invoke_agent(payload.agent_id, payload.question)
 
     if response is None:
-        logging.error(f"Failed to get response from agent {payload.agent_id}")
+        logger.error(f"Failed to get response from agent {payload.agent_id}")
         raise HTTPException(status_code=500, detail="Failed to get response from agent")
 
-    logging.info(f"Successfully got response from agent {payload.agent_id}")
+    logger.info(f"Successfully got response from agent {payload.agent_id}")
     return QueryResponse(
         agent_id=payload.agent_id, question=payload.question, answer=response
     )
@@ -252,16 +234,19 @@ async def get_default_queries(agent_id: str) -> List[str]:
     return FRONTEND_AGENT_DATA[agent_id]["default_queries"]
 
 
+queryid_to_messageid_map = {}
+
+
 @app.post("/stream-query")
 async def stream_query(payload: QueryRequest):
     """Stream a response from an agent"""
-    logging.info(
+    logger.info(
         f"Received streaming query request from agent {payload.agent_id}: {payload.question}"
     )
 
     # Verify agent exists
     if payload.agent_id not in FRONTEND_AGENT_DATA:
-        logging.error(f"Agent {payload.agent_id} not found")
+        logger.error(f"Agent {payload.agent_id} not found")
         raise HTTPException(
             status_code=404, detail=f"Agent {payload.agent_id} not found"
         )
@@ -276,11 +261,25 @@ async def stream_query(payload: QueryRequest):
 
             # Stream the response
             async for chunk in agent.stream_message(payload.question):
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
+                yield f"event: message\ndata: {json.dumps({'content': chunk})}\n\n"
+
+            # After streaming is complete, send the message ID
+            if agent._conversation_id and agent._memory:
+                message_id = agent._memory.get_last_message_id(agent._conversation_id)
+                logger.debug(f"Message ID: {message_id}")
+                if message_id:
+                    global queryid_to_messageid_map
+                    logger.debug(
+                        f"Mapping query_id {payload.query_id} to message_id {message_id}"
+                    )
+                    queryid_to_messageid_map[payload.query_id] = message_id
+                    yield f"event: complete\ndata: {json.dumps({'message_id': str(message_id)})}\n\n"
+            else:
+                raise Exception("No conversation ID or memory found for agent")
 
         except Exception as e:
-            logging.error(f"Error streaming response: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            logger.error(f"Error streaming response: {e}")
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -290,6 +289,257 @@ async def stream_query(payload: QueryRequest):
             "Connection": "keep-alive",
         },
     )
+
+
+##################################################################
+
+
+# Additional models for new features
+class FeedbackRequest(BaseModel):
+    query_id: str
+    agent_id: str
+    rating: int
+    comment: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
+class ContactFormRequest(BaseModel):
+    name: str
+    email: str
+    message: str
+
+    class Config:
+        orm_mode = True
+
+
+class DocumentChunk(BaseModel):
+    id: str
+    content: str
+    relevance_score: float
+    source: str
+
+    class Config:
+        orm_mode = True
+
+
+def map_agent_data(agent_name):
+    """Helper function to map agent data to AgentDetails model."""
+    agent_data = FRONTEND_AGENT_DATA[agent_name]
+    return AgentDetails(
+        id=agent_name,
+        name=agent_data["name"],
+        description=agent_data["description"],
+        welcome_title=agent_data["welcome_title"],
+        owl_image_url=f"/public/{agent_data['image_url']}",
+        color_theme=ColorTheme(**agent_data["color_theme"]),
+        default_queries=agent_data["default_queries"],
+    )
+
+
+@app.get("/agents", response_model=List[AgentDetails])
+async def list_agents():
+    """Get list of available agents with their details"""
+    # including only rag agents for backward compatibility
+    agent_names = [
+        name for name in agent_manager.get_agents_keys() if name.startswith("rag-")
+    ]
+    agents = [
+        map_agent_data(agent_name)
+        for agent_name in agent_names
+        if agent_name in FRONTEND_AGENT_DATA
+    ]
+    return agents
+
+
+@app.get("/default-agent", response_model=AgentDetails)
+def get_default_agent():
+    """Get the default agent for the single-agent page."""
+    agent_name = agent_manager.get_focus_owl().name
+    if not agent_name:
+        raise HTTPException(status_code=404, detail="No agents available")
+    return map_agent_data(agent_name)
+
+
+# Feedback system endpoints
+@app.post("/feedback")
+async def submit_feedback(feedback: FeedbackRequest):
+    """
+    Submit feedback for a query response.
+    Rating should be between 1 and 5.
+    """
+    logger.info(f"Received feedback request: {feedback.dict()}")
+    logger.debug(f"Current query_id mapping state: {queryid_to_messageid_map}")
+
+    if not 1 <= feedback.rating <= 5:
+        logger.warning(f"Invalid rating value: {feedback.rating}")
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+
+    # Get the message_id from the mapping
+    message_id = queryid_to_messageid_map.get(feedback.query_id)
+    if not message_id:
+        logger.error(
+            f"Query ID {feedback.query_id} not found in mapping. Available query IDs: {list(queryid_to_messageid_map.keys())}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Query ID not found. The message might have expired or was not properly saved.",
+        )
+
+    try:
+        # Store the feedback in the database
+        agent_manager.memory.log_feedback(
+            message_id=message_id, score=feedback.rating, comments=feedback.comment
+        )
+        logger.info(f"Feedback stored successfully for message {message_id}")
+        return {"status": "success", "message": "Feedback received"}
+    except Exception as e:
+        logger.error(f"Error storing feedback: {e}")
+        raise HTTPException(status_code=500, detail="Failed to store feedback")
+
+
+@app.post("/contact")
+async def submit_contact_form(contact: ContactFormRequest):
+    """Submit contact form feedback."""
+    logger.info(f"Received contact form submission from {contact.email}")
+    return {"status": "success", "message": "Contact form submitted"}
+
+
+# Document chunks visualization endpoint
+@app.get("/query/{query_id}/chunks")
+async def get_query_chunks(query_id: str):
+    """Get document chunks used to answer a specific query."""
+    # Mock response with sample chunks
+    chunks = [
+        DocumentChunk(
+            id="1",
+            content="This is a relevant document chunk...",
+            relevance_score=0.95,
+            source="document1.pdf",
+        ),
+        DocumentChunk(
+            id="2",
+            content="Another relevant piece of information...",
+            relevance_score=0.85,
+            source="document2.pdf",
+        ),
+    ]
+    return chunks
+
+
+# Enhanced logging endpoint
+@app.get("/query/{query_id}/logs")
+async def get_query_logs(query_id: str):
+    """Get detailed logs for a specific query (for development purposes)."""
+    # Mock response with sample logs
+    logs = {
+        "query_id": query_id,
+        "timestamp": "2024-04-02T10:00:00Z",
+        "processing_time": 1.5,
+        "llm_interactions": [
+            {
+                "timestamp": "2024-04-02T10:00:00Z",
+                "type": "prompt",
+                "content": "Sample prompt content",
+            },
+            {
+                "timestamp": "2024-04-02T10:00:01Z",
+                "type": "response",
+                "content": "Sample response content",
+            },
+        ],
+        "tool_invocations": [
+            {
+                "timestamp": "2024-04-02T10:00:00.5Z",
+                "tool": "document_search",
+                "parameters": {"query": "sample search"},
+                "result": "sample result",
+            }
+        ],
+    }
+    return logs
+
+
+# Version endpoint
+@app.get("/version")
+async def get_version():
+    """Get the current version of OwlAI."""
+    return {"version": "0.2.0"}
+
+
+@app.get("/feedback/all")
+async def get_all_feedback():
+    """Get all feedback entries with associated query information."""
+    # Mock feedback data for demonstration
+    mock_feedback = [
+        {
+            "query_id": "agent1-1",
+            "agent_id": "agent1",
+            "rating": 5,
+            "comment": "Very helpful and accurate response!",
+            "timestamp": "2024-04-02T10:00:00Z",
+            "query": "Can you explain what constitutes a valid civil contract in French law?",
+            "response": "A valid civil contract in French law requires four essential elements: consent (consentement), capacity (capacité), a defined object (objet), and a lawful cause (cause licite). The parties must give their free and informed consent, be legally capable of entering into contracts, agree on a specific and legal purpose, and have a legitimate reason for the contract. Additionally, certain contracts may require specific formalities, such as being in writing or notarized.",
+        },
+        {
+            "query_id": "agent2-1",
+            "agent_id": "agent2",
+            "rating": 2,
+            "comment": "The response was a bit confusing and could be more detailed.",
+            "timestamp": "2024-04-02T09:45:00Z",
+            "query": "What are the main elements of criminal liability in French law?",
+            "response": "Criminal liability in French law involves several elements. There needs to be a legal text defining the offense, and the person must have committed the act intentionally or through negligence.",
+        },
+        {
+            "query_id": "agent1-2",
+            "agent_id": "agent1",
+            "rating": 4,
+            "timestamp": "2024-04-02T09:30:00Z",
+            "query": "What are the basic property rights under French civil law?",
+            "response": "Under French civil law, property rights (droits réels) include: the right to use (usus), the right to enjoy benefits (fructus), and the right to dispose of property (abusus). These rights are protected by the Civil Code and can only be limited by law or contract. Property owners have extensive rights but must exercise them within legal boundaries and respect neighbors' rights.",
+        },
+        {
+            "query_id": "agent3-1",
+            "agent_id": "agent3",
+            "rating": 5,
+            "comment": "Perfect explanation, exactly what I needed!",
+            "timestamp": "2024-04-02T09:15:00Z",
+            "query": "What is the process for filing an administrative appeal?",
+            "response": "To file an administrative appeal in France, you must first identify whether you need a recours gracieux (appeal to the same authority) or recours hiérarchique (appeal to a higher authority). The appeal must be filed within 2 months of the decision. Include all relevant documents, clearly state your arguments, and keep proof of submission. The administration then has 2 months to respond, and silence is considered a rejection.",
+        },
+        {
+            "query_id": "agent2-2",
+            "agent_id": "agent2",
+            "rating": 1,
+            "comment": "The answer was not relevant to my question.",
+            "timestamp": "2024-04-02T09:00:00Z",
+            "query": "What constitutes legitimate self-defense under French penal law?",
+            "response": "Self-defense in French law requires proportionality between the threat and the response. The danger must be immediate and the response necessary.",
+        },
+    ]
+    return mock_feedback
+
+
+@app.get("/query/{query_id}")
+async def get_shared_query(query_id: str):
+    """
+    Retrieve a shared query and its response.
+    This is a mock implementation - in production, you would fetch this from your database.
+    """
+    # Mock data - replace with actual database query in production
+    mock_shared_queries = {
+        "example-query-1": {
+            "question": "What is artificial intelligence?",
+            "response": "Artificial Intelligence (AI) refers to the simulation of human intelligence in machines...",
+            "timestamp": "2024-03-20T10:30:00Z",
+        }
+    }
+
+    if query_id not in mock_shared_queries:
+        raise HTTPException(status_code=404, detail="Shared content not found")
+
+    return mock_shared_queries[query_id]
 
 
 def main():

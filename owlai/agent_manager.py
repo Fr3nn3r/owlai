@@ -91,6 +91,9 @@ class AgentManager:
     def get_agents_names(self) -> List[str]:
         return self.names
 
+    def get_agents_keys(self) -> List[str]:
+        return [key for key in OWL_AGENTS_CONFIG.keys()]
+
     def get_agents_info(self) -> List[str]:
         return [f"{agent.name}: {agent.description}" for agent in self.owls.values()]
 

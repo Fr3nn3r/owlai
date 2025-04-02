@@ -202,6 +202,19 @@ class Memory(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_last_message_id(self, conversation_id: UUID) -> Optional[UUID]:
+        """
+        Get the ID of the last message in a conversation.
+
+        Args:
+            conversation_id: ID of the conversation
+
+        Returns:
+            UUID of the last message or None if no messages exist
+        """
+        pass
+
 
 class SQLAlchemyMemory(Memory):
     """
@@ -447,3 +460,13 @@ class SQLAlchemyMemory(Memory):
             )
             for msg in messages
         ]
+
+    def get_last_message_id(self, conversation_id: UUID) -> Optional[UUID]:
+        stmt = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(desc(Message.timestamp))
+            .limit(1)
+        )
+        message = self.session.execute(stmt).scalar_one_or_none()
+        return cast(UUID, message.id) if message else None
