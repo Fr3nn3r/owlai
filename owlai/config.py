@@ -785,6 +785,49 @@ TOOLS_CONFIG = {
             },
         },
     },
+    "rag-naruto-v1": {
+        "name": "rag-naruto-v1",
+        "description": "Tool specialized in the anime naruto",
+        "args_schema": {
+            "title": "ToolInput",
+            "type": "object",
+            "properties": {
+                "query": {
+                    "title": "Query",
+                    "type": "string",
+                    "description": "Any question about the anime naruto expressed in english",
+                }
+            },
+            "required": ["query"],
+        },
+        "default_queries": [
+            "Who is Tsunade?",
+            "Tell me about Orochimaru's powers.",
+            "Who is the Hokage of Konoha?",
+            "Tell me about sasuke's personality",
+            "Who is the first sensei of naruto?",
+            "what happens to the Uchiha clan?",
+            "What is a sharingan?",
+            "What is the akatsuki?",
+            "Who is the first Hokage?",
+        ],
+        "retriever": {
+            "num_retrieved_docs": 30,
+            "num_docs_final": 5,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            "model_kwargs": {"device": device},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": enable_multi_process,
+            "datastore": {
+                "input_data_folder": "data/dataset-0001",  # Larger dataset
+                "parser": {
+                    "implementation": "FrenchLawParser",
+                    "output_data_folder": "data/dataset-0001",
+                },
+            },
+        },
+    },
     "tavily_search_results_json": {
         "max_results": 2,
     },
