@@ -351,9 +351,31 @@ FRENCH_LAW_QUESTIONS = {
 }
 
 
-_OWL_AGENTS_BASE_CONFIG = [
-    {
-        "name": "system-v0",
+_OWL_AGENTS_BASE_CONFIG = {
+    "fr-law-qna": {
+        "name": "fr-law-qna",
+        "version": "1.0",
+        "description": "Agent responsible for answering questions about french law",
+        "system_prompt": _PROMPT_CONFIG["qna-v4-fr"],
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 2048,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": [
+                "rag-fr-general-law-v1",
+                "rag-fr-tax-law-v1",
+                "rag-fr-admin-law-v1",
+            ],
+        },
+        "default_queries": FRENCH_LAW_QUESTIONS["general"]
+        + FRENCH_LAW_QUESTIONS["tax"]
+        + FRENCH_LAW_QUESTIONS["admin"],
+    },
+    "system": {
+        "name": "system",
+        "version": "1.0",
         "description": "Agent controlling the local system",
         "system_prompt": _PROMPT_CONFIG["system-v1"],
         "llm_config": {
@@ -377,8 +399,9 @@ _OWL_AGENTS_BASE_CONFIG = [
             "kill the notepad process",
         ],
     },
-    {
-        "name": "identification-v1",
+    "identification": {
+        "name": "identification",
+        "version": "1.0",
         "description": "Agent responsible for identifying the user",
         "system_prompt": _PROMPT_CONFIG["identification-v1"],
         "llm_config": {
@@ -405,8 +428,9 @@ _OWL_AGENTS_BASE_CONFIG = [
         ],
         "test_queries": [],
     },
-    {
-        "name": "welcome-v1",
+    "welcome": {
+        "name": "welcome",
+        "version": "1.0",
         "description": "Agent responsible for welcoming the user",
         "system_prompt": _PROMPT_CONFIG["welcome-v1"],
         "llm_config": {
@@ -432,30 +456,10 @@ _OWL_AGENTS_BASE_CONFIG = [
             "what is my favorite drink?",
         ],
     },
-    {
-        "name": "fr-law-qna-v1",
-        "description": "Agent responsible for answering questions about french law",
-        "system_prompt": _PROMPT_CONFIG["qna-v4-fr"],
-        "llm_config": {
-            "model_provider": "openai",
-            "model_name": "gpt-4o-mini",
-            "max_tokens": 2048,
-            "temperature": 0.1,
-            "context_size": 4096,
-            "tools_names": [
-                "rag-fr-general-law-v1",
-                "rag-fr-tax-law-v1",
-                "rag-fr-admin-law-v1",
-            ],
-        },
-        "default_queries": FRENCH_LAW_QUESTIONS["general"]
-        + FRENCH_LAW_QUESTIONS["tax"]
-        + FRENCH_LAW_QUESTIONS["admin"],
-    },
-]
+}
 
-
-_RAG_AGENTS_BASE_CONFIG = [
+# deprecated
+______RAG_AGENTS_BASE_CONFIG = [
     {
         "name": "rag-naruto-v1",
         "description": "Agent that knows everything about the anime series Naruto",
@@ -858,12 +862,12 @@ _OWL_AGENTS_CONFIG_ENV = {
 
 _RAG_AGENTS_CONFIG_ENV = {
     "development": [],
-    "production": _RAG_AGENTS_BASE_CONFIG,
+    "production": [],
 }
 
 # this is the hooks imported by consumers
 OWL_AGENTS_CONFIG = _OWL_AGENTS_CONFIG_ENV[env]
-RAG_AGENTS_CONFIG = _RAG_AGENTS_CONFIG_ENV[env]
+_____RAG_AGENTS_CONFIG = _RAG_AGENTS_CONFIG_ENV[env]
 
 TEST_QUERIES = {
     "test_queries": [
@@ -890,10 +894,3 @@ TEST_QUERIES = {
         "run the keyboard combination Ctlr + Win + -> ",
     ]
 }
-
-
-def _get_rag_agent_default_queries(agent_name: str):
-    for config in RAG_AGENTS_CONFIG:
-        if config["name"] == agent_name:
-            return config.get("default_queries", [])
-    return []

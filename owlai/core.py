@@ -28,8 +28,11 @@ from langchain_core.tools import BaseTool
 import logging.config
 import logging
 from pydantic import BaseModel, Field
+from uuid import UUID, uuid4
+from datetime import datetime, timezone
 
 from langchain.chat_models import init_chat_model
+from owlai.memory import Memory
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
@@ -83,6 +86,7 @@ class OwlAgent(BaseTool, BaseModel):
 
     # JSON defined properties
     name: str = "sad_unamed_owl_agent"
+    version: str
     description: str
     args_schema: Optional[ArgsSchema] = DefaultAgentInput
     llm_config: LLMConfig
@@ -98,6 +102,9 @@ class OwlAgent(BaseTool, BaseModel):
     _chat_model_cache: Any = None
     _tool_dict: Dict[str, BaseTool] = {}
     _message_history: List[BaseMessage] = []
+    _memory: Optional[Memory] = None
+    _agent_id: Optional[UUID] = None
+    _conversation_id: Optional[UUID] = None
 
     @property
     def chat_model(self) -> BaseChatModel:
@@ -134,6 +141,78 @@ class OwlAgent(BaseTool, BaseModel):
             logger.debug(f"Initialized tool: {tool.name} for agent {self.name}")
         return self._chat_model_cache
 
+    def init_memory(self, memory: Memory) -> None:
+        """Initialize the memory system for this agent.
+
+        Args:
+            memory (Memory): Memory implementation to use
+        """
+        self._memory = memory
+        # Register agent in memory system
+        self._agent_id = memory.get_or_create_agent(self.name, self.version)
+        logger.info(
+            f"Initialized memory for agent {self.name} with ID {self._agent_id}"
+        )
+
+    def _start_new_conversation(self) -> None:
+        """Start a new conversation in memory."""
+        if self._memory and self._agent_id:
+            self._conversation_id = self._memory.create_conversation(
+                f"Conversation with {self.name}"
+            )
+            logger.debug(f"Started new conversation {self._conversation_id}")
+
+    def append_message(self, message: BaseMessage) -> None:
+        """Append a message to history and memory.
+
+        Args:
+            message (BaseMessage): Message to append
+        """
+        if type(message) == AIMessage:
+            self.total_tokens = self._token_count(message)
+
+        # Handle FIFO mode for context window
+        if (self.total_tokens > self.llm_config.context_size) and (
+            not self.fifo_message_mode
+        ):
+            logger.warning(
+                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.llm_config.context_size}' -> activating FIFO message mode"
+            )
+            self.fifo_message_mode = True
+
+        if self.fifo_message_mode:
+            self._message_history.pop(1)  # Remove oldest message
+            if (
+                len(self._message_history) > 1
+                and self._message_history[1].type == "tool"
+            ):
+                self._message_history.pop(1)  # Remove tool message if any
+
+        # Add to message history
+        self._message_history.append(message)
+
+        # Log to memory if available
+        if self._memory and self._agent_id and self._conversation_id:
+            # Start new conversation if needed
+            if not self._conversation_id:
+                self._start_new_conversation()
+
+            # Map message types to sources
+            source_map = {
+                "human": "user",
+                "ai": "assistant",
+                "system": "system",
+                "tool": "tool",
+            }
+
+            # Log the message
+            self._memory.log_message(
+                agent_id=self._agent_id,
+                conversation_id=self._conversation_id,
+                source=source_map.get(message.type, "unknown"),
+                content=str(message.content),
+            )
+
     def _token_count(self, message: Union[AIMessage, BaseMessage]):
         """Count tokens in a message based on the model provider. Should get rid of model_provider dependend code ------------- should be a util function outside owlagent
 
@@ -167,30 +246,6 @@ class OwlAgent(BaseTool, BaseModel):
                 f"Token count unsupported for model provider: '{self.llm_config.model_provider}'"
             )
             return -1
-
-    def append_message(self, message: BaseMessage):
-        """Append a message to history with FIFO mode if context size is exceeded.
-
-        Args:
-            message (BaseMessage): Message to append
-        """
-        if type(message) == AIMessage:
-            self.total_tokens = self._token_count(message)
-        if (self.total_tokens > self.llm_config.context_size) and (
-            self.fifo_message_mode == False
-        ):
-            logger.warning(
-                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.llm_config.context_size}' -> activating FIFO message mode"
-            )
-            self.fifo_message_mode = True
-        if self.fifo_message_mode:
-            self._message_history.pop(1)  # Remove the oldest message
-            if (
-                self._message_history[1].type == "tool"
-            ):  # Remove the tool message if any
-                self._message_history.pop(1)
-
-        self._message_history.append(message)
 
     def _process_tool_calls(self, model_response: AIMessage) -> None:
         """Process tool calls from the model response and add results to chat history.
@@ -310,34 +365,39 @@ class OwlAgent(BaseTool, BaseModel):
             str: The model's response or error message
         """
         try:
-            # update system prompt with latestcontext
-            system_message = SystemMessage(f"{self.system_prompt}")
+            # Start new conversation if needed
+            if not self._conversation_id and self._memory:
+                self._start_new_conversation()
+
+            # Update system prompt
+            system_message = SystemMessage(content=self.system_prompt)
             if len(self._message_history) == 0:
                 self._message_history.append(system_message)
             else:
                 self._message_history[0] = system_message
 
-            self.append_message(HumanMessage(message))  # Add user message to history
-            response = self.chat_model.invoke(self._message_history)
-            self.append_message(response)  # Add model response to history
+            # Add user message
+            self.append_message(HumanMessage(content=message))
 
-            # Only process tool calls if response is AIMessage
+            # Get model response
+            response = self.chat_model.invoke(self._message_history)
+            self.append_message(response)
+
+            # Process tool calls if needed
             if isinstance(response, AIMessage):
                 self._process_tool_calls(response)
 
-                if (
-                    hasattr(response, "tool_calls") and response.tool_calls
-                ):  # If tools were called, invoke the model again
+                if hasattr(response, "tool_calls") and response.tool_calls:
                     response = self.chat_model.invoke(self._message_history)
-                    self.append_message(response)  # Add model response to history
+                    self.append_message(response)
 
                 self._total_tokens = self._token_count(response)
 
-            return str(response.content)  # Return the model response as string
+            return str(response.content)
 
         except Exception as e:
-            logger.error(f"Error invoking model '{self.llm_config.model_name}': '{e}'")
-            logger.error(f"Stack trace: '{traceback.format_exc()}'")
+            logger.error(f"Error invoking model '{self.llm_config.model_name}': {e}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
             return f"Error: {str(e)}"
 
     async def stream_message(self, message: str):
