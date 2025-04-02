@@ -182,11 +182,13 @@ class OwlAgent(BaseTool, BaseModel):
 
         if self.fifo_message_mode:
             self._message_history.pop(1)  # Remove oldest message
+            logger.warning(f"Message popped")
             if (
                 len(self._message_history) > 1
                 and self._message_history[1].type == "tool"
             ):
                 self._message_history.pop(1)  # Remove tool message if any
+                logger.warning(f"Tool message popped")
 
         # Add to message history
         self._message_history.append(message)

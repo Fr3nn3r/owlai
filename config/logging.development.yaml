@@ -56,7 +56,7 @@ loggers:
   main:
     level: DEBUG
     handlers: [console, file, error_file]
-    propagate: true
+    propagate: false
 
   access:
     level: INFO
