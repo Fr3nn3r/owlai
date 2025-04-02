@@ -10,7 +10,7 @@ formatters:
     datefmt: '%Y-%m-%d %H:%M:%S UTC'
   stdout:
     (): colorlog.ColoredFormatter
-    format: "%(log_color)s[%(filename)s:%(lineno)d] %(levelname)s | %(message)s"
+    format: "%(log_color)s(%(name)s)[%(filename)s:%(lineno)d] %(levelname)s | %(message)s"
     log_colors:
       DEBUG: "cyan"
       INFO: "green"

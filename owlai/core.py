@@ -229,7 +229,7 @@ class OwlAgent(BaseTool, BaseModel):
             self.llm_config.model_provider == "openai"
             or self.llm_config.model_provider == "mistralai"
         ):
-            return metadata["token_usage"]["total_tokens"]
+            return metadata.get("token_usage", {}).get("total_tokens", 0)
         elif self.llm_config.model_provider == "anthropic":
             anthropic_total_tokens = (
                 metadata["usage"]["input_tokens"] + metadata["usage"]["output_tokens"]
@@ -385,7 +385,7 @@ class OwlAgent(BaseTool, BaseModel):
                     response = self.chat_model.invoke(self._message_history)
                     self.append_message(response)
 
-                self._total_tokens = self._token_count(response)
+                # self._total_tokens = self._token_count(response)
 
             return str(response.content)
 
@@ -405,6 +405,10 @@ class OwlAgent(BaseTool, BaseModel):
         """
         try:
             logger.info(f"Streaming message for agent {self.name}")
+            # Start new conversation if needed
+            if not self._conversation_id and self._memory:
+                self._start_new_conversation()
+
             # update system prompt with latestcontext
             system_message = SystemMessage(f"{self.system_prompt}")
             if len(self._message_history) == 0:
@@ -412,15 +416,10 @@ class OwlAgent(BaseTool, BaseModel):
             else:
                 self._message_history[0] = system_message
 
-            self.append_message(HumanMessage(message))  # Add user message to history
+            self.append_message(HumanMessage(message))
 
-            # Stream the response
-            async for chunk in self.chat_model.astream(self._message_history):
-                if chunk.content:
-                    yield chunk.content
-
-            # Get the final response for history and tool processing
             response = self.chat_model.invoke(self._message_history)
+
             self.append_message(response)
 
             # Process tool calls if needed
@@ -428,8 +427,21 @@ class OwlAgent(BaseTool, BaseModel):
                 self._process_tool_calls(response)
                 if hasattr(response, "tool_calls") and response.tool_calls:
                     response = self.chat_model.invoke(self._message_history)
-                    self.append_message(response)
-                self._total_tokens = self._token_count(response)
+
+                    # Stream the response
+                    complete_response = []
+
+                    async for chunk in self.chat_model.astream(self._message_history):
+                        if chunk.content:
+                            complete_response.append(chunk.content)
+                            yield chunk.content
+
+                    final_response = "".join(complete_response)
+                    final_message = AIMessage(content=final_response)
+                    self.append_message(final_message)
+                    # self._total_tokens = self._token_count(final_message)
+                # self._total_tokens = self._token_count(response)
+            logger.info(f"Streaming message for agent {self.name} completed")
 
         except Exception as e:
             logger.error(
