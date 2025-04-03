@@ -215,6 +215,18 @@ class Memory(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_preceding_tool_message(self, message_id: UUID) -> Optional[MessageDict]:
+        """Get the tool message that precedes a given message in the same conversation.
+
+        Args:
+            message_id: ID of the message to find the preceding tool message for
+
+        Returns:
+            The preceding tool message if found, None otherwise
+        """
+        pass
+
 
 class SQLAlchemyMemory(Memory):
     """
@@ -470,3 +482,40 @@ class SQLAlchemyMemory(Memory):
         )
         message = self.session.execute(stmt).scalar_one_or_none()
         return cast(UUID, message.id) if message else None
+
+    def get_preceding_tool_message(self, message_id: UUID) -> Optional[MessageDict]:
+        # First get the target message to find its conversation
+        target_msg = self.session.execute(
+            select(Message).where(Message.id == message_id)
+        ).scalar_one_or_none()
+
+        if not target_msg:
+            return None
+
+        # Now get the preceding tool message in the same conversation
+        query = (
+            select(Message)
+            .where(Message.conversation_id == target_msg.conversation_id)
+            .where(Message.source == "tool")
+            .where(Message.timestamp < target_msg.timestamp)
+            .order_by(desc(Message.timestamp))
+            .limit(1)
+        )
+        message = self.session.execute(query).scalar_one_or_none()
+        if message:
+            return MessageDict(
+                id=cast(UUID, message.id),
+                agent_id=cast(UUID, message.agent_id),
+                source=str(message.source),
+                content=str(message.content),
+                timestamp=datetime.fromtimestamp(
+                    message.timestamp.timestamp(), timezone.utc
+                ),
+                metadata=(
+                    json.loads(str(message.message_metadata))
+                    if message.message_metadata
+                    else None
+                ),
+                feedback=[],
+            )
+        return None

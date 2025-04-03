@@ -7,6 +7,7 @@ OwlAI main entry point
 
 import logging
 import logging.config
+from torch import chunk
 import yaml
 from typing import List
 from fastapi import FastAPI, HTTPException
@@ -35,7 +36,7 @@ class AgentInfo(BaseModel):
     description: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ColorTheme(BaseModel):
@@ -43,7 +44,7 @@ class ColorTheme(BaseModel):
     secondary: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class AgentDetails(BaseModel):
@@ -56,7 +57,7 @@ class AgentDetails(BaseModel):
     default_queries: List[str]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class AgentResponse(BaseModel):
@@ -65,7 +66,7 @@ class AgentResponse(BaseModel):
     description: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class QueryRequest(BaseModel):
@@ -74,7 +75,7 @@ class QueryRequest(BaseModel):
     query_id: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class QueryResponse(BaseModel):
@@ -302,7 +303,7 @@ class FeedbackRequest(BaseModel):
     comment: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ContactFormRequest(BaseModel):
@@ -311,17 +312,17 @@ class ContactFormRequest(BaseModel):
     message: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentChunk(BaseModel):
     id: str
     content: str
-    relevance_score: float
     source: str
+    relevance_score: float
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 def map_agent_data(agent_name):
@@ -410,21 +411,62 @@ async def submit_contact_form(contact: ContactFormRequest):
 @app.get("/query/{query_id}/chunks")
 async def get_query_chunks(query_id: str):
     """Get document chunks used to answer a specific query."""
-    # Mock response with sample chunks
-    chunks = [
-        DocumentChunk(
-            id="1",
-            content="This is a relevant document chunk...",
-            relevance_score=0.95,
-            source="document1.pdf",
-        ),
-        DocumentChunk(
-            id="2",
-            content="Another relevant piece of information...",
-            relevance_score=0.85,
-            source="document2.pdf",
-        ),
-    ]
+    logger.info(f"Getting chunks for query {query_id}")
+
+    # Get message_id from mapping
+    message_id = queryid_to_messageid_map.get(query_id)
+    if not message_id:
+        logger.error(f"Query ID {query_id} not found in mapping")
+        raise HTTPException(
+            status_code=404,
+            detail="Query ID not found. The message might have expired or was not properly saved.",
+        )
+
+    # Get the preceding tool message
+    tool_message = agent_manager.memory.get_preceding_tool_message(message_id)
+    if not tool_message:
+        logger.error(f"No tool message found for message {message_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="No source documents found for this query.",
+        )
+
+    # Parse the content into chunks
+    chunks = []
+    content = tool_message["content"]
+
+    # Split content into numbered sections
+    import re
+
+    # Split by numbered sections
+    sections = re.split(r"(?=\d+\.\s*\[Source :)", content.strip())
+
+    for section in sections:
+        if not section.strip():
+            continue
+
+        # Extract source and content using regex
+        match = re.match(r"\d+\.\s*\[Source : (.*?)\](.*)", section, re.DOTALL)
+        if match:
+            source = match.group(1).strip()
+            content = match.group(2).strip()
+            # logger.debug(f"Source: {source}, Content: {content}")
+            chunks.append(
+                DocumentChunk(
+                    id=source,  # The name from [Source : XYZ]
+                    content=content,  # The actual content after brackets
+                    source=source,  # The file name (same as source)
+                    relevance_score=1.0,  # Default relevance score
+                )
+            )
+
+    if not chunks:
+        logger.error(f"No valid chunks found in tool message content: {content}")
+        raise HTTPException(
+            status_code=404,
+            detail="Failed to parse source documents for this query.",
+        )
+
     return chunks
 
 
