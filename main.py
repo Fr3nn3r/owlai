@@ -157,14 +157,14 @@ FRONTEND_AGENT_DATA = {
     },
     "fr-law-qna": {
         "name": "Marianne",
-        "description": "Une question sur le droit français ?",
+        "description": "Je réponds à vos questions sur le droit français, droit pénal, droit civil, droit fiscal, et droit administratif. Je suis open source et 100% gratuite mais pas encore tout à fait au point... Mon but est de m'améliorer alors laissez-moi vos commentaires! Je retiens le contexte de vos conversations (dans une certaine limite) n'hésitez pas à me demander d'approfondir certains points.",
         "default_queries": OWL_AGENTS_CONFIG["fr-law-qna"]["default_queries"],
         "image_url": "Marianne.jpg",
         "color_theme": {
             "primary": "#0055A4",  # French blue
             "secondary": "#FFFFFF",  # White
         },
-        "welcome_title": "Experte en droit français",
+        "welcome_title": "Bonjour! Je suis Marianne, une intelligence artificielle 100% française",
     },
 }
 
@@ -426,12 +426,8 @@ async def get_query_chunks(query_id: str):
     # Get the preceding tool message
     tool_message = agent_manager.memory.get_preceding_tool_message(message_id)
     if not tool_message:
-        logger.error(f"No tool message found for message {message_id}")
-        raise HTTPException(
-            status_code=404,
-            detail="No source documents found for this query.",
-        )
-
+        logger.debug(f"No tool message found for message {message_id}")
+        return []
     # Parse the content into chunks
     chunks = []
     content = tool_message["content"]

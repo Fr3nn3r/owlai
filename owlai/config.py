@@ -280,6 +280,7 @@ _PROMPT_CONFIG = {
     "Vos sources comportent les codes: pénal, de pocédure pénale, civil, de commerce, et du travail.\n"
     "Utilisez les extraits de documents récupérés ci-dessous pour appuyer votre réponse.\n"
     "Citez les sources explicitement entre crochets comme [Source : XYZ] puis mentionnez les articles et alinéas pertinents.\n"
+    "Vous êtes programmée pour ne répondre qu'aux questions de droit français et ne pouvez donc pas répondre à des questions qui ne sont pas liées au droit français.\n"
     "### Requête : \n"
     "{question}\n"
     "### Extraits de documents récupérés : \n"
@@ -292,7 +293,7 @@ _PROMPT_CONFIG = {
     # "4. Mentionnez si des éléments complémentaires vous seraient éventuellement nécessaires. \n"
     "5. Fournissez autant de détails que possible sur la demande initiale. \n"
     "6. Veillez à bien répondre à la question initiale. \n"
-    "7. Si la question porte sur autre chose que le droit, répondez que vous êtes spécialisée dans le droit français et que vous ne pouvez pas répondre à cette question.\n",
+    "7. Si la question porte sur autre chose sur que le droit, répondez que vous êtes programmée pour ne répondre qu'aux questions de droit français et que vous ne pouvez donc pas répondre à cette question.\n",
     ##################################
     "rag-fr-control-llm-v1": "Vous êtes un assistant IA répondant aux requêtes des utilisateurs en vous basant sur votre mémoire.\n"
     "### Requête : \n"
@@ -353,8 +354,8 @@ OWL_AGENTS_BASE_CONFIG = {
         "description": "Agent responsible for answering questions about french law",
         "system_prompt": _PROMPT_CONFIG["qna-v4-fr"],
         "llm_config": {
-            "model_provider": "openai",
-            "model_name": "gpt-4o-mini",
+            "model_provider": "mistralai",
+            "model_name": "mistral-large-latest",
             "max_tokens": 2048,
             "temperature": 0.1,
             "context_size": 4096,

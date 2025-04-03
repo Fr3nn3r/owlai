@@ -169,7 +169,7 @@ class OwlAgent(BaseTool, BaseModel):
             message (BaseMessage): Message to append
         """
         if type(message) == AIMessage:
-            self.total_tokens += self._token_count(message)
+            self.total_tokens = self._token_count(message)
             logger.debug(f"Total tokens: {self.total_tokens} for agent '{id(self)}'")
 
         # Handle FIFO mode to manage context window
@@ -439,6 +439,8 @@ class OwlAgent(BaseTool, BaseModel):
 
             self.append_message(response)
 
+            logger.debug(f"WTF {response.content}")
+
             # Process tool calls if needed
             if isinstance(response, AIMessage):
                 self._process_tool_calls(response)
@@ -456,8 +458,12 @@ class OwlAgent(BaseTool, BaseModel):
                     final_response = "".join(complete_response)
                     final_message = AIMessage(content=final_response)
                     self.append_message(final_message)
-                    # self._total_tokens = self._token_count(final_message)
-                # self._total_tokens = self._token_count(response)
+
+                else:
+                    yield response.content
+            else:
+                raise Exception("Invalid response from model")
+
             logger.info(f"Streaming message for agent {self.name} completed")
 
         except Exception as e:
