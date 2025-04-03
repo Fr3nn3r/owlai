@@ -1,8 +1,11 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from logging import Logger
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+import asyncio
+import time
+from datetime import datetime, timedelta
 
 from owlai.rag import RAGAgent
 from owlai.core import OwlAgent
@@ -29,16 +32,45 @@ logger: Logger = logging.getLogger(__name__)
 class AgentManager:
     """OwlAI agent manager"""
 
+    INACTIVE_TIMEOUT = 30 * 60  # 30 minutes in seconds
+    CLEANUP_INTERVAL = 300  # 5 minutes in seconds
+
     focus_agent: OwlAgent
     _initialized = False
 
     def __init__(self):
+        self.active_agents: Dict[str, OwlAgent] = {}
+        self.inactive_agents: Dict[str, OwlAgent] = {}
+        self.last_used: Dict[str, float] = {}
         self.owls: Dict[str, OwlAgent] = {}
         self.names: List[str] = []
         self.toolbox = ToolBox()
         self.db_session = Session()
         self.memory = SQLAlchemyMemory(self.db_session)
         self._lazy_init()
+        self._start_cleanup_task()
+        logger.info("AgentManager initialized with active/inactive agent management")
+
+    def initialize_agent(self, agent_key: str) -> Optional[OwlAgent]:
+        """Initialize a new agent with the given configuration key.
+
+        Args:
+            agent_key: The configuration key for the agent
+
+        Returns:
+            Initialized OwlAgent or None if initialization fails
+        """
+        try:
+            agent: OwlAgent = OwlAgent(**OWL_AGENTS_CONFIG[agent_key])
+            agent.init_callable_tools(
+                self.toolbox.get_tools(agent.llm_config.tools_names)
+            )
+            agent.init_memory(self.memory)
+            logger.debug(f"Initialized Owl agent: {agent.name}")
+            return agent
+        except ValidationError as e:
+            logger.error(f"Failed to initialize Owl agent {agent_key}: {e}")
+            return None
 
     def _lazy_init(self):
         """Lazy initialization of agents to prevent module reloading"""
@@ -46,18 +78,11 @@ class AgentManager:
             return
 
         # Initialize Owl agents
-        for iagent_key in OWL_AGENTS_CONFIG.keys():
-            try:
-                agent: OwlAgent = OwlAgent(**OWL_AGENTS_CONFIG[iagent_key])
-                agent.init_callable_tools(
-                    self.toolbox.get_tools(agent.llm_config.tools_names)
-                )
-                agent.init_memory(self.memory)
+        for agent_key in OWL_AGENTS_CONFIG.keys():
+            agent = self.initialize_agent(agent_key)
+            if agent:
                 self.owls[agent.name] = agent
                 self.names.append(agent.name)
-                logger.debug(f"Initialized Owl agent: {agent.name}")
-            except ValidationError as e:
-                logger.error(f"Failed to initialize Owl agent {iagent_key}: {e}")
 
         if not self.names:
             raise RuntimeError("No agents were successfully initialized")
@@ -69,6 +94,88 @@ class AgentManager:
     def get_focus_owl(self) -> OwlAgent:
         logger.debug(f"Focus agent: {self.focus_agent.name}")
         return self.focus_agent
+
+    def _start_cleanup_task(self):
+        """Start the background task for cleaning up inactive agents."""
+
+        async def cleanup_loop():
+            while True:
+                try:
+                    await self._cleanup_inactive_agents()
+                    await asyncio.sleep(self.CLEANUP_INTERVAL)
+                except Exception as e:
+                    logger.error(f"Error in cleanup loop: {e}")
+                    await asyncio.sleep(self.CLEANUP_INTERVAL)
+
+        asyncio.create_task(cleanup_loop())
+        logger.debug("Started background cleanup task")
+
+    async def _cleanup_inactive_agents(self):
+        """Clean up inactive agents that haven't been used for a while."""
+        current_time = time.time()
+        to_remove = []
+
+        for session_id, agent in self.inactive_agents.items():
+            if current_time - self.last_used.get(session_id, 0) > self.INACTIVE_TIMEOUT:
+                to_remove.append(session_id)
+                logger.debug(f"Marking inactive agent for cleanup: {session_id}")
+
+        for session_id in to_remove:
+            del self.inactive_agents[session_id]
+            del self.last_used[session_id]
+            logger.info(f"Cleaned up inactive agent: {session_id}")
+
+    def get_agent(self, session_id: str, agent_key: str) -> OwlAgent:
+        """Get an agent by session ID. If the agent doesn't exist, create it."""
+        current_time = time.time()
+
+        # Check active agents first
+        if session_id in self.active_agents:
+            self.last_used[session_id] = current_time
+            return self.active_agents[session_id]
+
+        # Check inactive agents
+        if session_id in self.inactive_agents:
+            logger.debug(f"Reactivating inactive agent: {session_id}")
+            agent = self.inactive_agents.pop(session_id)
+            self.active_agents[session_id] = agent
+            self.last_used[session_id] = current_time
+            agent.reset_message_history()
+            return agent
+
+        # Create new agent if not found
+        logger.debug(f"Creating new agent for session: {session_id}")
+        agent = self.initialize_agent(agent_key)
+        if not agent:
+            raise RuntimeError(f"Failed to initialize agent {agent_key}")
+
+        self.active_agents[session_id] = agent
+        self.last_used[session_id] = current_time
+        return agent
+
+    def mark_inactive(self, session_id: str):
+        """Mark an agent as inactive and move it to the inactive pool."""
+        if session_id in self.active_agents:
+            logger.debug(f"Moving agent to inactive pool: {session_id}")
+            agent = self.active_agents.pop(session_id)
+            self.inactive_agents[session_id] = agent
+            self.last_used[session_id] = time.time()
+
+    def get_active_count(self) -> int:
+        """Get the number of currently active agents."""
+        return len(self.active_agents)
+
+    def get_inactive_count(self) -> int:
+        """Get the number of currently inactive agents."""
+        return len(self.inactive_agents)
+
+    def get_agent_status(self, session_id: str) -> str:
+        """Get the status of an agent (active/inactive/not found)."""
+        if session_id in self.active_agents:
+            return "active"
+        if session_id in self.inactive_agents:
+            return "inactive"
+        return "not found"
 
     def get_default_queries(self) -> List[str]:
         if self.focus_agent.default_queries is None:

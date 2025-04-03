@@ -169,26 +169,41 @@ class OwlAgent(BaseTool, BaseModel):
             message (BaseMessage): Message to append
         """
         if type(message) == AIMessage:
-            self.total_tokens = self._token_count(message)
+            self.total_tokens += self._token_count(message)
+            logger.debug(f"Total tokens: {self.total_tokens} for agent '{id(self)}'")
 
-        # Handle FIFO mode for context window
-        if (self.total_tokens > self.llm_config.context_size) and (
+        # Handle FIFO mode to manage context window
+        if (
             not self.fifo_message_mode
+            and self.total_tokens > self.llm_config.context_size
         ):
             logger.warning(
-                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.llm_config.context_size}' -> activating FIFO message mode"
+                f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.llm_config.context_size}'; activating FIFO message mode."
             )
             self.fifo_message_mode = True
 
-        if self.fifo_message_mode:
-            self._message_history.pop(1)  # Remove oldest message
-            logger.warning(f"Message popped")
+        if self.fifo_message_mode and self.total_tokens > self.llm_config.context_size:
+            # Remove the oldest message
+            removed = self._message_history.pop(1)
+            self.total_tokens -= self._token_count(removed)
+            logger.warning("Oldest message removed from history.")
+
+            # Remove tool message if present as the next message
             if (
                 len(self._message_history) > 1
                 and self._message_history[1].type == "tool"
             ):
-                self._message_history.pop(1)  # Remove tool message if any
-                logger.warning(f"Tool message popped")
+                removed = self._message_history.pop(1)
+                self.total_tokens -= self._token_count(removed)
+                logger.warning("Tool message removed from history.")
+
+            def print_message_type_history():
+                for message in self._message_history:
+                    logger.info(f"Message type: {message.type}")
+
+            print_message_type_history()
+        else:
+            self.fifo_message_mode = False
 
         # Add to message history
         self._message_history.append(message)

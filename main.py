@@ -73,6 +73,7 @@ class QueryRequest(BaseModel):
     agent_id: str
     question: str
     query_id: str
+    session_id: str
 
     class Config:
         from_attributes = True
@@ -256,7 +257,7 @@ async def stream_query(payload: QueryRequest):
         try:
             logger.info(f"Streaming query for agent {payload.agent_id}")
             # Get the agent instance
-            agent = agent_manager.owls[payload.agent_id]
+            agent = agent_manager.get_agent(payload.session_id, "fr-law-qna")
 
             logger.info(f"Agent {payload.agent_id} found")
 
