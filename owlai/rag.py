@@ -22,12 +22,6 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from sentence_transformers.util import fullname
-from transformers import AutoTokenizer
-import matplotlib.pyplot as plt
-import pandas as pd
 import warnings
 from tqdm import tqdm
 import fitz
@@ -303,7 +297,7 @@ class RAGTool(BaseTool):
         return answer.get("answer", "?????")
 
 
-class RAGAgent(OwlAgent, RAGTool):
+class _RAGAgent(OwlAgent, RAGTool):
     """
     RAG Agent implementation that extends OwlAgent with RAG capabilities
     (now direct tool invocation is preferred for performance reasons)

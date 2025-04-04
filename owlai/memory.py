@@ -1,5 +1,5 @@
 """
-Memory interface for OwlAI agents to store and retrieve conversations and interactions.
+Memory interface for OwlAI agents to store and retrieve conversations and interactions in database
 """
 
 from abc import ABC, abstractmethod

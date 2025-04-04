@@ -193,4 +193,3 @@ is_dev = env == "development"
 is_test = env == "test"
 
 logger.info(f"System initialized for '{env}' environment, CUDA device: '{device}'")
-print(f"System initialized for '{env}' environment, CUDA device: '{device}'")
