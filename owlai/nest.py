@@ -77,7 +77,7 @@ class AgentManager:
                 self.toolbox.get_tools(agent.llm_config.tools_names)
             )
             agent.init_memory(self.memory)
-            logger.debug(f"Initialized Owl agent: {agent.name}")
+            logger.info(f"Initialized Owl agent: {agent.name}")
             return agent
         except ValidationError as e:
             logger.error(f"Failed to initialize Owl agent {agent_key}: {e}")

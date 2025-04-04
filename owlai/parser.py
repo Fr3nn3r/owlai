@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 # Fix fitz import to resolve type checking issues
 try:
-    from fitz import Document as PyMuPDFDocument, Page as PyMuPDFPage
+    from fitz import Document as PyMuPDFDocument, Page as PyMuPDFPage, open as fitz_open
 
     # Type aliases for type checking
     Document = PyMuPDFDocument  # type: ignore[assignment]
@@ -79,7 +79,7 @@ class DefaultParser(BaseModel):
     """
 
     implementation: str = "DefaultParser"
-    output_data_folder: str = "data/dataset-0001"
+    output_data_folder: str = os.path.normpath("data/dataset-0001")
     chunk_size: float = 512
     chunk_overlap: float = 50
     add_start_index: bool = True
@@ -264,34 +264,35 @@ class DefaultParser(BaseModel):
         # Convert to LangchainDocuments
         total_pages = metadata.get("num_pages", 0)
         loaded_docs: List[LangchainDocument] = []
-        with track_time(f"Loading document: '{filename}'"):
-            for page_number, doc in tqdm(
-                enumerate(docs),
-                total=total_pages,
-                desc=f"Loading pages from {filename}",
-            ):
-                try:
-                    # Ensure the text is properly encoded
-                    doc_content = doc.page_content.encode(
-                        "utf-8", errors="replace"
-                    ).decode("utf-8")
-                    metadata.update(doc.metadata)
-                    metadata["source"] = f"{filename}:{page_number}"
+        logger.debug(f"Loading document: '{filename}'")
 
-                    # Call document curator if provided
-                    if document_curator:
-                        doc_content = document_curator(doc_content, filepath)
+        for page_number, doc in tqdm(
+            enumerate(docs),
+            total=total_pages,
+            desc=f"Loading pages from {filename}",
+        ):
+            try:
+                # Ensure the text is properly encoded
+                doc_content = doc.page_content.encode("utf-8", errors="replace").decode(
+                    "utf-8"
+                )
+                metadata.update(doc.metadata)
+                metadata["source"] = f"{filename}:{page_number}"
 
-                    loaded_docs.append(
-                        LangchainDocument(
-                            page_content=doc_content,
-                            metadata=metadata,
-                        )
+                # Call document curator if provided
+                if document_curator:
+                    doc_content = document_curator(doc_content, filepath)
+
+                loaded_docs.append(
+                    LangchainDocument(
+                        page_content=doc_content,
+                        metadata=metadata,
                     )
-                except Exception as e:
-                    logger.error(f"Error processing page {page_number}: {str(e)}")
-                    logger.error(f"Error details: {traceback.format_exc()}")
-                    continue
+                )
+            except Exception as e:
+                logger.error(f"Error processing page {page_number}: {str(e)}")
+                logger.error(f"Error details: {traceback.format_exc()}")
+                continue
 
         # Split documents
         split_docs = self._split_documents(
@@ -345,16 +346,18 @@ class DefaultParser(BaseModel):
         # Analyze token lengths
         lengths = [len(tokenizer.encode(doc.page_content)) for doc in docs]
         total_tokens = sum(lengths)
-        logger.info(f"Total token count in documents: {total_tokens}")
+        logger.debug(f"Total token count in documents: {total_tokens}")
 
         fig = pd.Series(lengths).hist()
         plt.title(
             f"Chunk lengths [tokens] for {source_doc_filename} total tokens: {total_tokens}"
         )
         # Create a path for saving visualization images
-        file_dir = os.path.join(self.output_data_folder, self._image_folder)
-        file_path = os.path.join(
-            file_dir, f"chunk_size_distribution-{source_doc_filename}.png"
+        file_dir = os.path.normpath(
+            os.path.join(self.output_data_folder, self._image_folder)
+        )
+        file_path = os.path.normpath(
+            os.path.join(file_dir, f"chunk_size_distribution-{source_doc_filename}.png")
         )
         os.makedirs(file_dir, exist_ok=True)
         plt.savefig(file_path)
@@ -450,7 +453,7 @@ class FrenchLawParser(DefaultParser):
         logger.debug(f"Loading French law PDF from: {pdf_path}")
 
         # Open document with proper type handling
-        doc: Document = fitz.open(pdf_path)  # type: ignore[assignment]
+        doc: Document = fitz_open(pdf_path)  # type: ignore[assignment]
 
         if not doc or doc is None:
             raise ValueError(f"Failed to load document from {pdf_path}")
@@ -528,36 +531,40 @@ class FrenchLawParser(DefaultParser):
         ]
         # Analyze document chunks before splitting
 
-        with track_time("Splitting documents"):
-            text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-                tokenizer,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,  # The number of characters to overlap between chunks
-                add_start_index=True,  # If `True`, includes chunk's start index in metadata
-                strip_whitespace=True,  # If `True`, strips whitespace from the start and end of every document
-                separators=separators,
-                is_separator_regex=True,
-            )
+        logger.debug("Splitting documents")
+        text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+            tokenizer,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,  # The number of characters to overlap between chunks
+            add_start_index=True,  # If `True`, includes chunk's start index in metadata
+            strip_whitespace=True,  # If `True`, strips whitespace from the start and end of every document
+            separators=separators,
+            is_separator_regex=True,
+        )
 
-            def count_tokens(text: str) -> int:
-                return len(tokenizer.encode(text))
+        def count_tokens(text: str) -> int:
+            return len(tokenizer.encode(text))
 
-            docs_processed: List[LangchainDocument] = []
+        docs_processed: List[LangchainDocument] = []
 
-            docs_processed = text_splitter.split_documents(loaded_docs)
+        docs_processed = text_splitter.split_documents(loaded_docs)
 
-            unique_texts = {}
-            docs_processed_unique = []
-            for idoc in docs_processed:
-                if idoc.page_content not in unique_texts:
-                    unique_texts[idoc.page_content] = True
-                    metadata_update = idoc.metadata.copy()
-                    metadata_update["token_count"] = count_tokens(idoc.page_content)
-                    docs_processed_unique.append(
-                        LangchainDocument(
-                            page_content=idoc.page_content, metadata=metadata_update
-                        )
+        logger.debug("Document split, creating langchain documents")
+
+        unique_texts = {}
+        docs_processed_unique = []
+        for idoc in docs_processed:
+            if idoc.page_content not in unique_texts:
+                unique_texts[idoc.page_content] = True
+                metadata_update = idoc.metadata.copy()
+                metadata_update["token_count"] = count_tokens(idoc.page_content)
+                docs_processed_unique.append(
+                    LangchainDocument(
+                        page_content=idoc.page_content, metadata=metadata_update
                     )
+                )
+
+        logger.debug("Langchain documents created, parsing completed")
 
         return docs_processed_unique
 
@@ -572,6 +579,7 @@ class FrenchLawParser(DefaultParser):
 
         loaded_docs = self.load_fr_law_pdf(filepath)
 
+        logger.debug("Document loaded, analyzing chunk size distribution")
         self.analyze_chunk_size_distribution(
             "pre-split-" + filename,
             loaded_docs,
@@ -580,13 +588,16 @@ class FrenchLawParser(DefaultParser):
 
         parsed_docs = self.parse_fr_law_docs(loaded_docs)
 
+        logger.debug("Documents parsed, analyzing chunk size distribution")
         self.analyze_chunk_size_distribution(
             "post-split-" + filename,
             parsed_docs,
             model_name,
         )
 
-        logger.info(f"Vector store contains {len(parsed_docs)} chunks")
+        logger.debug(
+            f"Document contains {len(parsed_docs)} chunks to add to vector store"
+        )
 
         return parsed_docs
 
