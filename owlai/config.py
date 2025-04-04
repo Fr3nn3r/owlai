@@ -354,8 +354,8 @@ OWL_AGENTS_BASE_CONFIG = {
         "description": "Agent responsible for answering questions about french law",
         "system_prompt": _PROMPT_CONFIG["qna-v4-fr"],
         "llm_config": {
-            "model_provider": "mistralai",
-            "model_name": "mistral-large-latest",
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
             "max_tokens": 2048,
             "temperature": 0.1,
             "context_size": 4096,
