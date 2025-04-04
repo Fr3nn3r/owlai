@@ -38,7 +38,16 @@ class AgentManager:
     focus_agent: OwlAgent
     _initialized = False
 
-    def __init__(self):
+    def __init__(
+        self, agents_config: Dict[str, Dict[str, Any]], enable_cleanup: bool = False
+    ):
+        """Initialize the AgentManager.
+
+        Args:
+            agents_config: Dictionary containing agent configurations
+            enable_cleanup: Whether to enable automatic cleanup of inactive agents
+        """
+        self.agents_config = agents_config
         self.active_agents: Dict[str, OwlAgent] = {}
         self.inactive_agents: Dict[str, OwlAgent] = {}
         self.last_used: Dict[str, float] = {}
@@ -48,7 +57,11 @@ class AgentManager:
         self.db_session = Session()
         self.memory = SQLAlchemyMemory(self.db_session)
         self._lazy_init()
-        self._start_cleanup_task()
+        self.CLEANUP_INTERVAL = 300  # 5 minutes
+        self.INACTIVE_THRESHOLD = 1800  # 30 minutes
+
+        if enable_cleanup:
+            self._start_cleanup_task()
         logger.info("AgentManager initialized with active/inactive agent management")
 
     def initialize_agent(self, agent_key: str) -> Optional[OwlAgent]:
@@ -61,7 +74,7 @@ class AgentManager:
             Initialized OwlAgent or None if initialization fails
         """
         try:
-            agent: OwlAgent = OwlAgent(**OWL_AGENTS_CONFIG[agent_key])
+            agent: OwlAgent = OwlAgent(**self.agents_config[agent_key])
             agent.init_callable_tools(
                 self.toolbox.get_tools(agent.llm_config.tools_names)
             )
@@ -78,7 +91,7 @@ class AgentManager:
             return
 
         # Initialize Owl agents
-        for agent_key in OWL_AGENTS_CONFIG.keys():
+        for agent_key in self.agents_config.keys():
             agent = self.initialize_agent(agent_key)
             if agent:
                 self.owls[agent.name] = agent
@@ -199,7 +212,7 @@ class AgentManager:
         return self.names
 
     def get_agents_keys(self) -> List[str]:
-        return [key for key in OWL_AGENTS_CONFIG.keys()]
+        return [key for key in self.agents_config.keys()]
 
     def get_agents_info(self) -> List[str]:
         return [f"{agent.name}: {agent.description}" for agent in self.owls.values()]

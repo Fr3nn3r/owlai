@@ -7,23 +7,18 @@ OwlAI main entry point
 
 import logging
 import logging.config
-from torch import chunk
-import yaml
 from typing import List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from multiprocessing import freeze_support
 import uvicorn
 from contextlib import asynccontextmanager
-import os
 import json
-import sys
 from fastapi.responses import StreamingResponse
 from typing import Optional
 
-from owlai.agent_manager import AgentManager
+from owlai.nest import AgentManager
 from owlai.config import OWL_AGENTS_CONFIG
 from owlai.owlsys import is_dev
 
@@ -95,7 +90,9 @@ async def lifespan(app: FastAPI):
     # Startup
     global agent_manager
     if agent_manager is None:
-        agent_manager = AgentManager()
+        agent_manager = AgentManager(
+            agents_config=OWL_AGENTS_CONFIG, enable_cleanup=True
+        )
         logger.info("AgentManager initialized successfully")
     yield
     # Shutdown

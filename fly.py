@@ -10,16 +10,14 @@ print(f"Application loading please wait...")
 
 import logging
 import logging.config
-import yaml
-import os
-from typing import List, Dict, Any
+
 from logging import Logger
-from pydantic import ValidationError
 from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
-from owlai.agent_manager import AgentManager
+from owlai.nest import AgentManager
 from owlai.owlsys import setup_logging
+from owlai.config import OWL_AGENTS_CONFIG
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -31,7 +29,7 @@ if __name__ == "__main__":
     last_agent = None
     history = None
 
-    edwige = AgentManager()
+    edwige = AgentManager(agents_config=OWL_AGENTS_CONFIG, enable_cleanup=False)
     while True:
 
         try:
