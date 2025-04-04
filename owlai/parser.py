@@ -1,5 +1,5 @@
 """
-OwlAI Parser Module
+OwlAI Document Parser Module
 
 Note: We are using Pydantic v1 because it's required by langchain-core and other LangChain components.
 This is a temporary solution until LangChain fully supports Pydantic v2.

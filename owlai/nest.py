@@ -7,9 +7,7 @@ import asyncio
 import time
 from datetime import datetime, timedelta
 
-from owlai.rag import RAGAgent
 from owlai.core import OwlAgent
-from owlai.config import OWL_AGENTS_CONFIG
 from owlai.tools import ToolBox
 from owlai.memory import SQLAlchemyMemory
 
