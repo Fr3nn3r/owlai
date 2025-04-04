@@ -82,22 +82,22 @@ class SecurityTool(BaseTool):  # type: ignore[override, override]
 class ToolBox:
     """Toolbox for tools."""
 
-    # Eventually the class tool should be in config to have true plugins
-    _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
-    _security_tool = SecurityTool(**TOOLS_CONFIG["security_tool"])
-    _naruto_search = RAGTool(**TOOLS_CONFIG["rag-naruto-v1"])
-    _fr_general_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"])
-    _fr_tax_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"])
-    _fr_admin_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"])
-
     def __init__(self):
+        # Eventually the class tool should be in config to have true plugins
+        _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
+        _security_tool = SecurityTool(**TOOLS_CONFIG["security_tool"])
+        _naruto_search = RAGTool(**TOOLS_CONFIG["rag-naruto-v1"])
+        _fr_general_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"])
+        _fr_tax_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"])
+        _fr_admin_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"])
+
         self.mapping = {
-            "security_tool": self._security_tool,
-            "tavily_search_results_json": self._tavily_tool,
-            "rag-naruto-v1": self._naruto_search,
-            "rag-fr-general-law-v1": self._fr_general_law_search,
-            "rag-fr-tax-law-v1": self._fr_tax_law_search,
-            "rag-fr-admin-law-v1": self._fr_admin_law_search,
+            "security_tool": _security_tool,
+            "tavily_search_results_json": _tavily_tool,
+            "rag-naruto-v1": _naruto_search,
+            "rag-fr-general-law-v1": _fr_general_law_search,
+            "rag-fr-tax-law-v1": _fr_tax_law_search,
+            "rag-fr-admin-law-v1": _fr_admin_law_search,
         }
 
     def get_tools(self, keys: list[str]) -> list[Callable]:

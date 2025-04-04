@@ -47,6 +47,9 @@ class RAGDataStore(BaseModel):
         setting up all necessary parameters for document processing and vector storage.
         """
         super().__init__(**kwargs)
+        # Normalize input path immediately upon initialization
+        self.input_data_folder = os.path.normpath(self.input_data_folder)
+
         # Ensure input_data_folder exists
         if not os.path.exists(self.input_data_folder):
             logger.warning(
@@ -62,23 +65,27 @@ class RAGDataStore(BaseModel):
                 raise Exception(f"{self.parser.implementation} is not a valid parser")
             self.parser = new_parser
 
+    def _normalize_path(self, *paths: str) -> str:
+        """
+        Normalize and join paths in a platform-independent way.
+        """
+        return os.path.normpath(os.path.join(*paths))
+
     def load_vector_store(
         self, input_data_folder: str, embedding_model: HuggingFaceEmbeddings
     ) -> Optional[FAISS]:
-        file_path = os.path.normpath(
-            os.path.join(input_data_folder, self._vector_store_folder)
-        )
+        file_path = self._normalize_path(input_data_folder, self._vector_store_folder)
         logger.debug(f"Looking for vector database at: {file_path}")
         FAISS_vector_store = None
 
         if os.path.exists(file_path):
-            with track_time(f"Loading the vector database from disk: {file_path}"):
-                FAISS_vector_store = FAISS.load_local(
-                    file_path,
-                    embedding_model,
-                    distance_strategy=DistanceStrategy.COSINE,
-                    allow_dangerous_deserialization=True,
-                )
+            logger.debug(f"Loading the vector database from disk: {file_path}")
+            FAISS_vector_store = FAISS.load_local(
+                file_path,
+                embedding_model,
+                distance_strategy=DistanceStrategy.COSINE,
+                allow_dangerous_deserialization=True,
+            )
         else:
             logger.error(f"Vector database not found in {file_path}")
 
@@ -104,12 +111,12 @@ class RAGDataStore(BaseModel):
         Returns:
             FAISS vector store or None if no documents were processed
         """
-        # Use os.path.join for platform-independent path handling
-        # Normalize paths to ensure OS-compatible separators
-        input_data_folder = os.path.normpath(self.input_data_folder)
-        vector_db_file_path = os.path.join(input_data_folder, self._vector_store_folder)
-        in_store_folder = os.path.join(
-            input_data_folder, self._in_store_documents_folder
+        # Normalize all paths at the start
+        vector_db_file_path = self._normalize_path(
+            self.input_data_folder, self._vector_store_folder
+        )
+        in_store_folder = self._normalize_path(
+            self.input_data_folder, self._in_store_documents_folder
         )
         vector_store = None
 
@@ -122,27 +129,38 @@ class RAGDataStore(BaseModel):
             )
 
         # Get list of PDF and text files
-        files = [
-            f
-            for f in os.listdir(self.input_data_folder)
-            if f.endswith((".pdf", ".txt"))
-        ]
+        try:
+            files = [
+                f
+                for f in os.listdir(self.input_data_folder)
+                if f.lower().endswith((".pdf", ".txt"))
+            ]
+        except Exception as e:
+            logger.error(f"Error listing directory {self.input_data_folder}: {str(e)}")
+            return vector_store
+
         logger.debug(
             f"Found {len(files)} new documents to process in {self.input_data_folder}"
         )
 
         if len(files) > 0:
+            # Create in_store_folder before processing files
+            os.makedirs(in_store_folder, exist_ok=True)
+
             # Process each file individually
             with track_time(f"Loading {len(files)} document(s) into vector database"):
                 for filename in files:
-                    filepath = os.path.join(self.input_data_folder, filename)
+                    # Normalize paths for source and destination
+                    source_path = self._normalize_path(self.input_data_folder, filename)
+                    dest_path = self._normalize_path(in_store_folder, filename)
+
                     logger.info(
-                        f"Processing file: {filename} size: {os.path.getsize(filepath)}"
+                        f"Processing file: {filename} size: {os.path.getsize(source_path)}"
                     )
 
                     try:
                         split_docs = self.parser.load_and_split_document(
-                            filepath,
+                            source_path,
                             filename,
                             embedding_model.model_name,
                             metadata_extractor,
@@ -151,22 +169,43 @@ class RAGDataStore(BaseModel):
 
                         # Create or update vector store
                         if vector_store is None:
+                            logger.debug("Creating new vector store")
                             vector_store = FAISS.from_documents(
                                 split_docs,
                                 embedding_model,
                                 distance_strategy=DistanceStrategy.COSINE,
                             )
                         else:
+                            logger.debug("Loading new documents into vector store")
                             batch_store = FAISS.from_documents(
                                 split_docs,
                                 embedding_model,
                                 distance_strategy=DistanceStrategy.COSINE,
                             )
+                            logger.debug("Merging new documents into vector store")
                             vector_store.merge_from(batch_store)
 
                         # Move processed file to 'in_store' folder
-                        os.makedirs(in_store_folder, exist_ok=True)
-                        os.rename(filepath, os.path.join(in_store_folder, filename))
+                        try:
+                            os.rename(source_path, dest_path)
+                            logger.debug(f"Moved {source_path} to {dest_path}")
+                        except Exception as move_error:
+                            logger.error(
+                                f"Error moving file {source_path} to {dest_path}: {str(move_error)}"
+                            )
+                            # If rename fails, try to copy and then delete
+                            try:
+                                import shutil
+
+                                shutil.copy2(source_path, dest_path)
+                                os.remove(source_path)
+                                logger.debug(
+                                    f"Successfully copied and deleted {source_path} to {dest_path}"
+                                )
+                            except Exception as fallback_error:
+                                logger.error(
+                                    f"Fallback copy-delete also failed for {source_path}: {str(fallback_error)}"
+                                )
 
                     except Exception as e:
                         logger.error(f"Error processing {filename}: {str(e)}")
@@ -175,7 +214,12 @@ class RAGDataStore(BaseModel):
 
             # Save to disk
             if vector_store is not None and len(files) > 0:
-                vector_store.save_local(vector_db_file_path)
-                logger.info(f"Vector database saved to {vector_db_file_path}")
+                try:
+                    vector_store.save_local(vector_db_file_path)
+                    logger.info(f"Vector database saved to {vector_db_file_path}")
+                except Exception as save_error:
+                    logger.error(
+                        f"Error saving vector store to {vector_db_file_path}: {str(save_error)}"
+                    )
 
         return vector_store

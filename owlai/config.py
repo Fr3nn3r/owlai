@@ -535,10 +535,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "input_data_folder": "data/legal-rag/general",  # Larger dataset
+                "input_data_folder": "data/legal-rag-tmp/general",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
-                    "output_data_folder": "data/legal-rag/general",
+                    "output_data_folder": "data/legal-rag-tmp/general",
                     "chunk_size": 512,
                     "chunk_overlap": 50,
                     "add_start_index": True,

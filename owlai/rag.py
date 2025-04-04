@@ -113,6 +113,7 @@ class RAGRetriever(BaseModel):
         return retrieved_docs, metadata
 
     def load_dataset(self, embeddings: HuggingFaceEmbeddings) -> Optional[FAISS]:
+        """Load dataset from the datastore with normalized paths."""
         return self.datastore.load_dataset(embeddings)
 
 
@@ -133,12 +134,12 @@ class RAGTool(BaseTool):
 
     def __init__(self, *args, **kwargs):
         try:
-            logger.info(f"Starting RAGAgent initialization")
+            logger.debug(f"Starting RAGTool initialization")
 
-            # Initialize the base class (OwlAgent)
+            # Initialize the base class (BaseTool)
             logger.debug("Initializing base class")
             super().__init__(**kwargs)
-            logger.debug("Base class initialization completed")
+            logger.debug(f"Base class initialization completed {self.name}")
 
             # Initialize embeddings
             logger.debug(
@@ -161,7 +162,7 @@ class RAGTool(BaseTool):
 
                 reranker_name = self.retriever.reranker_name
                 self._reranker = CrossEncoder(reranker_name)
-                logger.info(
+                logger.debug(
                     f"Successfully initialized cross-encoder reranker: {reranker_name}"
                 )
             except Exception as e:
@@ -177,14 +178,14 @@ class RAGTool(BaseTool):
                     "No vector stores found: you must set the vector store manually."
                 )
             else:
-                logger.info(
+                logger.debug(
                     f"Data store loaded: {self.retriever.datastore.input_data_folder}"
                 )
 
-            logger.info("RAGAgent initialization completed successfully")
+            logger.debug(f"RAGTool initialization completed successfully {self.name}")
 
         except Exception as e:
-            logger.error(f"Error during RAGAgent initialization: {str(e)}")
+            logger.error(f"Error during RAGTool initialization: {str(e)}")
             logger.error(f"Error details: {traceback.format_exc()}")
             raise
 
