@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 
 from owlai.nest import AgentManager
-from owlai.config import OWL_AGENTS_CONFIG
+from owlai.config import OWL_AGENTS_CONFIG, OWL_AGENTS_OPTIONAL_RAG_TOOLS
 from owlai.owlsys import is_dev
 
 logger = logging.getLogger(__name__)
@@ -119,39 +119,6 @@ app.add_middleware(
 )
 
 FRONTEND_AGENT_DATA = {
-    "rag-naruto": {
-        "name": "Kiyomi Uchiha",
-        "description": "Ask me about Naruto (spoiler alert!)",
-        "default_queries": OWL_AGENTS_CONFIG["rag-naruto"]["default_queries"],
-        "image_url": "Kiyomi.jpg",
-        "color_theme": {
-            "primary": "#000000",
-            "secondary": "#FF0000",
-        },
-        "welcome_title": "Fan of the anime series Naruto.",
-    },
-    "rag-droit-fiscal": {
-        "name": "Marine",
-        "description": "Posez vos questions sur le droit fiscal",
-        "default_queries": OWL_AGENTS_CONFIG["rag-droit-fiscal"]["default_queries"],
-        "image_url": "Nathalie.jpg",
-        "color_theme": {
-            "primary": "#000000",
-            "secondary": "#FF0000",
-        },
-        "welcome_title": "Expert en droit fiscal",
-    },
-    "rag-droit-admin": {
-        "name": "Nathalie",
-        "description": "Posez vos questions sur le droit administratif",
-        "default_queries": OWL_AGENTS_CONFIG["rag-droit-admin"]["default_queries"],
-        "image_url": "Nathalie.jpg",
-        "color_theme": {
-            "primary": "#000000",
-            "secondary": "#FF0000",
-        },
-        "welcome_title": "Expert en droit administratif",
-    },
     "fr-law-qna": {
         "name": "Marianne",
         "description": "Je réponds à vos questions sur le droit français, droit pénal, droit civil, droit fiscal, et droit administratif. Je suis open source et 100% gratuite mais pas encore tout à fait au point... Mon but est de m'améliorer alors laissez-moi vos commentaires! Je retiens le contexte de vos conversations (dans une certaine limite) n'hésitez pas à me demander d'approfondir certains points.",
@@ -162,6 +129,48 @@ FRONTEND_AGENT_DATA = {
             "secondary": "#FFFFFF",  # White
         },
         "welcome_title": "Bonjour! Je suis Marianne, une intelligence artificielle 100% française",
+    },
+}
+
+OPTIONAL_AGENTS = {
+    "rag-naruto": {
+        "name": "Kiyomi Uchiha",
+        "description": "Ask me about Naruto (spoiler alert!)",
+        "default_queries": OWL_AGENTS_OPTIONAL_RAG_TOOLS["rag-naruto"][
+            "default_queries"
+        ],
+        "image_url": "Kiyomi.jpg",
+        "color_theme": {
+            "primary": "#000000",
+            "secondary": "#FF0000",
+        },
+        "welcome_title": "Fan of the anime series Naruto.",
+    },
+    "rag-droit-fiscal": {
+        "name": "Marine",
+        "description": "Posez vos questions sur le droit fiscal",
+        "default_queries": OWL_AGENTS_OPTIONAL_RAG_TOOLS["rag-droit-fiscal"][
+            "default_queries"
+        ],
+        "image_url": "Nathalie.jpg",
+        "color_theme": {
+            "primary": "#000000",
+            "secondary": "#FF0000",
+        },
+        "welcome_title": "Expert en droit fiscal",
+    },
+    "rag-droit-admin": {
+        "name": "Nathalie",
+        "description": "Posez vos questions sur le droit administratif",
+        "default_queries": OWL_AGENTS_OPTIONAL_RAG_TOOLS["rag-droit-admin"][
+            "default_queries"
+        ],
+        "image_url": "Nathalie.jpg",
+        "color_theme": {
+            "primary": "#000000",
+            "secondary": "#FF0000",
+        },
+        "welcome_title": "Expert en droit administratif",
     },
 }
 
