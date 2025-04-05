@@ -36,7 +36,7 @@ class RAGDataStore(BaseModel):
 
     name: str
     version: str
-    input_data_folder: str
+    vector_cache_data_folder: str
 
     parser: DefaultParser
 

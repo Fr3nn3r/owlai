@@ -495,6 +495,7 @@ TOOLS_CONFIG = {
             "datastore": {
                 "name": "fr-law-admin",
                 "version": "0.2.0",
+                "cache_data_folder": "data/cache",
                 "input_data_folder": "data/legal-rag/admin",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
@@ -537,6 +538,7 @@ TOOLS_CONFIG = {
             "datastore": {
                 "name": "fr-law-fiscal",
                 "version": "0.2.0",
+                "cache_data_folder": "data/cache",
                 "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
@@ -580,6 +582,7 @@ TOOLS_CONFIG = {
             "datastore": {
                 "name": "fr-law-general",
                 "version": "0.2.0",
+                "cache_data_folder": "data/cache",
                 "input_data_folder": "data/legal-rag-tmp/general",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
