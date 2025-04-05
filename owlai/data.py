@@ -29,7 +29,13 @@ logger = logging.getLogger(__name__)
 
 
 class RAGDataStore(BaseModel):
+    """
+    RAGDataStore is a class that manages the data store for the RAG system.
+    It is responsible for loading and saving the vector store, as well as for parsing the documents.
+    """
 
+    name: str
+    version: str
     input_data_folder: str
 
     parser: DefaultParser

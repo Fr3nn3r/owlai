@@ -493,6 +493,8 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
+                "name": "fr-law-admin",
+                "version": "0.2.0",
                 "input_data_folder": "data/legal-rag/admin",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
@@ -533,6 +535,8 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
+                "name": "fr-law-fiscal",
+                "version": "0.2.0",
                 "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
@@ -574,6 +578,8 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
+                "name": "fr-law-general",
+                "version": "0.2.0",
                 "input_data_folder": "data/legal-rag-tmp/general",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
