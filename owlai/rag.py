@@ -33,6 +33,8 @@ from owlai.parser import DefaultParser, create_instance
 from owlai.data import RAGDataStore
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
+from owlai.embeddings import EmbeddingManager
+from owlai.models import RAGPretrainedModel
 
 logger = logging.getLogger(__name__)
 
@@ -46,26 +48,36 @@ class DefaultToolInput(BaseModel):
 
 
 class RAGRetriever(BaseModel):
-    """Classe responsible for retrieving relevant chunks from the knowledge base"""
+    """Class responsible for retrieving relevant chunks from the knowledge base"""
 
     num_retrieved_docs: int = 30  # Commonly called k
     num_docs_final: int = 5
     embeddings_model_name: str = "thenlper/gte-small"
-    reranker_name: str = (
-        "cross-encoder/ms-marco-MiniLM-L-12-v2"  # Changed to a cross-encoder model
-    )
+    reranker_name: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
     model_kwargs: Dict[str, Any] = {}
     encode_kwargs: Dict[str, Any] = {}
     multi_process: bool = True
     datastore: RAGDataStore
 
+    def load_dataset(self, embeddings: HuggingFaceEmbeddings) -> Optional[FAISS]:
+        """
+        Load or create vector store using the provided embeddings.
+
+        Args:
+            embeddings: HuggingFaceEmbeddings instance to use
+
+        Returns:
+            Optional FAISS vector store
+        """
+        if not isinstance(embeddings, HuggingFaceEmbeddings):
+            raise ValueError("embeddings must be an instance of HuggingFaceEmbeddings")
+        return self.datastore.load_vector_store(embeddings)
+
     def retrieve_relevant_chunks(
         self,
         query: str,
         knowledge_base: Optional[FAISS],
-        reranker: Optional[
-            Any
-        ] = None,  # Changed type hint to Any since we're not using ColBERT anymore
+        reranker: Optional[Any] = None,
     ) -> Tuple[List[LangchainDocument], dict]:
         """
         Retrieve the k most relevant document chunks for a given query.
@@ -74,13 +86,10 @@ class RAGRetriever(BaseModel):
             query: The user query to find relevant documents for
             knowledge_base: The vector database containing indexed documents
             reranker: Optional reranker model to rerank results
-            num_retrieved_docs: Number of initial documents to retrieve
-            num_docs_final: Number of documents to return after reranking
 
         Returns:
             Tuple containing a list of retrieved and reranked LangchainDocument objects with scores and metadata
         """
-
         if knowledge_base is None:
             raise Exception("Invalid FAISS vector store")
 
@@ -112,10 +121,6 @@ class RAGRetriever(BaseModel):
 
         return retrieved_docs, metadata
 
-    def load_dataset(self, embeddings: HuggingFaceEmbeddings) -> Optional[FAISS]:
-        """Load dataset from the datastore with normalized paths."""
-        return self.datastore.load_dataset(embeddings)
-
 
 class RAGTool(BaseTool):
     """
@@ -141,16 +146,19 @@ class RAGTool(BaseTool):
             super().__init__(**kwargs)
             logger.debug(f"Base class initialization completed {self.name}")
 
-            # Initialize embeddings
+            # Initialize embeddings using EmbeddingManager
             logger.debug(
-                f"Initializing embeddings with model: '{self.retriever.embeddings_model_name}' multi_process: '{self.retriever.multi_process}'"
+                f"Getting embeddings with model: '{self.retriever.embeddings_model_name}' multi_process: '{self.retriever.multi_process}'"
             )
-            self._embeddings = HuggingFaceEmbeddings(
+            embeddings = EmbeddingManager.get_embedding(
                 model_name=self.retriever.embeddings_model_name,
                 multi_process=self.retriever.multi_process,
                 model_kwargs=self.retriever.model_kwargs,
                 encode_kwargs=self.retriever.encode_kwargs,
             )
+            if not isinstance(embeddings, HuggingFaceEmbeddings):
+                raise ValueError("Failed to initialize embeddings")
+            self._embeddings = embeddings
             logger.debug("Embeddings initialization completed")
 
             # Try to initialize reranker
@@ -298,37 +306,124 @@ class RAGTool(BaseTool):
         return answer.get("answer", "?????")
 
 
-class _RAGAgent(OwlAgent, RAGTool):
-    """
-    RAG Agent implementation that extends OwlAgent with RAG capabilities
-    (now direct tool invocation is preferred for performance reasons)
-    """
+class RAGAgent(OwlAgent):
 
-    # RAG specific properties
+    # JSON defined properties
     retriever: RAGRetriever
-    _vector_store: Optional[FAISS] = None
+
+    # Runtime updated properties
+    _init_completed = False
+    _prompt = None
+    _vector_store = None
     _embeddings: Optional[HuggingFaceEmbeddings] = None
-    _reranker: Optional[Any] = None
-    _prompt: Optional[PromptTemplate] = None
+    _reranker = None
 
     def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._embeddings = EmbeddingManager.get_embedding(
+            model_name=self.retriever.embeddings_model_name,
+            multi_process=self.retriever.multi_process,
+            model_kwargs=self.retriever.model_kwargs,
+            encode_kwargs=self.retriever.encode_kwargs,
+        )
+        reranker_name = self.retriever.reranker_name
+        self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
+        self._prompt = PromptTemplate.from_template(self.system_prompt)
+
+        if self._embeddings is None:
+            raise ValueError("Failed to initialize embeddings")
+
+        self._vector_store = self.retriever.load_dataset(self._embeddings)
+
+        if self._vector_store is None:
+            logger.warning(
+                "No vector stores found: you must set the vector store manually."
+            )
+        else:
+            logger.info(
+                f"Data store loaded: {self.retriever.datastore.input_data_folder}"
+            )
+
+    def rerank_documents(
+        self, query: str, documents: List[LangchainDocument], k: int = 5
+    ) -> List[LangchainDocument]:
+        """
+        Rerank documents using the reranker model.
+
+        Args:
+            query: The search query
+            documents: List of documents to rerank
+            k: Number of documents to return
+
+        Returns:
+            Reranked list of documents
+        """
+        if not self._reranker:
+            return documents[:k]
+
         try:
-            logger.warning(f"Starting RAGAgent initialization (deprecated)")
+            # Prepare sentence pairs for reranking
+            sentence_pairs = [(query, doc.page_content) for doc in documents]
 
-            # Initialize the base class (OwlAgent)
-            logger.debug("Initializing base class")
-            super().__init__(**kwargs)
-            logger.debug("Base class initialization completed")
+            # Get scores from reranker
+            scores = self._reranker.predict(sentence_pairs)
 
-            # Initialize prompt template
-            logger.debug("Initializing prompt template")
-            self._prompt = PromptTemplate.from_template(self.system_prompt)
-            logger.debug("Prompt template initialization completed")
+            # Create list of (score, doc) tuples and sort by score
+            scored_docs = list(zip(scores, documents))
+            scored_docs.sort(key=lambda x: x[0], reverse=True)
+
+            # Update metadata with scores
+            for i, (score, doc) in enumerate(scored_docs[:k]):
+                doc.metadata["rerank_score"] = float(score)
+                doc.metadata["rerank_position"] = i + 1
+
+            logger.debug(f"Reranking completed for {len(scored_docs)} documents")
+
+            return [doc for _, doc in scored_docs[:k]]
 
         except Exception as e:
-            logger.error(f"Error during RAGAgent initialization: {str(e)}")
-            logger.error(f"Error details: {traceback.format_exc()}")
-            raise
+            logger.warning(f"Error during reranking: {str(e)}")
+            logger.warning("Falling back to original document order")
+            return documents[:k]
+
+    def get_rag_sources(self, question: str) -> Dict[str, Any]:
+        """
+        Get relevant documents for a question using RAG.
+
+        Args:
+            question: The question to find sources for
+
+        Returns:
+            Dictionary containing question, answer (document content), and metadata
+        """
+        logger.debug(f"Getting RAG sources for: '{question}'")
+
+        answer: Dict[str, Any] = {"question": question}
+
+        # Get initial documents without reranking
+        retrieved_docs, metadata = self.retriever.retrieve_relevant_chunks(
+            query=question,
+            knowledge_base=self._vector_store,
+            reranker=None,  # We'll do reranking separately
+        )
+
+        # Rerank documents
+        reranked_docs = self.rerank_documents(
+            question, retrieved_docs, k=self.retriever.num_docs_final
+        )
+
+        # Format document content
+        docs_content = "\n\n".join(
+            [
+                f"{idx+1}. [Source: {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
+                for idx, doc in enumerate(reranked_docs)
+            ]
+        )
+
+        answer["answer"] = docs_content
+        answer["metadata"] = metadata
+
+        return answer
 
     def invoke_rag(self, question: str) -> Dict[str, Any]:
         """

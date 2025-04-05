@@ -193,8 +193,9 @@ _PROMPT_CONFIG = {
     " 1. rag-fr-general-law-v1 : pour le droit civil, pénal, du commerce, de la famille, de l'aide sociale, du travail, de la santé, de l'éducation, et du séjour des étrangers.\n"
     " 2. rag-fr-tax-law-v1 : pour le droit fiscal français. \n"
     " 3. rag-fr-admin-law-v1 : pour le droit administratif français. \n"
-    "Vous devez toujours utiliser a umoins un outil avant de formuler votre réponse. \n"
-    "Dans le doute, utilisez l'outil 1.. \n"
+    "------------------INSTRUCTIONS---------------------"
+    " - Vous devez toujours utiliser au moins un outil avant de formuler votre réponse. \n"
+    " - Dans le doute, utilisez l'outil 1. \n"
     " - Fournissez autant de détails que nécéssaire à partir des réponses des outils pour bien répondre à la question initiale. \n"
     " - Fournissez une réponse synthétique et structurée. \n"
     " - Veillez à répondre précisemment à la question initiale. \n"
@@ -394,7 +395,7 @@ OWL_AGENTS_BASE_CONFIG = {
             "model_name": "codestral-latest",
             "max_tokens": 2048,
             "temperature": 0.1,
-            "context_size": 4096,
+            "context_size": 10000,
             "tools_names": [
                 "rag-fr-general-law-v1",
                 "rag-fr-tax-law-v1",

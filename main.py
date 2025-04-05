@@ -121,14 +121,14 @@ app.add_middleware(
 FRONTEND_AGENT_DATA = {
     "fr-law-qna": {
         "name": "Marianne",
-        "description": "Je réponds à vos questions sur le droit français, droit pénal, droit civil, droit fiscal, et droit administratif. Je suis open source et 100% gratuite mais pas encore tout à fait au point... Mon but est de m'améliorer alors laissez-moi vos commentaires! Je retiens le contexte de vos conversations (dans une certaine limite) n'hésitez pas à me demander d'approfondir certains points.",
+        "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
         "default_queries": OWL_AGENTS_CONFIG["fr-law-qna"]["default_queries"],
         "image_url": "Marianne.jpg",
         "color_theme": {
             "primary": "#0055A4",  # French blue
             "secondary": "#FFFFFF",  # White
         },
-        "welcome_title": "Bonjour! Je suis Marianne, une intelligence artificielle 100% française",
+        "welcome_title": "Marianne, intelligence artificielle 100% française",
     },
 }
 

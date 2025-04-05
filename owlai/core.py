@@ -67,6 +67,7 @@ class LLMConfig(BaseModel):
         max_tokens (int): Maximum tokens per response (default: 2048)
         context_size (int): Maximum context window size (default: 4096)
         tools_names (List[str]): List of available tool names
+        tool_choice (str): Tool choice mode for the model (default: None)
     """
 
     model_provider: str
@@ -75,6 +76,7 @@ class LLMConfig(BaseModel):
     max_tokens: int = 2048
     context_size: int = 4096
     tools_names: List[str] = []  # list of tools this agent can use
+    tool_choice: Optional[str] = None  # Tool choice mode for the model
 
 
 class OwlAgent(BaseTool, BaseModel):
@@ -121,7 +123,7 @@ class OwlAgent(BaseTool, BaseModel):
                 max_tokens=self.llm_config.max_tokens,
             )
             logger.debug(
-                f"Chat model initialized: {self.llm_config.model_name} {self.llm_config.model_provider} {self.llm_config.temperature} {self.llm_config.max_tokens}"
+                f"Chat model initialized: {self.llm_config.model_name} {self.llm_config.model_provider} {self.llm_config.temperature} {self.llm_config.max_tokens} {self.llm_config.tool_choice}"
             )
         return self._chat_model_cache
 
@@ -177,7 +179,7 @@ class OwlAgent(BaseTool, BaseModel):
             not self.fifo_message_mode
             and self.total_tokens > self.llm_config.context_size
         ):
-            logger.warning(
+            logger.debug(
                 f"Total tokens '{self.total_tokens}' exceeded max context tokens '{self.llm_config.context_size}'; activating FIFO message mode."
             )
             self.fifo_message_mode = True
@@ -186,7 +188,7 @@ class OwlAgent(BaseTool, BaseModel):
             # Remove the oldest message
             removed = self._message_history.pop(1)
             self.total_tokens -= self._token_count(removed)
-            logger.warning("Oldest message removed from history.")
+            logger.debug("Oldest message removed from history.")
 
             # Remove tool message if present as the next message
             if (
@@ -199,9 +201,9 @@ class OwlAgent(BaseTool, BaseModel):
 
             def print_message_type_history():
                 for message in self._message_history:
-                    logger.info(f"Message type: {message.type}")
+                    logger.debug(f"Message type: {message.type}")
 
-            print_message_type_history()
+            # print_message_type_history()
         else:
             self.fifo_message_mode = False
 
@@ -438,8 +440,6 @@ class OwlAgent(BaseTool, BaseModel):
             response = self.chat_model.invoke(self._message_history)
 
             self.append_message(response)
-
-            logger.debug(f"WTF {response.content}")
 
             # Process tool calls if needed
             if isinstance(response, AIMessage):

@@ -72,9 +72,20 @@ class RAGDataStore(BaseModel):
         return os.path.normpath(os.path.join(*paths))
 
     def load_vector_store(
-        self, input_data_folder: str, embedding_model: HuggingFaceEmbeddings
+        self, embedding_model: HuggingFaceEmbeddings
     ) -> Optional[FAISS]:
-        file_path = self._normalize_path(input_data_folder, self._vector_store_folder)
+        """
+        Load vector store from disk using the provided embedding model.
+
+        Args:
+            embedding_model: HuggingFaceEmbeddings instance to use for the vector store
+
+        Returns:
+            Optional FAISS vector store
+        """
+        file_path = self._normalize_path(
+            self.input_data_folder, self._vector_store_folder
+        )
         logger.debug(f"Looking for vector database at: {file_path}")
         FAISS_vector_store = None
 
@@ -124,9 +135,7 @@ class RAGDataStore(BaseModel):
             logger.debug(
                 f"Loading existing vector database from: {vector_db_file_path}"
             )
-            vector_store = self.load_vector_store(
-                self.input_data_folder, embedding_model
-            )
+            vector_store = self.load_vector_store(embedding_model)
 
         # Get list of PDF and text files
         try:
