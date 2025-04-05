@@ -1,6 +1,14 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, Integer, ForeignKey, TIMESTAMP
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    Integer,
+    ForeignKey,
+    TIMESTAMP,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -69,11 +77,33 @@ class Context(Base):
     )
 
 
+class VectorStore(Base):
+    __tablename__ = "vector_stores"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    model_name = Column(String, nullable=False)
+    data = Column(Text, nullable=False)  # Will store base64 encoded binary data
+    created_at = Column(TIMESTAMP, default=datetime.utcnow)
+
+    __table_args__ = (
+        # Ensure unique combination of name and version
+        UniqueConstraint("name", "version", name="uix_name_version"),
+    )
+
+
 def main():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
     DATABASE_URL = "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
+
+    confirm = input(
+        "WARNING: This will drop and recreate all database tables. Type 'yes' to confirm: "
+    )
+    if confirm.lower() != "yes":
+        print("Operation cancelled.")
+        exit()
 
     engine = create_engine(DATABASE_URL)
     Session = sessionmaker(bind=engine)
