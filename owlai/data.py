@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from tqdm import tqdm
 import traceback
 
-from owlai.owlsys import track_time
+from owlai.owlsys import track_time, Session
 from owlai.parser import DefaultParser, create_instance
 
 # Get logger using the module name
@@ -36,14 +36,15 @@ class RAGDataStore(BaseModel):
 
     name: str
     version: str
-    vector_cache_data_folder: str
-
+    input_data_folder: str
+    cache_data_folder: str
     parser: DefaultParser
 
     _vector_store: Optional[FAISS] = None
     _images_folder: str = "images"
     _in_store_documents_folder: str = "in_store"
     _vector_store_folder: str = "vector_db"
+    _db_session: Optional[Any] = None
 
     def __init__(self, **kwargs):
         """
@@ -53,14 +54,20 @@ class RAGDataStore(BaseModel):
         setting up all necessary parameters for document processing and vector storage.
         """
         super().__init__(**kwargs)
-        # Normalize input path immediately upon initialization
+        # Normalize paths immediately upon initialization
         self.input_data_folder = os.path.normpath(self.input_data_folder)
+        self.cache_data_folder = os.path.normpath(self.cache_data_folder)
 
         # Ensure input_data_folder exists
         if not os.path.exists(self.input_data_folder):
             logger.warning(
                 f"Input data folder does not exist: {self.input_data_folder}"
             )
+
+        # Ensure cache_data_folder exists
+        os.makedirs(self.cache_data_folder, exist_ok=True)
+
+        self._db_session = Session()
 
         if self.parser.implementation == "DefaultParser":
             logger.debug(f"Using DefaultParser")
@@ -81,7 +88,11 @@ class RAGDataStore(BaseModel):
         self, embedding_model: HuggingFaceEmbeddings
     ) -> Optional[FAISS]:
         """
-        Load vector store from disk using the provided embedding model.
+        Load vector store with the following priority:
+        1. Try loading from cache folder (cache_data_folder/name/vector_db)
+        2. Try loading from database and save to cache if successful
+        3. Try loading from input folder and save to cache if successful
+        4. Return None if no vector store is found
 
         Args:
             embedding_model: HuggingFaceEmbeddings instance to use for the vector store
@@ -89,24 +100,101 @@ class RAGDataStore(BaseModel):
         Returns:
             Optional FAISS vector store
         """
-        file_path = self._normalize_path(
+        # 1. Try loading from cache first
+        cache_path = self._normalize_path(
+            self.cache_data_folder, self.name, self._vector_store_folder
+        )
+        logger.debug(f"Looking for cached vector database at: {cache_path}")
+
+        if os.path.exists(cache_path):
+            logger.info(f"Loading vector database from cache: {cache_path}")
+            try:
+                return FAISS.load_local(
+                    cache_path,
+                    embedding_model,
+                    distance_strategy=DistanceStrategy.COSINE,
+                    allow_dangerous_deserialization=True,
+                )
+            except Exception as e:
+                logger.error(f"Failed to load from cache: {str(e)}")
+
+        # 2. Try loading from database
+        if self._db_session is not None:
+            logger.debug(f"Attempting to load vector store '{self.name}' from database")
+            try:
+                from sqlalchemy import select
+                from owlai.dbmodels import VectorStore
+                from owlai.vector_store_manager import decode_vector_store_files
+
+                query = select(VectorStore).where(VectorStore.name == self.name)
+                if self.version:
+                    query = query.where(VectorStore.version == self.version)
+                else:
+                    query = query.order_by(VectorStore.created_at.desc())
+
+                vector_store_record = self._db_session.execute(
+                    query
+                ).scalar_one_or_none()
+                if vector_store_record:
+                    logger.info(f"Found vector store '{self.name}' in database")
+
+                    # Create temporary directory for database files
+                    temp_db_dir = self._normalize_path(cache_path)
+                    os.makedirs(os.path.dirname(temp_db_dir), exist_ok=True)
+
+                    # Decode files from database
+                    decode_vector_store_files(vector_store_record.data, temp_db_dir)
+
+                    # Load the vector store
+                    vector_store = FAISS.load_local(
+                        temp_db_dir,
+                        embedding_model,
+                        distance_strategy=DistanceStrategy.COSINE,
+                        allow_dangerous_deserialization=True,
+                    )
+
+                    # Save to cache for future use
+                    logger.info(f"Saving database vector store to cache: {cache_path}")
+                    vector_store.save_local(cache_path)
+
+                    return vector_store
+                else:
+                    logger.error(
+                        f"No vector store found in database for {self.name} {self.version}"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to load from database: {str(e)}")
+
+        else:
+            logger.error(f"Database session in no initialized.")
+
+        # 3. Try loading from input folder
+        input_path = self._normalize_path(
             self.input_data_folder, self._vector_store_folder
         )
-        logger.debug(f"Looking for vector database at: {file_path}")
-        FAISS_vector_store = None
+        logger.debug(f"Looking for vector database at: {input_path}")
 
-        if os.path.exists(file_path):
-            logger.debug(f"Loading the vector database from disk: {file_path}")
-            FAISS_vector_store = FAISS.load_local(
-                file_path,
-                embedding_model,
-                distance_strategy=DistanceStrategy.COSINE,
-                allow_dangerous_deserialization=True,
-            )
-        else:
-            logger.error(f"Vector database not found in {file_path}")
+        if os.path.exists(input_path):
+            logger.info(f"Loading vector database from input folder: {input_path}")
+            try:
+                vector_store = FAISS.load_local(
+                    input_path,
+                    embedding_model,
+                    distance_strategy=DistanceStrategy.COSINE,
+                    allow_dangerous_deserialization=True,
+                )
 
-        return FAISS_vector_store
+                # Save to cache for next time
+                logger.info(f"Saving vector database to cache: {cache_path}")
+                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                vector_store.save_local(cache_path)
+
+                return vector_store
+            except Exception as e:
+                logger.error(f"Failed to load from input folder: {str(e)}")
+
+        logger.warning("Vector database not found in cache, database or input folder")
+        return None
 
     def load_dataset(
         self,
@@ -117,31 +205,19 @@ class RAGDataStore(BaseModel):
         """
         Loads an existing vector store if exists in the input_data_folder.
         Processes documents and adds them to the store.
-        Processed documents are moved to the 'in_store' folder
+        Processed documents are moved to the 'in_store' folder.
+        New vector stores are saved both to input folder and cache.
 
         Args:
-            input_data_folder: Path to the folder containing documents
             embedding_model: The embedding model to use
-            chunk_size: Size of text chunks for splitting documents
             metadata_extractor: Optional callback function for extracting metadata
+            document_curator: Optional callback function for curating documents
 
         Returns:
             FAISS vector store or None if no documents were processed
         """
-        # Normalize all paths at the start
-        vector_db_file_path = self._normalize_path(
-            self.input_data_folder, self._vector_store_folder
-        )
-        in_store_folder = self._normalize_path(
-            self.input_data_folder, self._in_store_documents_folder
-        )
-        vector_store = None
-
-        if os.path.exists(vector_db_file_path):
-            logger.debug(
-                f"Loading existing vector database from: {vector_db_file_path}"
-            )
-            vector_store = self.load_vector_store(embedding_model)
+        # First try loading existing vector store (will check cache first)
+        vector_store = self.load_vector_store(embedding_model)
 
         # Get list of PDF and text files
         try:
@@ -160,6 +236,9 @@ class RAGDataStore(BaseModel):
 
         if len(files) > 0:
             # Create in_store_folder before processing files
+            in_store_folder = self._normalize_path(
+                self.input_data_folder, self._in_store_documents_folder
+            )
             os.makedirs(in_store_folder, exist_ok=True)
 
             # Process each file individually
@@ -201,40 +280,31 @@ class RAGDataStore(BaseModel):
                             vector_store.merge_from(batch_store)
 
                         # Move processed file to 'in_store' folder
-                        try:
-                            os.rename(source_path, dest_path)
-                            logger.debug(f"Moved {source_path} to {dest_path}")
-                        except Exception as move_error:
-                            logger.error(
-                                f"Error moving file {source_path} to {dest_path}: {str(move_error)}"
-                            )
-                            # If rename fails, try to copy and then delete
-                            try:
-                                import shutil
-
-                                shutil.copy2(source_path, dest_path)
-                                os.remove(source_path)
-                                logger.debug(
-                                    f"Successfully copied and deleted {source_path} to {dest_path}"
-                                )
-                            except Exception as fallback_error:
-                                logger.error(
-                                    f"Fallback copy-delete also failed for {source_path}: {str(fallback_error)}"
-                                )
+                        os.rename(source_path, dest_path)
 
                     except Exception as e:
                         logger.error(f"Error processing {filename}: {str(e)}")
                         logger.error(f"Error details: {traceback.format_exc()}")
                         continue
 
-            # Save to disk
+            # Save to both input folder and cache if we have a vector store and processed files
             if vector_store is not None and len(files) > 0:
-                try:
-                    vector_store.save_local(vector_db_file_path)
-                    logger.info(f"Vector database saved to {vector_db_file_path}")
-                except Exception as save_error:
-                    logger.error(
-                        f"Error saving vector store to {vector_db_file_path}: {str(save_error)}"
-                    )
+                # Save to input folder
+                input_vector_path = self._normalize_path(
+                    self.input_data_folder, self._vector_store_folder
+                )
+                os.makedirs(input_vector_path, exist_ok=True)
+                vector_store.save_local(input_vector_path)
+                logger.info(
+                    f"Vector database saved to input folder: {input_vector_path}"
+                )
+
+                # Save to cache
+                cache_vector_path = self._normalize_path(
+                    self.cache_data_folder, self.name, self._vector_store_folder
+                )
+                os.makedirs(os.path.dirname(cache_vector_path), exist_ok=True)
+                vector_store.save_local(cache_vector_path)
+                logger.info(f"Vector database saved to cache: {cache_vector_path}")
 
         return vector_store

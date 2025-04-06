@@ -136,8 +136,15 @@ class RAGTool(BaseTool):
     _embeddings: Optional[HuggingFaceEmbeddings] = None
     _reranker: Optional[Any] = None
     _prompt: Optional[PromptTemplate] = None
+    _db_session = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, db_session: Optional[Any] = None, **kwargs):
+        """Initialize RAGTool with optional database session for vector store caching.
+
+        Args:
+            db_session: Optional SQLAlchemy session for vector store DB operations
+            *args, **kwargs: Additional arguments passed to parent
+        """
         try:
             logger.debug(f"Starting RAGTool initialization")
 
@@ -145,6 +152,9 @@ class RAGTool(BaseTool):
             logger.debug("Initializing base class")
             super().__init__(**kwargs)
             logger.debug(f"Base class initialization completed {self.name}")
+
+            # Store DB session
+            self._db_session = db_session
 
             # Initialize embeddings using EmbeddingManager
             logger.debug(
@@ -177,6 +187,10 @@ class RAGTool(BaseTool):
                 logger.warning(f"Failed to initialize reranker model: {str(e)}")
                 logger.warning("Falling back to basic retrieval without reranking")
                 self._reranker = None
+
+            # Pass db_session to datastore
+            if self._db_session:
+                self.retriever.datastore._db_session = self._db_session
 
             # Load vector store
             logger.debug("Loading vector store")
@@ -317,22 +331,40 @@ class RAGAgent(OwlAgent):
     _vector_store = None
     _embeddings: Optional[HuggingFaceEmbeddings] = None
     _reranker = None
+    _db_session = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, db_session: Optional[Any] = None, **kwargs):
+        """Initialize RAGAgent with optional database session for vector store caching.
+
+        Args:
+            db_session: Optional SQLAlchemy session for vector store DB operations
+            *args, **kwargs: Additional arguments passed to parent
+        """
         super().__init__(*args, **kwargs)
+
+        # Store DB session
+        self._db_session = db_session
+
+        # Initialize embeddings
         self._embeddings = EmbeddingManager.get_embedding(
             model_name=self.retriever.embeddings_model_name,
             multi_process=self.retriever.multi_process,
             model_kwargs=self.retriever.model_kwargs,
             encode_kwargs=self.retriever.encode_kwargs,
         )
+        if self._embeddings is None:
+            raise ValueError("Failed to initialize embeddings")
+
+        # Initialize reranker
         reranker_name = self.retriever.reranker_name
         self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
         self._prompt = PromptTemplate.from_template(self.system_prompt)
 
-        if self._embeddings is None:
-            raise ValueError("Failed to initialize embeddings")
+        # Pass db_session to datastore
+        if self._db_session:
+            self.retriever.datastore._db_session = self._db_session
 
+        # Load vector store
         self._vector_store = self.retriever.load_dataset(self._embeddings)
 
         if self._vector_store is None:

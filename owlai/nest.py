@@ -10,19 +10,7 @@ from datetime import datetime, timedelta
 from owlai.core import OwlAgent
 from owlai.tools import ToolBox
 from owlai.memory import SQLAlchemyMemory
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-import os
-
-# Replace with your actual DB URI
-# DATABASE_URL = "postgresql://postgres:dev@localhost:5432/owlai_dev"
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
-)
-
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
+from owlai.owlsys import Session
 
 logger: Logger = logging.getLogger(__name__)
 

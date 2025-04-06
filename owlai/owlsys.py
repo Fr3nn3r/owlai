@@ -193,3 +193,16 @@ is_dev = env == "development"
 is_test = env == "test"
 
 logger.info(f"System initialized for '{env}' environment, CUDA device: '{device}'")
+
+# Replace with your actual DB URI
+# DATABASE_URL = "postgresql://postgres:dev@localhost:5432/owlai_dev"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
+)
+
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)

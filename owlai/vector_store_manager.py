@@ -155,8 +155,14 @@ def load_vector_store(
             return False
 
         logger.info(f"Found vector store '{name}' version {vector_store.version}")
-        decode_vector_store_files(vector_store.data, output_dir)
-        logger.info(f"Successfully loaded vector store '{name}' to {output_dir}")
+
+        # Create vector_db subdirectory in output_dir
+        vector_db_dir = os.path.join(output_dir, "vector_db")
+        os.makedirs(vector_db_dir, exist_ok=True)
+
+        # Decode files into vector_db directory
+        decode_vector_store_files(vector_store.data, vector_db_dir)
+        logger.info(f"Successfully loaded vector store '{name}' to {vector_db_dir}")
         return True
 
     except SQLAlchemyError as e:
@@ -191,7 +197,7 @@ def import_vector_stores(
         logger.warning(f"Vector store directory not found: {vector_db_path}")
         return results
 
-    # Check if the directory contains the required files directly
+    # Check if the directory contains the required files
     if os.path.exists(os.path.join(vector_db_path, "index.faiss")) and os.path.exists(
         os.path.join(vector_db_path, "index.pkl")
     ):
@@ -223,9 +229,9 @@ if __name__ == "__main__":
 
     # Store names in dict keys match the names used in the database
     stores = {
-        "rag-fr-general-law-v1": "data/legal-rag-tmp/general",
-        "rag-fr-tax-law-v1": "data/legal-rag/fiscal",
-        "rag-fr-admin-law-v1": "data/legal-rag/admin",
+        "rag-fr-general-law": "data/legal-rag-tmp/general",
+        "rag-fr-tax-law": "data/legal-rag/fiscal",
+        "rag-fr-admin-law": "data/legal-rag/admin",
     }
 
     try:
@@ -261,6 +267,7 @@ if __name__ == "__main__":
 
         for store_name in stores.keys():
             output_dir = os.path.join(output_base, store_name)
+            os.makedirs(output_dir, exist_ok=True)
             success = load_vector_store(
                 session=session, name=store_name, output_dir=output_dir, version="0.3.1"
             )

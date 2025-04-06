@@ -493,10 +493,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "fr-law-admin",
-                "version": "0.2.0",
+                "name": "rag-fr-admin-law",
+                "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag/admin",  # Larger dataset
+                "input_data_folder": "__________data/legal-rag/admin",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/admin",
@@ -536,10 +536,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "fr-law-fiscal",
-                "version": "0.2.0",
+                "name": "rag-fr-tax-law",
+                "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
+                "input_data_folder": "__________data/legal-rag/fiscal",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/fiscal",
@@ -580,10 +580,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "fr-law-general",
-                "version": "0.2.0",
+                "name": "rag-fr-general-law",
+                "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag-tmp/general",  # Larger dataset
+                "input_data_folder": "__________data/legal-rag-tmp/general",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag-tmp/general",
@@ -634,6 +634,9 @@ TOOLS_CONFIG = {
             "multi_process": enable_multi_process,
             "datastore": {
                 "input_data_folder": "data/dataset-0001",  # Larger dataset
+                "cache_data_folder": "data/cache",
+                "version": "0.3.1",
+                "name": "naruto",
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/dataset-0001",
