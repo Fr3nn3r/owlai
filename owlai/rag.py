@@ -100,24 +100,19 @@ class RAGRetriever(BaseModel):
             "reranking_enabled": reranker is not None,
         }
 
-        with track_time(f"Documents search", metadata):
-            retrieved_docs = knowledge_base.similarity_search(
-                query=query, k=self.num_retrieved_docs
-            )
-            metadata["num_docs_retrieved"] = len(retrieved_docs)
-            metadata["retrieved_docs"] = {
-                i: {
-                    "title": doc.metadata.get("title", "No title"),
-                    "source": doc.metadata.get("source", "Unknown source"),
-                }
-                for i, doc in enumerate(retrieved_docs)
+        logger.info(f"Documents search")
+        retrieved_docs = knowledge_base.similarity_search(
+            query=query, k=self.num_retrieved_docs
+        )
+        metadata["num_docs_retrieved"] = len(retrieved_docs)
+        metadata["retrieved_docs"] = {
+            i: {
+                "title": doc.metadata.get("title", "No title"),
+                "source": doc.metadata.get("source", "Unknown source"),
             }
-            logger.debug(f"{len(retrieved_docs)} documents retrieved")
-
-        # If no reranker, just return top k docs
-        if not reranker:
-            logger.info("No reranker available, using basic retrieval")
-            return retrieved_docs[: self.num_docs_final], metadata
+            for i, doc in enumerate(retrieved_docs)
+        }
+        logger.debug(f"{len(retrieved_docs)} documents retrieved")
 
         return retrieved_docs, metadata
 
@@ -200,9 +195,7 @@ class RAGTool(BaseTool):
                     "No vector stores found: you must set the vector store manually."
                 )
             else:
-                logger.debug(
-                    f"Data store loaded: {self.retriever.datastore.input_data_folder}"
-                )
+                logger.debug(f"Data store loaded: {self.retriever.datastore.name}")
 
             logger.debug(f"RAGTool initialization completed successfully {self.name}")
 
@@ -278,13 +271,17 @@ class RAGTool(BaseTool):
             question, retrieved_docs, k=self.retriever.num_docs_final
         )
 
-        with track_time("Model invocation with RAG context", metadata):
-            docs_content = "\n\n".join(
-                [
-                    f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
-                    for idx, doc in enumerate(reranked_docs)
-                ]
+        for idoc in reranked_docs:
+            logger.debug(
+                f"Document {idoc.metadata.get('title', 'Unknown Title')} - Rerank Score: {idoc.metadata.get('rerank_score', 'Unknown')}"
             )
+
+        docs_content = f"Query: '{question}'\nDocuments:\n\n".join(
+            [
+                f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
+                for idx, doc in enumerate(reranked_docs)
+            ]
+        )
 
         answer["answer"] = docs_content
         answer["metadata"] = metadata
@@ -310,11 +307,8 @@ class RAGTool(BaseTool):
 
     def message_invoke(self, message: str) -> str:
         """Override OwlAgent.message_invoke with RAG specific implementation"""
-        logger.debug(
-            f"[RAGTool.message_invoke] Called from {self.name} with message: {message}"
-        )
-        logger.debug(f"RAG engine not keeping context for now")
         answer = self.get_rag_sources(message)
+        logger.debug(f"Completed RAG search completed")
         if "answer" not in answer or answer["answer"] == "":
             raise Exception("No answer found")
         return answer.get("answer", "?????")

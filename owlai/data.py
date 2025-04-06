@@ -36,8 +36,8 @@ class RAGDataStore(BaseModel):
 
     name: str
     version: str
-    input_data_folder: str
-    cache_data_folder: str
+    input_data_folder: Optional[str] = None
+    cache_data_folder: str = "data/cache"
     parser: DefaultParser
 
     _vector_store: Optional[FAISS] = None
@@ -55,14 +55,14 @@ class RAGDataStore(BaseModel):
         """
         super().__init__(**kwargs)
         # Normalize paths immediately upon initialization
-        self.input_data_folder = os.path.normpath(self.input_data_folder)
-        self.cache_data_folder = os.path.normpath(self.cache_data_folder)
+        if self.input_data_folder:
+            self.input_data_folder = os.path.normpath(self.input_data_folder)
+            if not os.path.exists(self.input_data_folder):
+                logger.warning(
+                    f"Input data folder does not exist: {self.input_data_folder}"
+                )
 
-        # Ensure input_data_folder exists
-        if not os.path.exists(self.input_data_folder):
-            logger.warning(
-                f"Input data folder does not exist: {self.input_data_folder}"
-            )
+        self.cache_data_folder = os.path.normpath(self.cache_data_folder)
 
         # Ensure cache_data_folder exists
         os.makedirs(self.cache_data_folder, exist_ok=True)
@@ -169,6 +169,10 @@ class RAGDataStore(BaseModel):
             logger.error(f"Database session in no initialized.")
 
         # 3. Try loading from input folder
+        if not self.input_data_folder:
+            logger.warning("No input data folder defined, skipping input folder load")
+            return None
+
         input_path = self._normalize_path(
             self.input_data_folder, self._vector_store_folder
         )
@@ -216,6 +220,10 @@ class RAGDataStore(BaseModel):
         Returns:
             FAISS vector store or None if no documents were processed
         """
+        if not self.input_data_folder:
+            logger.warning("No input data folder defined")
+            return None
+
         # First try loading existing vector store (will check cache first)
         vector_store = self.load_vector_store(embedding_model)
 
