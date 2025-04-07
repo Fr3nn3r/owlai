@@ -26,6 +26,9 @@ DATABASE_URL = (
     "?sslmode=require&connect_timeout=30"
 )
 
+# Vector store names
+VECTOR_STORES = ["rag-fr-general-law", "rag-fr-tax-law", "rag-fr-admin-law"]
+
 
 @retry_on_connection_error()
 def download_large_object(connection, oid: int, output_path: str) -> bool:
@@ -67,9 +70,8 @@ def download_large_object(connection, oid: int, output_path: str) -> bool:
 def download_vector_store(store_name: str, output_dir: str) -> bool:
     """Download vector store files from database and create FAISS index."""
     try:
-        # Create output directory
-        os.makedirs(output_dir, exist_ok=True)
-        vector_db_dir = os.path.join(output_dir, "vector_db")
+        # Create output directory structure
+        vector_db_dir = os.path.join(output_dir, store_name, "vector_db")
         os.makedirs(vector_db_dir, exist_ok=True)
 
         # Use get_fresh_connection for better connection handling
@@ -139,18 +141,46 @@ def download_vector_store(store_name: str, output_dir: str) -> bool:
         return False
 
 
+def download_all_vector_stores(base_dir: str) -> dict:
+    """Download all vector stores and return status for each."""
+    results = {}
+
+    for store_name in VECTOR_STORES:
+        logger.info(f"\n{'='*50}")
+        logger.info(f"Downloading vector store: {store_name}")
+        logger.info(f"{'='*50}\n")
+
+        success = download_vector_store(store_name, base_dir)
+        results[store_name] = success
+
+        if success:
+            logger.info(f"Successfully downloaded {store_name}")
+        else:
+            logger.error(f"Failed to download {store_name}")
+
+    return results
+
+
 if __name__ == "__main__":
-    # Create temp directory
-    temp_dir = "temp"
-    os.makedirs(temp_dir, exist_ok=True)
+    # Set base directory for vector stores
+    base_dir = "data/cache"
+    os.makedirs(base_dir, exist_ok=True)
 
-    # Download vector store
-    store_name = (
-        "rag-fr-general-law"  # You can change this to download a different store
-    )
-    success = download_vector_store(store_name, temp_dir)
+    # Download all vector stores
+    results = download_all_vector_stores(base_dir)
 
-    if success:
-        logger.info(f"Vector store downloaded successfully to {temp_dir}")
+    # Print final summary
+    logger.info("\n" + "=" * 50)
+    logger.info("Download Summary:")
+    logger.info("=" * 50)
+
+    all_successful = True
+    for store_name, success in results.items():
+        status = "SUCCESS" if success else "FAILED"
+        logger.info(f"{store_name}: {status}")
+        all_successful = all_successful and success
+
+    if all_successful:
+        logger.info("\nAll vector stores downloaded successfully!")
     else:
-        logger.error("Failed to download vector store")
+        logger.error("\nSome vector stores failed to download. Check logs for details.")

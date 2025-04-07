@@ -456,28 +456,37 @@ async def get_query_chunks(query_id: str):
     chunks = []
     content = tool_message["content"]
 
+    # logger.debug(f"Content: {content}")
+
     # Split content into numbered sections
     import re
 
     # Split by numbered sections
-    sections = re.split(r"(?=\d+\.\s*\[Source :)", content.strip())
+    sections = re.split(r"(?=\d+\.\s*\[Source:)", content.strip())
 
     for section in sections:
         if not section.strip():
             continue
 
-        # Extract source and content using regex
-        match = re.match(r"\d+\.\s*\[Source : (.*?)\](.*)", section, re.DOTALL)
+        # Extract source, score and content using regex
+        match = re.match(
+            r"\d+\.\s*\[Source: (.*?)(?:\s*-\s*Score:\s*(-?\d*\.?\d+))?\](.*)",
+            section,
+            re.DOTALL,
+        )
         if match:
             source = match.group(1).strip()
-            content = match.group(2).strip()
-            # logger.debug(f"Source: {source}, Content: {content}")
+            score = (
+                float(match.group(2)) if match.group(2) else -10
+            )  # Default to -10 if no score
+            content = match.group(3).strip()
+            logger.debug(f"Source: {source}, Score: '{score}'")
             chunks.append(
                 DocumentChunk(
                     id=source,  # The name from [Source : XYZ]
                     content=content,  # The actual content after brackets
                     source=source,  # The file name (same as source)
-                    relevance_score=1.0,  # Default relevance score
+                    relevance_score=score,  # Use the parsed score
                 )
             )
 

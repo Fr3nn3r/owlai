@@ -278,7 +278,7 @@ class RAGTool(BaseTool):
 
         docs_content = f"Query: '{question}'\nDocuments:\n\n".join(
             [
-                f"{idx+1}. [Source : {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
+                f"{idx+1}. [Source: {doc.metadata.get('title', 'Unknown Title')} - Score: {doc.metadata.get('rerank_score', 'Unknown')}] \"{doc.page_content}\""
                 for idx, doc in enumerate(reranked_docs)
             ]
         )
@@ -441,7 +441,7 @@ class RAGAgent(OwlAgent):
         # Format document content
         docs_content = "\n\n".join(
             [
-                f"{idx+1}. [Source: {doc.metadata.get('title', 'Unknown Title')} - {doc.metadata.get('source', '')}] \"{doc.page_content}\""
+                f"{idx+1}. [Source: {doc.metadata.get('title', 'Unknown Title')} - Score: {doc.metadata.get('rerank_score', 'Unknown')}] \"{doc.page_content}\""
                 for idx, doc in enumerate(reranked_docs)
             ]
         )
@@ -501,7 +501,7 @@ class RAGAgent(OwlAgent):
         logger.debug(
             f"[RAGOwlAgent.message_invoke] Called from {self.name} with message: {message}"
         )
-        logger.warning(f"RAG engine not keeping context for now")
+
         answer = self.invoke_rag(message)
         if "answer" not in answer or answer["answer"] == "":
             raise Exception("No answer found")
