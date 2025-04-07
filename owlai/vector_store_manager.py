@@ -14,13 +14,27 @@ import faiss
 import numpy as np
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, OperationalError
 from owlai.dbmodels import VectorStore
 from tqdm import tqdm
 import hashlib
+import time
+import traceback
+from contextlib import contextmanager
+from functools import wraps
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Constants for database operations
+CHUNK_SIZE = 1024 * 1024  # 1MB chunk size for reading/writing
+MAX_RETRIES = 3  # Maximum number of retry attempts for database operations
+RETRY_DELAY = (
+    2  # Initial delay in seconds for retry (will be used with exponential backoff)
+)
+CONNECTION_TIMEOUT = 30  # Connection timeout in seconds
+KEEPALIVE_IDLE = 15  # Keepalive idle time in seconds
+KEEPALIVE_INTERVAL = 5  # Keepalive interval in seconds
 
 
 def encode_vector_store_files(vector_db_path: str) -> Dict[str, str]:
@@ -121,6 +135,91 @@ def chunk_large_data(
     return chunks
 
 
+@contextmanager
+def get_fresh_connection(url, operation_name="database operation"):
+    """Create a fresh database connection for a single operation."""
+    logger.info(f"Creating fresh connection for: {operation_name}")
+
+    # Create engine with optimized settings for large object operations
+    engine = create_engine(
+        url,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=CONNECTION_TIMEOUT,
+        pool_recycle=60,  # Recycle connections after 60 seconds
+        connect_args={
+            "connect_timeout": CONNECTION_TIMEOUT,
+            "keepalives": 1,
+            "keepalives_idle": KEEPALIVE_IDLE,
+            "keepalives_interval": KEEPALIVE_INTERVAL,
+            "keepalives_count": 3,
+        },
+    )
+
+    # Create session
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    try:
+        logger.debug(f"Connection established for {operation_name}")
+        yield session
+        session.commit()
+        logger.debug(f"Operation completed successfully: {operation_name}")
+    except Exception as e:
+        logger.error(f"Error during {operation_name}: {str(e)}")
+        session.rollback()
+        raise
+    finally:
+        session.close()
+        engine.dispose()
+        logger.debug(f"Connection closed for {operation_name}")
+
+
+def retry_on_connection_error(max_retries=MAX_RETRIES, base_delay=RETRY_DELAY):
+    """Decorator to retry functions on database connection errors with exponential backoff."""
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (OperationalError, SQLAlchemyError) as e:
+                    # Check if it's a connection error
+                    error_str = str(e).lower()
+                    if any(
+                        x in error_str
+                        for x in ["connection", "ssl", "timeout", "closed"]
+                    ):
+                        delay = base_delay * (2**attempt)  # Exponential backoff
+                        logger.warning(
+                            f"Connection error on attempt {attempt+1}/{max_retries}, "
+                            f"retrying in {delay} seconds. Error: {str(e)}"
+                        )
+                        time.sleep(delay)
+                        last_exception = e
+                    else:
+                        # Not a connection error, don't retry
+                        raise
+                except Exception as e:
+                    # Don't retry other types of exceptions
+                    raise
+
+            # If we get here, we've exhausted our retries
+            if last_exception:
+                logger.error(
+                    f"Max retries ({max_retries}) reached. Last error: {str(last_exception)}"
+                )
+                raise last_exception
+            raise RuntimeError("Max retries reached for unknown reason")
+
+        return wrapper
+
+    return decorator
+
+
+@retry_on_connection_error()
 def save_vector_store(
     session: Any,
     vector_db_path: str,
@@ -129,7 +228,7 @@ def save_vector_store(
     model_name: str,
     progress_bar: Optional[tqdm] = None,
 ) -> UUID:
-    """Save a complete vector store (both index.faiss and index.pkl) to the database using large object storage."""
+    """Save a complete vector store (both index.faiss and index.pkl) to the database using large object storage with chunking."""
     logger.info(f"Saving vector store '{name}' version {version} to database")
 
     try:
@@ -141,35 +240,111 @@ def save_vector_store(
             raise FileNotFoundError(f"Missing required files in {vector_db_path}")
 
         # Calculate total size for logging
-        total_size = os.path.getsize(faiss_path) + os.path.getsize(pkl_path)
-        logger.info(f"Total data size: {total_size/1024/1024:.1f} MB")
+        faiss_size = os.path.getsize(faiss_path)
+        pkl_size = os.path.getsize(pkl_path)
+        total_size = faiss_size + pkl_size
+        logger.info(
+            f"Total data size: {total_size/1024/1024:.1f} MB (FAISS: {faiss_size/1024/1024:.1f} MB, PKL: {pkl_size/1024/1024:.1f} MB)"
+        )
 
         if progress_bar:
-            progress_bar.set_description(f"Encoding {name}")
+            progress_bar.set_description(f"Processing {name}")
             progress_bar.update(10)
 
         # Get raw connection from SQLAlchemy session
         connection = session.connection().connection
+        logger.info("Database connection established for saving vector store")
 
         # Create large objects for each file
         large_objects = {}
-        lobj = connection.lobject(0, "wb")
 
-        # Store FAISS index
+        # Process FAISS index with chunking
+        logger.info(
+            f"Storing FAISS index ({faiss_size/1024/1024:.1f} MB) as large object"
+        )
+        lobj_faiss = connection.lobject(0, "wb")
+
+        chunks_processed = 0
+        total_chunks = faiss_size // CHUNK_SIZE + (1 if faiss_size % CHUNK_SIZE else 0)
+
         with open(faiss_path, "rb") as f:
-            lobj.write(f.read())
-        large_objects["index.faiss"] = lobj.oid
+            start_time = time.time()
+            while chunk := f.read(CHUNK_SIZE):
+                try:
+                    lobj_faiss.write(chunk)
+                    chunks_processed += 1
 
-        # Store pickle file
-        lobj = connection.lobject(0, "wb")
-        with open(pkl_path, "rb") as f:
-            lobj.write(f.read())
-        large_objects["index.pkl"] = lobj.oid
+                    # Log progress periodically
+                    if chunks_processed % 10 == 0 or chunks_processed == total_chunks:
+                        elapsed = time.time() - start_time
+                        logger.info(
+                            f"FAISS: Processed {chunks_processed}/{total_chunks} chunks "
+                            f"({chunks_processed*CHUNK_SIZE/faiss_size*100:.1f}%) "
+                            f"in {elapsed:.1f}s ({chunks_processed*CHUNK_SIZE/1024/1024/elapsed:.1f} MB/s)"
+                        )
+
+                    if progress_bar:
+                        progress_bar.update(
+                            len(chunk) / total_size * 30
+                        )  # 30% of progress for FAISS
+                except Exception as e:
+                    logger.error(
+                        f"Error writing FAISS chunk {chunks_processed}: {str(e)}"
+                    )
+                    raise
+
+        large_objects["index.faiss"] = lobj_faiss.oid
+        logger.info(
+            f"Successfully stored FAISS index as large object with OID {lobj_faiss.oid}"
+        )
 
         if progress_bar:
-            progress_bar.update(40)
+            progress_bar.update(5)
+
+        # Process pickle file with chunking
+        logger.info(
+            f"Storing pickle file ({pkl_size/1024/1024:.1f} MB) as large object"
+        )
+        lobj_pkl = connection.lobject(0, "wb")
+        chunks_processed = 0
+        total_chunks = pkl_size // CHUNK_SIZE + (1 if pkl_size % CHUNK_SIZE else 0)
+
+        with open(pkl_path, "rb") as f:
+            start_time = time.time()
+            while chunk := f.read(CHUNK_SIZE):
+                try:
+                    lobj_pkl.write(chunk)
+                    chunks_processed += 1
+
+                    # Log progress periodically
+                    if chunks_processed % 10 == 0 or chunks_processed == total_chunks:
+                        elapsed = time.time() - start_time
+                        logger.info(
+                            f"PKL: Processed {chunks_processed}/{total_chunks} chunks "
+                            f"({chunks_processed*CHUNK_SIZE/pkl_size*100:.1f}%) "
+                            f"in {elapsed:.1f}s ({chunks_processed*CHUNK_SIZE/1024/1024/elapsed:.1f} MB/s)"
+                        )
+
+                    if progress_bar:
+                        progress_bar.update(
+                            len(chunk) / total_size * 30
+                        )  # 30% of progress for PKL
+                except Exception as e:
+                    logger.error(
+                        f"Error writing PKL chunk {chunks_processed}: {str(e)}"
+                    )
+                    raise
+
+        large_objects["index.pkl"] = lobj_pkl.oid
+        logger.info(
+            f"Successfully stored pickle file as large object with OID {lobj_pkl.oid}"
+        )
+
+        if progress_bar:
+            progress_bar.update(5)
 
         # Create the vector store record with large object references
+        logger.info("Creating vector store record in database")
         vector_store = VectorStore(
             name=name,
             version=version,
@@ -180,8 +355,15 @@ def save_vector_store(
             created_at=datetime.now(timezone.utc),
         )
 
+        # Add to session and commit
         session.add(vector_store)
-        session.commit()
+        try:
+            session.commit()
+            logger.info("Database commit successful")
+        except SQLAlchemyError as e:
+            logger.error(f"Database error during commit: {str(e)}")
+            session.rollback()
+            raise
 
         if progress_bar:
             progress_bar.update(100 - progress_bar.n)
@@ -191,24 +373,16 @@ def save_vector_store(
 
     except Exception as e:
         logger.error(f"Failed to save vector store '{name}': {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         session.rollback()
         raise
 
 
+@retry_on_connection_error()
 def load_vector_store(
     session: Any, name: str, output_dir: str, version: Optional[str] = None
 ) -> bool:
-    """Load a vector store from the database and save it to the specified directory.
-
-    Args:
-        session: SQLAlchemy session
-        name: Name identifier of the vector store
-        output_dir: Directory where to save the vector store files
-        version: Optional specific version to load (loads latest if not specified)
-
-    Returns:
-        True if successful, False if not found
-    """
+    """Load a vector store from the database and save it to the specified directory."""
     logger.info(
         f"Loading vector store '{name}'{f' version {version}' if version else ' (latest version)'}"
     )
@@ -231,47 +405,58 @@ def load_vector_store(
         os.makedirs(vector_db_dir, exist_ok=True)
 
         try:
-            # Parse the JSON data
-            files_data = json.loads(vector_store.data)
+            # Parse the JSON data to get large object OIDs
+            object_ids = json.loads(vector_store.data)
+            logger.info(f"Retrieved large object IDs: {object_ids}")
 
-            # Decode and write files
-            for file_name, encoded_content in files_data.items():
+            # Get raw connection
+            connection = session.connection().connection
+
+            # Process each large object
+            for file_name, oid in object_ids.items():
+                logger.info(f"Retrieving large object for {file_name} with OID {oid}")
                 file_path = os.path.join(vector_db_dir, file_name)
 
-                # Decode the base64 content
                 try:
-                    binary_content = base64.b64decode(encoded_content)
-                except Exception as e:
-                    logger.error(f"Failed to decode {file_name}: {str(e)}")
-                    raise
+                    # Open the large object for reading
+                    lobj = connection.lobject(oid, "rb")
+                    file_size = lobj.seek(0, 2)  # Seek to end to get size
+                    lobj.seek(0)  # Reset to beginning
 
-                # Verify checksum if available
-                if hasattr(vector_store, "checksum") and vector_store.checksum:
-                    expected_checksum = vector_store.checksum.get(file_name)
-                    if expected_checksum:
-                        actual_checksum = hashlib.sha256(binary_content).hexdigest()
-                        if actual_checksum != expected_checksum:
-                            raise ValueError(
-                                f"Checksum mismatch for {file_name}. "
-                                f"Expected: {expected_checksum}, "
-                                f"Got: {actual_checksum}"
-                            )
-
-                # Write the file
-                with open(file_path, "wb") as f:
-                    f.write(binary_content)
-
-                # Verify file size is reasonable
-                file_size = os.path.getsize(file_path)
-                if file_size < 1024:  # Less than 1KB is suspicious
-                    logger.warning(
-                        f"Warning: {file_name} is suspiciously small ({file_size} bytes)"
+                    logger.info(
+                        f"Large object size for {file_name}: {file_size/1024/1024:.1f} MB"
                     )
+
+                    # Read and write in chunks
+                    with open(file_path, "wb") as f:
+                        bytes_read = 0
+                        start_time = time.time()
+                        while chunk := lobj.read(CHUNK_SIZE):
+                            f.write(chunk)
+                            bytes_read += len(chunk)
+                            if bytes_read % (10 * CHUNK_SIZE) == 0:
+                                elapsed = time.time() - start_time
+                                logger.info(
+                                    f"Read {bytes_read/1024/1024:.1f} MB of {file_size/1024/1024:.1f} MB "
+                                    f"for {file_name} ({bytes_read/file_size*100:.1f}%) "
+                                    f"in {elapsed:.1f}s ({bytes_read/1024/1024/elapsed:.1f} MB/s)"
+                                )
+
+                    logger.info(
+                        f"Successfully wrote {file_name} ({os.path.getsize(file_path)/1024/1024:.1f} MB)"
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"Error reading large object for {file_name}: {str(e)}"
+                    )
+                    raise
 
             # Verify FAISS index integrity
             try:
                 faiss_path = os.path.join(vector_db_dir, "index.faiss")
-                faiss.read_index(faiss_path)
+                index = faiss.read_index(faiss_path)
+                logger.info(f"Successfully verified FAISS index: {index}")
             except Exception as e:
                 logger.error(f"Failed to verify FAISS index: {str(e)}")
                 raise ValueError(f"FAISS index verification failed: {str(e)}")
@@ -283,7 +468,8 @@ def load_vector_store(
             logger.error(f"Failed to parse vector store data: {str(e)}")
             raise
         except Exception as e:
-            logger.error(f"Failed to decode vector store files: {str(e)}")
+            logger.error(f"Failed to load vector store: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
     except SQLAlchemyError as e:
@@ -291,24 +477,14 @@ def load_vector_store(
         raise
     except Exception as e:
         logger.error(f"Unexpected error while loading vector store '{name}': {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise
 
 
 def import_vector_stores(
-    session: Any, base_path: str, version: str, model_name: str, store_name: str
+    database_url: str, base_path: str, version: str, model_name: str, store_name: str
 ) -> Dict[str, bool]:
-    """Import vector store from a specific directory to the database.
-
-    Args:
-        session: SQLAlchemy session
-        base_path: Base path containing the vector store files
-        version: Version string to assign
-        model_name: Name of the model used to create embeddings
-        store_name: Name to use for the vector store in the database
-
-    Returns:
-        Dictionary mapping store names to import success status
-    """
+    """Import vector store from a specific directory to the database using fresh connections."""
     results = {}
 
     # Look for vector_db directory
@@ -323,16 +499,125 @@ def import_vector_stores(
         os.path.join(vector_db_path, "index.pkl")
     ):
         try:
-            save_vector_store(session, vector_db_path, store_name, version, model_name)
-            results[store_name] = True
-            logger.info(f"Successfully imported vector store: {store_name}")
+            # Use a fresh connection for storing the vector store
+            with get_fresh_connection(database_url, f"Import {store_name}") as session:
+                vector_store_id = save_vector_store(
+                    session, vector_db_path, store_name, version, model_name
+                )
+                results[store_name] = True
+                logger.info(f"Successfully imported vector store: {store_name}")
+
+                # Verify the import with a separate connection
+                with get_fresh_connection(
+                    database_url, f"Verify {store_name}"
+                ) as verify_session:
+                    output_dir = os.path.join("temp", store_name)
+                    os.makedirs(output_dir, exist_ok=True)
+                    success = load_vector_store(
+                        verify_session, store_name, output_dir, version
+                    )
+
+                    if not success:
+                        logger.warning(
+                            f"Verification did not find vector store: {store_name}"
+                        )
+                        results[store_name] = False
+
         except Exception as e:
             logger.error(f"Failed to import vector store: {str(e)}")
+            logger.error(traceback.format_exc())
             results[store_name] = False
     else:
         logger.warning(f"No valid vector store found in {vector_db_path}")
 
     return results
+
+
+def process_vector_store(database_url, store_name, store_path, version, model_name):
+    """Process a single vector store with improved connection management and error handling."""
+    logger.info(f"Processing vector store '{store_name}' from {store_path}")
+
+    with tqdm(total=100, desc=f"Processing {store_name}", unit="%") as progress_bar:
+        try:
+            # First check if store already exists using a quick connection
+            with get_fresh_connection(
+                database_url, f"Check if {store_name} exists"
+            ) as check_session:
+                existing = check_session.execute(
+                    select(VectorStore).where(
+                        VectorStore.name == store_name, VectorStore.version == version
+                    )
+                ).scalar_one_or_none()
+
+            if existing:
+                logger.warning(
+                    f"Vector store '{store_name}' version {version} already exists, skipping..."
+                )
+                progress_bar.update(100)
+                return False
+
+            progress_bar.update(10)
+            logger.info(f"Starting import of '{store_name}' version {version}")
+
+            # Process the import with a dedicated connection for saving
+            with get_fresh_connection(
+                database_url, f"Save {store_name}"
+            ) as save_session:
+                try:
+                    vector_store_id = save_vector_store(
+                        session=save_session,
+                        vector_db_path=store_path,
+                        name=store_name,
+                        version=version,
+                        model_name=model_name,
+                        progress_bar=progress_bar,
+                    )
+                    logger.info(
+                        f"Successfully saved vector store '{store_name}' with ID {vector_store_id}"
+                    )
+                except Exception as e:
+                    logger.error(f"Error during save: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    return False
+
+            # Verify with a separate connection
+            if vector_store_id:
+                with get_fresh_connection(
+                    database_url, f"Verify {store_name}"
+                ) as verify_session:
+                    try:
+                        output_dir = os.path.join("temp", store_name)
+                        os.makedirs(output_dir, exist_ok=True)
+                        success = load_vector_store(
+                            session=verify_session,
+                            name=store_name,
+                            output_dir=output_dir,
+                            version=version,
+                        )
+                        progress_bar.update(20)
+
+                        if success:
+                            logger.info(
+                                f"Successfully imported and verified {store_name}"
+                            )
+                            return True
+                        else:
+                            logger.error(f"Verification failed for {store_name}")
+                            return False
+                    except Exception as e:
+                        logger.error(f"Error during verification: {str(e)}")
+                        logger.error(traceback.format_exc())
+                        return False
+            else:
+                logger.error(f"Import failed for {store_name}")
+                return False
+
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in process_vector_store for {store_name}: {str(e)}"
+            )
+            logger.error(traceback.format_exc())
+            return False
 
 
 if __name__ == "__main__":
@@ -349,16 +634,6 @@ if __name__ == "__main__":
         "?sslmode=require&connect_timeout=30"
     )
 
-    # Configure engine with proper settings for large data handling
-    engine = create_engine(
-        DATABASE_URL,
-        pool_size=5,  # Limit concurrent connections
-        max_overflow=10,  # Allow up to 10 additional connections
-        pool_timeout=30,  # Wait up to 30 seconds for a connection
-        pool_recycle=1800,  # Recycle connections after 30 minutes
-    )
-    Session = sessionmaker(bind=engine)
-
     # Store names in dict keys match the names used in the database
     stores = {
         "rag-fr-general-law": "data/legal-rag-tmp/general",
@@ -366,144 +641,46 @@ if __name__ == "__main__":
         "rag-fr-admin-law": "data/legal-rag/admin",
     }
 
-    from tqdm import tqdm
-    import time
-    from contextlib import contextmanager
-    from sqlalchemy.exc import OperationalError, SQLAlchemyError
-
-    @contextmanager
-    def get_db_session():
-        """Context manager for database sessions with automatic cleanup"""
-        session = Session()
-        try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
-
-    def retry_on_db_error(func, max_retries=3, delay=5):
-        """Decorator to retry database operations with exponential backoff"""
-
-        def wrapper(*args, **kwargs):
-            for attempt in range(max_retries):
-                try:
-                    return func(*args, **kwargs)
-                except OperationalError as e:
-                    if attempt == max_retries - 1:
-                        raise
-                    logger.warning(
-                        f"Database operation failed, retrying in {delay} seconds... Error: {e}"
-                    )
-                    time.sleep(delay * (2**attempt))
-            return None
-
-        return wrapper
-
-    @retry_on_db_error
-    def process_vector_store(session, store_name, store_path, version, model_name):
-        """Process a single vector store with progress monitoring"""
-        logger.info(f"Processing vector store '{store_name}' from {store_path}")
-
-        with tqdm(total=100, desc=f"Processing {store_name}", unit="%") as progress_bar:
-            # Check if store already exists
-            existing = session.execute(
-                select(VectorStore).where(
-                    VectorStore.name == store_name, VectorStore.version == version
-                )
-            ).scalar_one_or_none()
-
-            if existing:
-                logger.warning(
-                    f"Vector store '{store_name}' version {version} already exists, skipping..."
-                )
-                progress_bar.update(100)
-                return False
-
-            progress_bar.update(10)
-
-            # Import the store with progress monitoring
-            try:
-                vector_store_id = save_vector_store(
-                    session=session,
-                    vector_db_path=store_path,
-                    name=store_name,
-                    version=version,
-                    model_name=model_name,
-                    progress_bar=progress_bar,  # Pass the progress bar
-                )
-
-                # Verify the import
-                if vector_store_id:
-                    output_dir = os.path.join("temp", store_name)
-                    os.makedirs(output_dir, exist_ok=True)
-                    success = load_vector_store(
-                        session=session,
-                        name=store_name,
-                        output_dir=output_dir,
-                        version=version,
-                    )
-                    progress_bar.update(20)
-
-                    if success:
-                        logger.info(f"Successfully imported and verified {store_name}")
-                        return True
-                    else:
-                        logger.error(f"Verification failed for {store_name}")
-                        return False
-                else:
-                    logger.error(f"Import failed for {store_name}")
-                    return False
-
-            except Exception as e:
-                logger.error(f"Error processing {store_name}: {str(e)}")
-                return False
-
     try:
-        # Process each store in sequence
-        with get_db_session() as session:
-            # First validate all paths before starting
-            for store_name, base_path in stores.items():
-                vector_db_path = os.path.join(base_path, "vector_db")
-                faiss_path = os.path.join(vector_db_path, "index.faiss")
-                pkl_path = os.path.join(vector_db_path, "index.pkl")
+        # Process each store in sequence, with validation first
+        for store_name, base_path in stores.items():
+            vector_db_path = os.path.join(base_path, "vector_db")
+            faiss_path = os.path.join(vector_db_path, "index.faiss")
+            pkl_path = os.path.join(vector_db_path, "index.pkl")
 
-                logger.info(f"Validating paths for {store_name}:")
-                logger.info(f"  Base path: {base_path}")
-                logger.info(f"  Vector DB path: {vector_db_path}")
-                logger.info(f"  FAISS index: {faiss_path}")
-                logger.info(f"  Pickle file: {pkl_path}")
+            logger.info(f"Validating paths for {store_name}:")
+            logger.info(f"  Base path: {base_path}")
+            logger.info(f"  Vector DB path: {vector_db_path}")
+            logger.info(f"  FAISS index: {faiss_path}")
+            logger.info(f"  Pickle file: {pkl_path}")
 
-                if not os.path.exists(base_path):
-                    raise FileNotFoundError(f"Base path does not exist: {base_path}")
-                if not os.path.exists(vector_db_path):
-                    raise FileNotFoundError(
-                        f"vector_db directory not found: {vector_db_path}"
-                    )
-                if not os.path.exists(faiss_path):
-                    raise FileNotFoundError(f"FAISS index not found: {faiss_path}")
-                if not os.path.exists(pkl_path):
-                    raise FileNotFoundError(f"Pickle file not found: {pkl_path}")
-
-            # If validation passes, process stores
-            for store_name, store_path in stores.items():
-                success = process_vector_store(
-                    session=session,
-                    store_name=store_name,
-                    store_path=os.path.join(
-                        store_path, "vector_db"
-                    ),  # Add vector_db to path
-                    version="0.3.1",
-                    model_name="thenlper/gte-small",
+            if not os.path.exists(base_path):
+                raise FileNotFoundError(f"Base path does not exist: {base_path}")
+            if not os.path.exists(vector_db_path):
+                raise FileNotFoundError(
+                    f"vector_db directory not found: {vector_db_path}"
                 )
+            if not os.path.exists(faiss_path):
+                raise FileNotFoundError(f"FAISS index not found: {faiss_path}")
+            if not os.path.exists(pkl_path):
+                raise FileNotFoundError(f"Pickle file not found: {pkl_path}")
 
-                if not success:
-                    raise RuntimeError(f"Failed to process {store_name}")
+        # If validation passes, process each store with a separate connection
+        for store_name, store_path in stores.items():
+            success = process_vector_store(
+                database_url=DATABASE_URL,
+                store_name=store_name,
+                store_path=os.path.join(store_path, "vector_db"),
+                version="0.3.1",
+                model_name="thenlper/gte-small",
+            )
 
+            if not success:
+                logger.error(f"Failed to process {store_name}")
+            else:
                 logger.info(f"Successfully processed {store_name}")
 
     except Exception as e:
         logger.error(f"Error during vector store processing: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
