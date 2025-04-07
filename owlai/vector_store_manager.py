@@ -73,9 +73,10 @@ def encode_vector_store_files(vector_db_path: str) -> Dict[str, str]:
 
 def decode_vector_store_files(encoded_data: str, output_dir: str, session: Any) -> None:
     """Decode vector store files to the specified directory.
-    Handles both storage formats:
+    Handles multiple storage formats:
     1. Base64 encoded file contents (old format)
     2. Large object IDs (new format)
+    3. Raw large object IDs
 
     Args:
         encoded_data: JSON string containing either base64 encoded files or large object IDs
@@ -84,38 +85,79 @@ def decode_vector_store_files(encoded_data: str, output_dir: str, session: Any) 
     """
     logger.debug(f"Decoding vector store files to {output_dir}")
     try:
-        # Parse the JSON string back to dictionary
-        files_data = json.loads(encoded_data)
+        # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
 
-        for file_name in ["index.faiss", "index.pkl"]:
+        # Try to parse the JSON data
+        try:
+            files_data = json.loads(encoded_data)
+            if not isinstance(files_data, dict):
+                raise ValueError(f"Expected dictionary data, got {type(files_data)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON data: {str(e)}")
+            logger.debug(f"Raw data received: {encoded_data[:100]}...")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error parsing data: {str(e)}")
+            raise
+
+        # Validate required files are present
+        required_files = ["index.faiss", "index.pkl"]
+        missing_files = [f for f in required_files if f not in files_data]
+        if missing_files:
+            raise ValueError(f"Missing required files in data: {missing_files}")
+
+        # Get database connection
+        connection = session.connection().connection
+
+        # Process each file
+        for file_name in required_files:
             file_path = os.path.join(output_dir, file_name)
             data = files_data[file_name]
 
-            # Try to detect the storage format
+            logger.debug(f"Processing {file_name}, data type: {type(data)}")
+
+            # Try different data formats
             try:
-                # Try to convert to integer (new format - large object ID)
-                oid = int(data)
-                logger.debug(f"Detected large object format for {file_name}")
+                # First try: direct integer OID
+                if isinstance(data, int):
+                    logger.debug(f"Detected integer OID format for {file_name}")
+                    lobj = connection.lobject(data, "rb")
+                    with open(file_path, "wb") as f:
+                        f.write(lobj.read())
+                    continue
 
-                # Get raw connection from SQLAlchemy session
-                connection = session.connection().connection
-                lobj = connection.lobject(oid, "rb")
-                with open(file_path, "wb") as f:
-                    f.write(lobj.read())
-
-            except ValueError:
-                # If conversion to int fails, assume it's base64 encoded (old format)
-                logger.debug(f"Detected base64 format for {file_name}")
+                # Second try: string OID
                 try:
+                    oid = int(data)
+                    logger.debug(f"Detected string OID format for {file_name}")
+                    lobj = connection.lobject(oid, "rb")
+                    with open(file_path, "wb") as f:
+                        f.write(lobj.read())
+                    continue
+                except ValueError:
+                    pass  # Not an integer string, try next format
+
+                # Third try: base64 encoded data
+                try:
+                    logger.debug(f"Attempting base64 decode for {file_name}")
                     decoded_data = base64.b64decode(data)
                     with open(file_path, "wb") as f:
                         f.write(decoded_data)
+                    continue
                 except Exception as e:
-                    logger.error(
-                        f"Failed to decode base64 data for {file_name}: {str(e)}"
-                    )
-                    raise
+                    logger.debug(f"Base64 decode failed for {file_name}: {str(e)}")
+
+                # If we get here, none of the formats worked
+                raise ValueError(
+                    f"Could not determine data format for {file_name}. "
+                    f"Data type: {type(data)}, "
+                    f"First 100 chars: {str(data)[:100]}"
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to process {file_name}: {str(e)}")
+                raise
 
         logger.debug("Successfully decoded vector store files")
 
