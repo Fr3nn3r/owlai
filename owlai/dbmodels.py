@@ -96,7 +96,9 @@ def main():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    DATABASE_URL = "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
+    # DATABASE_URL = "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
+
+    DATABASE_URL = "postgresql://owluser:NyCINUy7Un3JjE28Md3mRjpg5Dd4aKEy@dpg-cvn7c2ngi27c73bi26hg-a.frankfurt-postgres.render.com/owlai_db"
 
     confirm = input(
         "WARNING: This will drop and recreate all database tables. Type 'yes' to confirm: "
