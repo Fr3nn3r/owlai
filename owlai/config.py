@@ -604,7 +604,7 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-admin-law-v0",
+                "name": "rag-fr-admin-law",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
                 "input_data_folder": "temp/rag-fr-admin-law",  # Larger dataset
@@ -647,7 +647,7 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-tax-law-v0",
+                "name": "rag-fr-tax-law",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
                 "input_data_folder": "temp/rag-fr-tax-law",  # Larger dataset
@@ -690,7 +690,7 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-general-law-v0",
+                "name": "rag-fr-general-law",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
                 "input_data_folder": "temp/rag-fr-general-law",  # Larger dataset
