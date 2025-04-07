@@ -128,7 +128,7 @@ FRONTEND_AGENT_DATA = {
             "primary": "#0055A4",  # French blue
             "secondary": "#FFFFFF",  # White
         },
-        "welcome_title": "Marianne, intelligence artificielle 100% française",
+        "welcome_title": "Voici Marianne, une intelligence artificielle sur le droit français",
     },
 }
 

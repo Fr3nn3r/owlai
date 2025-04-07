@@ -191,7 +191,7 @@ class OwlAgent(BaseTool, BaseModel):
             logger.debug("Oldest message removed from history.")
 
             # Remove tool message if present as the next message
-            if (
+            while (
                 len(self._message_history) > 1
                 and self._message_history[1].type == "tool"
             ):
@@ -271,8 +271,8 @@ class OwlAgent(BaseTool, BaseModel):
             return
 
         if len(model_response.tool_calls) > 1:
-            raise Exception(
-                f"Multiple tool calls in response is not supported: {model_response.tool_calls}"
+            logger.warning(
+                f"Multiple tool calls in response is experimental: {model_response.tool_calls}"
             )
 
         for tool_call in model_response.tool_calls:
@@ -445,7 +445,7 @@ class OwlAgent(BaseTool, BaseModel):
             if isinstance(response, AIMessage):
                 self._process_tool_calls(response)
                 if hasattr(response, "tool_calls") and response.tool_calls:
-                    response = self.chat_model.invoke(self._message_history)
+                    # response = self.chat_model.invoke(self._message_history)
 
                     # Stream the response
                     complete_response = []

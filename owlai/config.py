@@ -372,6 +372,7 @@ _PROMPT_CONFIG = {
     "Guidelines: \n"
     "Use a spartan tone of voice.\n"
     "Use the OwlAI system services tools to acquire knowledge about the user's request.\n"
+    # "Use only one tool at a time.\n"  # we have to work on this limitation
     "Go beyond surface level insight and generic advice.\n"
     "Without services data, report that the OwlAI system failed to provide sufficent quality information to answer.\n"
     "Response format:\n"
@@ -508,11 +509,12 @@ OWL_AGENTS_BASE_CONFIG = {
             "tools_names": [
                 "rag-fr-general-law-v1",
                 "rag-fr-tax-law-v1",
-                # "rag-fr-admin-law-v1",
+                "rag-fr-admin-law-v1",
             ],
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"]
-        + FRENCH_LAW_QUESTIONS["tax"],
+        + FRENCH_LAW_QUESTIONS["tax"]
+        + FRENCH_LAW_QUESTIONS["admin"],
     },
 }
 
@@ -601,10 +603,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-admin-law",
+                "name": "rag-fr-admin-law-v0",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "__________data/legal-rag/admin",  # Larger dataset
+                "input_data_folder": "data/legal-rag/admin",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/admin",
@@ -644,10 +646,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-tax-law",
+                "name": "rag-fr-tax-law-v0",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "__________data/legal-rag/fiscal",  # Larger dataset
+                "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/fiscal",
@@ -687,13 +689,13 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-general-law",
+                "name": "rag-fr-general-law-v0",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "__________data/legal-rag-tmp/general",  # Larger dataset
+                "input_data_folder": "data/legal-rag/general",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
-                    "output_data_folder": "data/legal-rag-tmp/general",
+                    "output_data_folder": "data/legal-rag/general",
                     "chunk_size": 512,
                     "chunk_overlap": 50,
                     "add_start_index": True,

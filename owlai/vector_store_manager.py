@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 from owlai.dbmodels import VectorStore
 from tqdm import tqdm
+import hashlib
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -128,106 +129,68 @@ def save_vector_store(
     model_name: str,
     progress_bar: Optional[tqdm] = None,
 ) -> UUID:
-    """Save a complete vector store (both index.faiss and index.pkl) to the database."""
+    """Save a complete vector store (both index.faiss and index.pkl) to the database using large object storage."""
     logger.info(f"Saving vector store '{name}' version {version} to database")
 
     try:
-        # First encode the files
-        encoded_data = encode_vector_store_files(vector_db_path)
+        # Read files in binary mode
+        faiss_path = os.path.join(vector_db_path, "index.faiss")
+        pkl_path = os.path.join(vector_db_path, "index.pkl")
 
-        # Calculate total size for progress monitoring
-        total_size = sum(len(content) for content in encoded_data.values())
+        if not os.path.exists(faiss_path) or not os.path.exists(pkl_path):
+            raise FileNotFoundError(f"Missing required files in {vector_db_path}")
+
+        # Calculate total size for logging
+        total_size = os.path.getsize(faiss_path) + os.path.getsize(pkl_path)
         logger.info(f"Total data size: {total_size/1024/1024:.1f} MB")
 
         if progress_bar:
             progress_bar.set_description(f"Encoding {name}")
             progress_bar.update(10)
 
-        # Create the vector store record first
+        # Get raw connection from SQLAlchemy session
+        connection = session.connection().connection
+
+        # Create large objects for each file
+        large_objects = {}
+        lobj = connection.lobject(0, "wb")
+
+        # Store FAISS index
+        with open(faiss_path, "rb") as f:
+            lobj.write(f.read())
+        large_objects["index.faiss"] = lobj.oid
+
+        # Store pickle file
+        lobj = connection.lobject(0, "wb")
+        with open(pkl_path, "rb") as f:
+            lobj.write(f.read())
+        large_objects["index.pkl"] = lobj.oid
+
+        if progress_bar:
+            progress_bar.update(40)
+
+        # Create the vector store record with large object references
         vector_store = VectorStore(
             name=name,
             version=version,
             model_name=model_name,
-            data=json.dumps({}),  # Empty data initially
+            data=json.dumps(
+                large_objects
+            ),  # Store large object IDs instead of raw data
             created_at=datetime.now(timezone.utc),
         )
+
         session.add(vector_store)
-        session.flush()
-
-        if progress_bar:
-            progress_bar.set_description(f"Created record for {name}")
-            progress_bar.update(10)
-
-        # Split data into smaller chunks (5MB)
-        chunks = chunk_large_data(
-            encoded_data, chunk_size=5 * 1024 * 1024
-        )  # 5MB chunks
-        chunk_size = len(chunks)
-
-        logger.info(f"Split data into {chunk_size} chunks of 5MB each")
-
-        # Create a nested progress bar for chunk uploads
-        chunk_progress = tqdm(
-            total=chunk_size, desc="Uploading chunks", unit="chunk", leave=False
-        )
-
-        # Upload chunks with progress monitoring
-        accumulated_data = {"index.faiss": "", "index.pkl": ""}
-        last_commit = 0  # Track when we last committed
-
-        for i, chunk in enumerate(chunks):
-            # Accumulate chunk data
-            file_name = chunk["file_name"]
-            accumulated_data[file_name] += chunk["data"]
-            chunk_progress.update(1)
-
-            # Update accumulated size for this file
-            current_size = len(accumulated_data[file_name])
-
-            # If we've accumulated 5MB or this is the last chunk, send the data
-            if current_size >= 5 * 1024 * 1024 or i == len(chunks) - 1:
-                try:
-                    # Update the vector store with accumulated data
-                    setattr(vector_store, "data", json.dumps(accumulated_data))
-                    session.merge(vector_store)
-                    session.flush()
-
-                    # Clear accumulated data for this file
-                    accumulated_data[file_name] = ""
-
-                    # Update main progress bar
-                    if progress_bar:
-                        progress = min(80, 20 + (i + 1) / chunk_size * 60)
-                        progress_bar.update(progress - progress_bar.n)
-
-                    # Commit every 20 chunks to avoid long-running transactions
-                    if i - last_commit >= 20:
-                        session.commit()
-                        last_commit = i
-
-                except SQLAlchemyError as e:
-                    chunk_progress.close()
-                    logger.error(f"Failed uploading chunk {i+1}/{chunk_size}: {str(e)}")
-                    raise
-
-        chunk_progress.close()
-
-        # Final commit
         session.commit()
 
         if progress_bar:
-            progress_bar.set_description(f"Completed {name}")
             progress_bar.update(100 - progress_bar.n)
 
         logger.info(f"Successfully saved vector store '{name}' (version {version})")
         return cast(UUID, vector_store.id)
 
-    except SQLAlchemyError as e:
-        logger.error(f"Database error while saving vector store '{name}': {str(e)}")
-        session.rollback()
-        raise
     except Exception as e:
-        logger.error(f"Unexpected error while saving vector store '{name}': {str(e)}")
+        logger.error(f"Failed to save vector store '{name}': {str(e)}")
         session.rollback()
         raise
 
@@ -267,10 +230,61 @@ def load_vector_store(
         vector_db_dir = os.path.join(output_dir, "vector_db")
         os.makedirs(vector_db_dir, exist_ok=True)
 
-        # Decode files into vector_db directory
-        decode_vector_store_files(vector_store.data, vector_db_dir)
-        logger.info(f"Successfully loaded vector store '{name}' to {vector_db_dir}")
-        return True
+        try:
+            # Parse the JSON data
+            files_data = json.loads(vector_store.data)
+
+            # Decode and write files
+            for file_name, encoded_content in files_data.items():
+                file_path = os.path.join(vector_db_dir, file_name)
+
+                # Decode the base64 content
+                try:
+                    binary_content = base64.b64decode(encoded_content)
+                except Exception as e:
+                    logger.error(f"Failed to decode {file_name}: {str(e)}")
+                    raise
+
+                # Verify checksum if available
+                if hasattr(vector_store, "checksum") and vector_store.checksum:
+                    expected_checksum = vector_store.checksum.get(file_name)
+                    if expected_checksum:
+                        actual_checksum = hashlib.sha256(binary_content).hexdigest()
+                        if actual_checksum != expected_checksum:
+                            raise ValueError(
+                                f"Checksum mismatch for {file_name}. "
+                                f"Expected: {expected_checksum}, "
+                                f"Got: {actual_checksum}"
+                            )
+
+                # Write the file
+                with open(file_path, "wb") as f:
+                    f.write(binary_content)
+
+                # Verify file size is reasonable
+                file_size = os.path.getsize(file_path)
+                if file_size < 1024:  # Less than 1KB is suspicious
+                    logger.warning(
+                        f"Warning: {file_name} is suspiciously small ({file_size} bytes)"
+                    )
+
+            # Verify FAISS index integrity
+            try:
+                faiss_path = os.path.join(vector_db_dir, "index.faiss")
+                faiss.read_index(faiss_path)
+            except Exception as e:
+                logger.error(f"Failed to verify FAISS index: {str(e)}")
+                raise ValueError(f"FAISS index verification failed: {str(e)}")
+
+            logger.info(f"Successfully loaded vector store '{name}' to {vector_db_dir}")
+            return True
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse vector store data: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to decode vector store files: {str(e)}")
+            raise
 
     except SQLAlchemyError as e:
         logger.error(f"Database error while loading vector store '{name}': {str(e)}")
