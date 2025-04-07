@@ -143,7 +143,9 @@ class RAGDataStore(BaseModel):
                     os.makedirs(os.path.dirname(temp_db_dir), exist_ok=True)
 
                     # Decode files from database
-                    decode_vector_store_files(vector_store_record.data, temp_db_dir)
+                    decode_vector_store_files(
+                        vector_store_record.data, temp_db_dir, self._db_session
+                    )
 
                     # Load the vector store
                     vector_store = FAISS.load_local(

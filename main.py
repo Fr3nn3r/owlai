@@ -21,6 +21,7 @@ from typing import Optional
 from owlai.nest import AgentManager
 from owlai.config import OWL_AGENTS_CONFIG, OWL_AGENTS_OPTIONAL_RAG_TOOLS
 from owlai.owlsys import is_dev
+from owlai.telemetry import RequestLatencyTracker
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +249,9 @@ queryid_to_messageid_map = {}
 @app.post("/stream-query")
 async def stream_query(payload: QueryRequest):
     """Stream a response from an agent"""
+    # Create latency tracker
+    latency = RequestLatencyTracker(payload.query_id)
+
     logger.info(
         f"Received streaming query request from agent {payload.agent_id}: {payload.question}"
     )
@@ -260,18 +264,26 @@ async def stream_query(payload: QueryRequest):
         )
 
     async def generate():
+        first_token_logged = False
         try:
+            latency.mark("generate_start")
             logger.info(f"Streaming query for agent {payload.agent_id}")
             # Get the agent instance
             agent = agent_manager.get_agent(payload.session_id, "fr-law-qna")
+            latency.mark("agent_initialized")
 
             logger.info(f"Agent {payload.agent_id} found")
 
             # Stream the response
             async for chunk in agent.stream_message(payload.question):
+                if not first_token_logged:
+                    latency.mark("first_token_generated")
+                    first_token_logged = True
                 yield f"event: message\ndata: {json.dumps({'content': chunk})}\n\n"
 
-            # After streaming is complete, send the message ID
+            # After streaming is complete
+            latency.mark("streaming_complete")
+
             if agent._conversation_id and agent._memory:
                 message_id = agent._memory.get_last_message_id(agent._conversation_id)
                 logger.debug(f"Message ID: {message_id}")
@@ -284,6 +296,12 @@ async def stream_query(payload: QueryRequest):
                     yield f"event: complete\ndata: {json.dumps({'message_id': str(message_id)})}\n\n"
             else:
                 raise Exception("No conversation ID or memory found for agent")
+
+            # Log final latency breakdown at debug level
+            latencies = latency.get_latency_breakdown()
+            logger.debug(
+                f"Request {payload.query_id} complete - Latency breakdown: {latencies}"
+            )
 
         except Exception as e:
             logger.error(f"Error streaming response: {e}")

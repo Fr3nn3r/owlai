@@ -373,7 +373,7 @@ _PROMPT_CONFIG = {
     "Guidelines: \n"
     "Use a spartan tone of voice.\n"
     "Use the OwlAI system services tools to acquire knowledge about the user's request.\n"
-    "You must use only one tool everytime.\n"  # we have to work on this limitation
+    "You must always try to use at least one tool.\n"  # we have to work on this limitation
     "Go beyond surface level insight and generic advice.\n"
     "Without services data, report that the OwlAI system failed to provide sufficent quality information to answer.\n"
     "Response format:\n"
@@ -381,11 +381,11 @@ _PROMPT_CONFIG = {
     "Use headings, subheadings, bullet points, numbered lists and clear formatting elements.\n"
     "Quote relevant sources this way: according to article 1234 from code ABC... [Source XYZ]\n"
     "Always ask specific and referenceable questions to:\n"
-    "1. offer more details on specific points (example: 1. would you me more details on point X above?)\n"
-    "2. understand the user context better (example: 2. may I ask why you are asking this question?)\n"
-    "3. propose to create a draft document (example: 3. would you like me to draft a document for you?)\n"
-    "4. offer to define technical terms (example: 4. do you need clarification about this XYZ technical term?)\n"
-    "5. offer to provide a list of related questions (example: 5. would you like me to provide a list of related questions?)\n"
+    "a. offer more details on specific points (example: a. would you me more details on point X above?)\n"
+    "b. understand the user context better (example: b. may I ask why you are asking this question?)\n"
+    "c. propose to create a draft document (example: c. would you like me to draft a document for you?)\n"
+    "d. offer to define technical terms (example: d. do you need clarification about this XYZ technical term?)\n"
+    "e. offer to provide a list of related questions (example: e. would you like me to provide a list of related questions?)\n"
     "NEVER ask non-specific questions - BAD EXAMPLES:\n"
     "a. May I help you with anything else?\n"
     "b. If you would like me to assist further just let me know.\n"
@@ -514,7 +514,8 @@ OWL_AGENTS_BASE_CONFIG = {
             ],
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"]
-        + FRENCH_LAW_QUESTIONS["tax"],
+        + FRENCH_LAW_QUESTIONS["tax"]
+        + FRENCH_LAW_QUESTIONS["admin"],
     },
 }
 
@@ -603,10 +604,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-admin-law",
+                "name": "rag-fr-admin-law-v0",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag/admin",  # Larger dataset
+                "input_data_folder": "temp/rag-fr-admin-law",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/admin",
@@ -646,10 +647,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-tax-law",
+                "name": "rag-fr-tax-law-v0",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag/fiscal",  # Larger dataset
+                "input_data_folder": "temp/rag-fr-tax-law",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/fiscal",
@@ -666,7 +667,7 @@ TOOLS_CONFIG = {
     },
     "rag-fr-general-law-v1": {
         "name": "rag-fr-general-law-v1",
-        "description": "Returns data chunks from french law documents: civil, commercial, criminal, residency, social, public health",
+        "description": "Returns data chunks from french law documents: civil, work, commercial, criminal, residency, social, public health",
         "args_schema": {
             "title": "ToolInput",
             "type": "object",
@@ -689,10 +690,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "rag-fr-general-law",
+                "name": "rag-fr-general-law-v0",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag/general",  # Larger dataset
+                "input_data_folder": "temp/rag-fr-general-law",  # Larger dataset
                 "parser": {
                     "implementation": "FrenchLawParser",
                     "output_data_folder": "data/legal-rag/general",

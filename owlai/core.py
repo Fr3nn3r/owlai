@@ -42,6 +42,7 @@ from langchain_core.callbacks import (
 import traceback
 from owlai.owlsys import sprint
 from langchain_core.tools import BaseTool, ArgsSchema
+from owlai.telemetry import RequestLatencyTracker
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)
@@ -422,11 +423,15 @@ class OwlAgent(BaseTool, BaseModel):
         Yields:
             str: Chunks of the model's response
         """
+        latency = RequestLatencyTracker(str(id(self)))
+        first_token_logged = False
         try:
             logger.info(f"Streaming message for agent {self.name}")
             # Start new conversation if needed
             if not self._conversation_id and self._memory:
                 self._start_new_conversation()
+
+            latency.mark("conversation_setup")
 
             # update system prompt with latestcontext
             system_message = SystemMessage(f"{self.system_prompt}")
@@ -436,35 +441,47 @@ class OwlAgent(BaseTool, BaseModel):
                 self._message_history[0] = system_message
 
             self.append_message(HumanMessage(message))
+            latency.mark("messages_prepared")
 
             response = self.chat_model.invoke(self._message_history)
+            latency.mark("initial_response_received")
 
             self.append_message(response)
 
             # Process tool calls if needed
             if isinstance(response, AIMessage):
                 self._process_tool_calls(response)
-                if hasattr(response, "tool_calls") and response.tool_calls:
-                    # response = self.chat_model.invoke(self._message_history)
+                latency.mark("tool_calls_processed")
 
+                if hasattr(response, "tool_calls") and response.tool_calls:
                     # Stream the response
                     complete_response = []
 
                     async for chunk in self.chat_model.astream(self._message_history):
                         if chunk.content:
+                            if (
+                                not complete_response and not first_token_logged
+                            ):  # First token
+                                latency.mark("first_token_generated")
+                                first_token_logged = True
                             complete_response.append(chunk.content)
                             yield chunk.content
 
                     final_response = "".join(complete_response)
                     final_message = AIMessage(content=final_response)
                     self.append_message(final_message)
+                    latency.mark("streaming_complete")
 
                 else:
                     yield response.content
+                    latency.mark("direct_response_sent")
             else:
                 raise Exception("Invalid response from model")
 
             logger.info(f"Streaming message for agent {self.name} completed")
+            # Log final latency breakdown
+            latencies = latency.get_latency_breakdown()
+            logger.debug(f"Agent processing latencies: {latencies}")
 
         except Exception as e:
             logger.error(

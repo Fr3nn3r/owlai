@@ -71,29 +71,51 @@ def encode_vector_store_files(vector_db_path: str) -> Dict[str, str]:
         raise
 
 
-def decode_vector_store_files(encoded_data: str, output_dir: str) -> None:
-    """Decode base64 strings back to FAISS index and pickle files.
+def decode_vector_store_files(encoded_data: str, output_dir: str, session: Any) -> None:
+    """Decode vector store files to the specified directory.
+    Handles both storage formats:
+    1. Base64 encoded file contents (old format)
+    2. Large object IDs (new format)
 
     Args:
-        encoded_data: JSON string containing base64 encoded file contents
-        output_dir: Directory where to save the decoded files
+        encoded_data: JSON string containing either base64 encoded files or large object IDs
+        output_dir: Directory where to save the files
+        session: SQLAlchemy session for database access
     """
     logger.debug(f"Decoding vector store files to {output_dir}")
     try:
         # Parse the JSON string back to dictionary
         files_data = json.loads(encoded_data)
-
         os.makedirs(output_dir, exist_ok=True)
 
-        # Decode and write FAISS index
-        faiss_path = os.path.join(output_dir, "index.faiss")
-        with open(faiss_path, "wb") as f:
-            f.write(base64.b64decode(files_data["index.faiss"]))
+        for file_name in ["index.faiss", "index.pkl"]:
+            file_path = os.path.join(output_dir, file_name)
+            data = files_data[file_name]
 
-        # Decode and write pickle file
-        pkl_path = os.path.join(output_dir, "index.pkl")
-        with open(pkl_path, "wb") as f:
-            f.write(base64.b64decode(files_data["index.pkl"]))
+            # Try to detect the storage format
+            try:
+                # Try to convert to integer (new format - large object ID)
+                oid = int(data)
+                logger.debug(f"Detected large object format for {file_name}")
+
+                # Get raw connection from SQLAlchemy session
+                connection = session.connection().connection
+                lobj = connection.lobject(oid, "rb")
+                with open(file_path, "wb") as f:
+                    f.write(lobj.read())
+
+            except ValueError:
+                # If conversion to int fails, assume it's base64 encoded (old format)
+                logger.debug(f"Detected base64 format for {file_name}")
+                try:
+                    decoded_data = base64.b64decode(data)
+                    with open(file_path, "wb") as f:
+                        f.write(decoded_data)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to decode base64 data for {file_name}: {str(e)}"
+                    )
+                    raise
 
         logger.debug("Successfully decoded vector store files")
 
