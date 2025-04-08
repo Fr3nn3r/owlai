@@ -29,14 +29,14 @@ def set_cuda_device():
 
         if torch.cuda.is_available():
             device = "cuda"
-            logger.info(f"Using CUDA device")
+            logger.debug(f"Using CUDA device")
         else:
             device = "cpu"
-            logger.info("CUDA not available, falling back to CPU")
+            logger.debug("CUDA not available, falling back to CPU")
 
     except ImportError:
         device = "cpu"
-        logger.info("PyTorch not available, using CPU")
+        logger.debug("PyTorch not available, using CPU")
 
     return device
 
@@ -81,7 +81,7 @@ def setup_logging():
                 os.makedirs(os.path.dirname(handler["filename"]), exist_ok=True)
 
         logging.config.dictConfig(logging_config)
-        logger.info(f"Logging configured from {config_file}")
+        logger.debug(f"Logging configured from {config_file}")
 
     except Exception as e:
         raise RuntimeError(
@@ -192,7 +192,7 @@ is_prod = env == "production"
 is_dev = env == "development"
 is_test = env == "test"
 
-logger.info(f"System initialized for '{env}' environment, CUDA device: '{device}'")
+logger.debug(f"System initialized for '{env}' environment, CUDA device: '{device}'")
 
 # Replace with your actual DB URI
 # DATABASE_URL = "postgresql://postgres:dev@localhost:5432/owlai_dev"

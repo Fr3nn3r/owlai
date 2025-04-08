@@ -34,6 +34,7 @@ from owlai.data import RAGDataStore
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
 from owlai.embeddings import EmbeddingManager
+from owlai.reranker import RerankerManager
 from owlai.models import RAGPretrainedModel
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class RAGRetriever(BaseModel):
         query: str,
         knowledge_base: Optional[FAISS],
         reranker: Optional[Any] = None,
-    ) -> Tuple[List[LangchainDocument], dict]:
+    ) -> List[LangchainDocument]:
         """
         Retrieve the k most relevant document chunks for a given query.
 
@@ -100,7 +101,7 @@ class RAGRetriever(BaseModel):
             "reranking_enabled": reranker is not None,
         }
 
-        logger.info(f"Documents search")
+        logger.debug(f"Documents search")
         retrieved_docs = knowledge_base.similarity_search(
             query=query, k=self.num_retrieved_docs
         )
@@ -114,7 +115,7 @@ class RAGRetriever(BaseModel):
         }
         logger.debug(f"{len(retrieved_docs)} documents retrieved")
 
-        return retrieved_docs, metadata
+        return retrieved_docs
 
 
 class RAGTool(BaseTool):
@@ -166,15 +167,16 @@ class RAGTool(BaseTool):
             self._embeddings = embeddings
             logger.debug("Embeddings initialization completed")
 
-            # Try to initialize reranker
+            # Try to initialize reranker using RerankerManager
             logger.debug(
                 f"Attempting to initialize reranker: {self.retriever.reranker_name}"
             )
             try:
-                from sentence_transformers import CrossEncoder
-
                 reranker_name = self.retriever.reranker_name
-                self._reranker = CrossEncoder(reranker_name)
+                self._reranker = RerankerManager.get_reranker(
+                    model_name=reranker_name,
+                    model_kwargs=self.retriever.model_kwargs,
+                )
                 logger.debug(
                     f"Successfully initialized cross-encoder reranker: {reranker_name}"
                 )
@@ -237,7 +239,9 @@ class RAGTool(BaseTool):
                 doc.metadata["rerank_score"] = float(score)
                 doc.metadata["rerank_position"] = i + 1
 
-            logger.debug(f"Reranking completed for {len(scored_docs)} documents")
+            logger.debug(
+                f"Reranking completed from {len(scored_docs)} documents to {k}"
+            )
 
             return [doc for _, doc in scored_docs[:k]]
 
@@ -255,12 +259,12 @@ class RAGTool(BaseTool):
         Returns:
             A dictionary containing the question, answer, and metadata.
         """
-        logger.debug(f"Running RAG query: '{question}'")
+        logger.info(f"Tool: '{self.name}' - Semantics query: '{question}'")
 
         answer: Dict[str, Any] = {"question": question}
 
         # Get initial documents
-        retrieved_docs, metadata = self.retriever.retrieve_relevant_chunks(
+        retrieved_docs = self.retriever.retrieve_relevant_chunks(
             query=question,
             knowledge_base=self._vector_store,
             reranker=None,  # We'll do reranking separately
@@ -273,7 +277,7 @@ class RAGTool(BaseTool):
 
         for idoc in reranked_docs:
             logger.debug(
-                f"Document {idoc.metadata.get('title', 'Unknown Title')} - Rerank Score: {idoc.metadata.get('rerank_score', 'Unknown')}"
+                f"Document '{idoc.metadata.get('title', 'Unknown Title')}' - Rerank Score: {idoc.metadata.get('rerank_score', 'Unknown')}"
             )
 
         docs_content = f"Query: '{question}'\nDocuments:\n\n".join(
@@ -282,6 +286,22 @@ class RAGTool(BaseTool):
                 for idx, doc in enumerate(reranked_docs)
             ]
         )
+
+        metadata = {
+            "query": question,
+            "k": self.retriever.num_retrieved_docs,
+            "num_docs_final": self.retriever.num_docs_final,
+            "reranking_enabled": self._reranker is not None,
+        }
+
+        metadata["reranked_docs"] = [
+            {
+                "title": doc.metadata.get("title", "Unknown Title"),
+                "score": doc.metadata.get("rerank_score", "Unknown"),
+                "source": doc.metadata.get("source", "Unknown Source"),
+            }
+            for doc in reranked_docs
+        ]
 
         answer["answer"] = docs_content
         answer["metadata"] = metadata
@@ -308,236 +328,19 @@ class RAGTool(BaseTool):
     def message_invoke(self, message: str) -> str:
         """Override OwlAgent.message_invoke with RAG specific implementation"""
         answer = self.get_rag_sources(message)
-        logger.debug(f"Completed RAG search completed")
+        metadata = answer["metadata"]
+        # logger.debug(f"Metadata: {metadata}")
+        mean_rerank_score = sum(
+            float(doc.get("score", 0)) for doc in metadata["reranked_docs"]
+        ) / len(metadata["reranked_docs"])
+
+        logger.info(
+            f"Selected {len(metadata['reranked_docs'])} documents - mean rerank score: {mean_rerank_score}"
+        )
+
         if "answer" not in answer or answer["answer"] == "":
             raise Exception("No answer found")
         return answer.get("answer", "?????")
-
-
-class RAGAgent(OwlAgent):
-
-    # JSON defined properties
-    retriever: RAGRetriever
-
-    # Runtime updated properties
-    _init_completed = False
-    _prompt = None
-    _vector_store = None
-    _embeddings: Optional[HuggingFaceEmbeddings] = None
-    _reranker = None
-    _db_session = None
-
-    def __init__(self, *args, db_session: Optional[Any] = None, **kwargs):
-        """Initialize RAGAgent with optional database session for vector store caching.
-
-        Args:
-            db_session: Optional SQLAlchemy session for vector store DB operations
-            *args, **kwargs: Additional arguments passed to parent
-        """
-        super().__init__(*args, **kwargs)
-
-        # Store DB session
-        self._db_session = db_session
-
-        # Initialize embeddings
-        self._embeddings = EmbeddingManager.get_embedding(
-            model_name=self.retriever.embeddings_model_name,
-            multi_process=self.retriever.multi_process,
-            model_kwargs=self.retriever.model_kwargs,
-            encode_kwargs=self.retriever.encode_kwargs,
-        )
-        if self._embeddings is None:
-            raise ValueError("Failed to initialize embeddings")
-
-        # Initialize reranker
-        reranker_name = self.retriever.reranker_name
-        self._reranker = RAGPretrainedModel.from_pretrained(reranker_name)
-        self._prompt = PromptTemplate.from_template(self.system_prompt)
-
-        # Pass db_session to datastore
-        if self._db_session:
-            self.retriever.datastore._db_session = self._db_session
-
-        # Load vector store
-        self._vector_store = self.retriever.load_dataset(self._embeddings)
-
-        if self._vector_store is None:
-            logger.warning(
-                "No vector stores found: you must set the vector store manually."
-            )
-        else:
-            logger.info(
-                f"Data store loaded: {self.retriever.datastore.input_data_folder}"
-            )
-
-    def rerank_documents(
-        self, query: str, documents: List[LangchainDocument], k: int = 5
-    ) -> List[LangchainDocument]:
-        """
-        Rerank documents using the reranker model.
-
-        Args:
-            query: The search query
-            documents: List of documents to rerank
-            k: Number of documents to return
-
-        Returns:
-            Reranked list of documents
-        """
-        if not self._reranker:
-            return documents[:k]
-
-        try:
-            # Prepare sentence pairs for reranking
-            sentence_pairs = [(query, doc.page_content) for doc in documents]
-
-            # Get scores from reranker
-            scores = self._reranker.predict(sentence_pairs)
-
-            # Create list of (score, doc) tuples and sort by score
-            scored_docs = list(zip(scores, documents))
-            scored_docs.sort(key=lambda x: x[0], reverse=True)
-
-            # Update metadata with scores
-            for i, (score, doc) in enumerate(scored_docs[:k]):
-                doc.metadata["rerank_score"] = float(score)
-                doc.metadata["rerank_position"] = i + 1
-
-            logger.debug(f"Reranking completed for {len(scored_docs)} documents")
-
-            return [doc for _, doc in scored_docs[:k]]
-
-        except Exception as e:
-            logger.warning(f"Error during reranking: {str(e)}")
-            logger.warning("Falling back to original document order")
-            return documents[:k]
-
-    def get_rag_sources(self, question: str) -> Dict[str, Any]:
-        """
-        Get relevant documents for a question using RAG.
-
-        Args:
-            question: The question to find sources for
-
-        Returns:
-            Dictionary containing question, answer (document content), and metadata
-        """
-        logger.debug(f"Getting RAG sources for: '{question}'")
-
-        answer: Dict[str, Any] = {"question": question}
-
-        # Get initial documents without reranking
-        retrieved_docs, metadata = self.retriever.retrieve_relevant_chunks(
-            query=question,
-            knowledge_base=self._vector_store,
-            reranker=None,  # We'll do reranking separately
-        )
-
-        # Rerank documents
-        reranked_docs = self.rerank_documents(
-            question, retrieved_docs, k=self.retriever.num_docs_final
-        )
-
-        # Format document content
-        docs_content = "\n\n".join(
-            [
-                f"{idx+1}. [Source: {doc.metadata.get('title', 'Unknown Title')} - Score: {doc.metadata.get('rerank_score', 'Unknown')}] \"{doc.page_content}\""
-                for idx, doc in enumerate(reranked_docs)
-            ]
-        )
-
-        answer["answer"] = docs_content
-        answer["metadata"] = metadata
-
-        return answer
-
-    def invoke_rag(self, question: str) -> Dict[str, Any]:
-        """
-        Runs the RAG query against the vector store and returns an answer to the question.
-        Args:
-            question: a string containing the question to answer.
-
-        Returns:
-            A dictionary containing the question, answer, and metadata.
-        """
-        logger.debug(f"Running RAG query: '{question}'")
-
-        answer: Dict[str, Any] = {"question": question}
-
-        docs_content = self.get_rag_sources(question)["answer"]
-
-        with track_time("Model invocation with RAG context"):
-
-            if self._prompt is None:
-                raise Exception("Prompt is not set")
-
-            rag_prompt = self._prompt.format(question=question, context=docs_content)
-            message = SystemMessage(rag_prompt)
-            messages = self.chat_model.invoke([message])
-
-        answer["answer"] = str(messages.content) if messages.content is not None else ""
-
-        return answer
-
-    def _run(
-        self,
-        query: str,
-        run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
-        """Override BaseTool._run to ensure we use our implementation"""
-        logger.debug(f"[RAGOwlAgent._run] Called with query: {query}")
-        return self.message_invoke(query)
-
-    async def _arun(
-        self,
-        query: str,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> str:
-        """Override BaseTool._arun to ensure we use our implementation"""
-        return self.message_invoke(query)
-
-    def message_invoke(self, message: str) -> str:
-        """Override OwlAgent.message_invoke with RAG specific implementation"""
-        logger.debug(
-            f"[RAGOwlAgent.message_invoke] Called from {self.name} with message: {message}"
-        )
-
-        answer = self.invoke_rag(message)
-        if "answer" not in answer or answer["answer"] == "":
-            raise Exception("No answer found")
-        return answer.get("answer", "?????")
-
-    async def stream_message(self, message: str):
-        """Stream a response from the RAG agent"""
-        logger.debug(
-            f"[RAGOwlAgent.stream_message] Called from {self.name} with message: {message}"
-        )
-
-        # Get initial documents without reranking
-        retrieved_docs, metadata = self.retriever.retrieve_relevant_chunks(
-            query=message,
-            knowledge_base=self._vector_store,
-            reranker=None,  # Skip reranking in the retriever
-        )
-
-        # Perform reranking separately with error handling
-        reranked_docs = self.rerank_documents(
-            message, retrieved_docs, k=self.retriever.num_docs_final
-        )
-
-        # Format documents content
-        docs_content = self.get_rag_sources(message)["answer"]
-
-        if self._prompt is None:
-            raise Exception("Prompt is not set")
-
-        # Create the RAG prompt
-        rag_prompt = self._prompt.format(question=message, context=docs_content)
-
-        # Stream the response
-        async for chunk in self.chat_model.astream([SystemMessage(rag_prompt)]):
-            if chunk.content:
-                yield chunk.content
 
 
 def main():

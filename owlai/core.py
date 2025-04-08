@@ -173,7 +173,7 @@ class OwlAgent(BaseTool, BaseModel):
         """
         if type(message) == AIMessage:
             self.total_tokens = self._token_count(message)
-            logger.debug(f"Total tokens: {self.total_tokens} for agent '{id(self)}'")
+            # logger.debug(f"Total tokens: {self.total_tokens} for agent '{id(self)}'")
 
         # Handle FIFO mode to manage context window
         if (

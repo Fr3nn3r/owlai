@@ -1,3 +1,7 @@
+"""
+OwlAI agent manager module
+"""
+
 import logging
 from typing import List, Dict, Any, Optional
 from logging import Logger
@@ -21,34 +25,41 @@ class AgentManager:
     INACTIVE_TIMEOUT = 30 * 60  # 30 minutes in seconds
     CLEANUP_INTERVAL = 300  # 5 minutes in seconds
 
-    focus_agent: OwlAgent
-    _initialized = False
-
     def __init__(
-        self, agents_config: Dict[str, Dict[str, Any]], enable_cleanup: bool = False
+        self, agents_config: Dict[str, Dict[str, Any]], enable_cleanup: bool = True
     ):
-        """Initialize the AgentManager.
+        """Initialize AgentManager.
 
         Args:
-            agents_config: Dictionary containing agent configurations
-            enable_cleanup: Whether to enable automatic cleanup of inactive agents
+            agents_config: Dictionary of agent configurations
+            enable_cleanup: Whether to enable cleanup of inactive agents
         """
         self.agents_config = agents_config
         self.active_agents: Dict[str, OwlAgent] = {}
         self.inactive_agents: Dict[str, OwlAgent] = {}
         self.last_used: Dict[str, float] = {}
-        self.owls: Dict[str, OwlAgent] = {}
+        self.owls: Dict[str, Optional[OwlAgent]] = {}
         self.names: List[str] = []
         self.toolbox = ToolBox()
         self.db_session = Session()
         self.memory = SQLAlchemyMemory(self.db_session)
-        self._lazy_init()
-        self.CLEANUP_INTERVAL = 300  # 5 minutes
-        self.INACTIVE_THRESHOLD = 1800  # 30 minutes
+        self._initialized = False
+        self._focus_agent: Optional[OwlAgent] = None
+        self.focus_agent_name = ""
+        self.enable_cleanup = enable_cleanup
 
-        if enable_cleanup:
-            self._start_cleanup_task()
-        logger.info("AgentManager initialized with active/inactive agent management")
+        # Register agent names but don't initialize them yet
+        for agent_key in agents_config.keys():
+            agent_config = agents_config[agent_key]
+            self.owls[agent_config["name"]] = None
+            self.names.append(agent_config["name"])
+
+        if not self.names:
+            raise RuntimeError("No agent configurations found")
+
+        # Set focus agent name but don't initialize it yet
+        self.focus_agent_name = self.names[0]
+        logger.info(f"AgentManager initialized with active/inactive agent management")
 
     def initialize_agent(self, agent_key: str) -> Optional[OwlAgent]:
         """Initialize a new agent with the given configuration key.
@@ -86,13 +97,17 @@ class AgentManager:
         if not self.names:
             raise RuntimeError("No agents were successfully initialized")
 
-        self.focus_agent = self.owls[self.names[0]]
+        self._focus_agent = self.owls[self.names[0]]
         self._initialized = True
         logger.info(f"AgentManager initialized with {len(self.names)} agents")
 
-    def get_focus_owl(self) -> OwlAgent:
-        logger.debug(f"Focus agent: {self.focus_agent.name}")
-        return self.focus_agent
+    def get_focus_owl(self) -> Optional[OwlAgent]:
+        """Get the current focus agent, initializing it if necessary."""
+        if self._focus_agent is None:
+            self._focus_agent = self.get_agent(self.focus_agent_name)
+
+        logger.debug(f"Focus agent: {self.focus_agent_name}")
+        return self._focus_agent
 
     def _start_cleanup_task(self):
         """Start the background task for cleaning up inactive agents."""
@@ -124,33 +139,27 @@ class AgentManager:
             del self.last_used[session_id]
             logger.info(f"Cleaned up inactive agent: {session_id}")
 
-    def get_agent(self, session_id: str, agent_key: str) -> OwlAgent:
-        """Get an agent by session ID. If the agent doesn't exist, create it."""
-        current_time = time.time()
+    def get_agent(self, agent_name: str) -> Optional[OwlAgent]:
+        """Get an agent by name, initializing it if necessary.
 
-        # Check active agents first
-        if session_id in self.active_agents:
-            self.last_used[session_id] = current_time
-            return self.active_agents[session_id]
+        Args:
+            agent_name: Name of the agent to get
 
-        # Check inactive agents
-        if session_id in self.inactive_agents:
-            logger.debug(f"Reactivating inactive agent: {session_id}")
-            agent = self.inactive_agents.pop(session_id)
-            self.active_agents[session_id] = agent
-            self.last_used[session_id] = current_time
-            agent.reset_message_history()
-            return agent
+        Returns:
+            The requested agent or None if not found/initialization fails
+        """
+        if agent_name not in self.owls:
+            logger.error(f"No agent configuration found for {agent_name}")
+            return None
 
-        # Create new agent if not found
-        logger.debug(f"Creating new agent for session: {session_id}")
-        agent = self.initialize_agent(agent_key)
-        if not agent:
-            raise RuntimeError(f"Failed to initialize agent {agent_key}")
+        # Initialize agent if not already initialized
+        if self.owls[agent_name] is None:
+            for key, config in self.agents_config.items():
+                if config["name"] == agent_name:
+                    self.owls[agent_name] = self.initialize_agent(key)
+                    break
 
-        self.active_agents[session_id] = agent
-        self.last_used[session_id] = current_time
-        return agent
+        return self.owls[agent_name]
 
     def mark_inactive(self, session_id: str):
         """Mark an agent as inactive and move it to the inactive pool."""
@@ -177,22 +186,22 @@ class AgentManager:
         return "not found"
 
     def get_default_queries(self) -> List[str]:
-        if self.focus_agent.default_queries is None:
-            logger.warning(f"No default queries defined for {self.focus_agent.name}")
+        if self._focus_agent.default_queries is None:
+            logger.warning(f"No default queries defined for {self._focus_agent.name}")
             return []
 
-        return self.focus_agent.default_queries
+        return self._focus_agent.default_queries
 
     def run_default_queries(self):
         default_queries = self.get_default_queries()
 
         if len(default_queries) > 0:
-            logger.info(f"Running default queries for {self.focus_agent.name}")
+            logger.info(f"Running default queries for {self._focus_agent.name}")
             for test in default_queries:
                 logger.info(f"USER: {test}")
-                self.focus_agent.invoke(test)
+                self._focus_agent.invoke(test)
         else:
-            logger.warning(f"No default queries defined for {self.focus_agent.name}")
+            logger.warning(f"No default queries defined for {self._focus_agent.name}")
 
     def get_agents_names(self) -> List[str]:
         return self.names
@@ -201,23 +210,39 @@ class AgentManager:
         return [key for key in self.agents_config.keys()]
 
     def get_agents_info(self) -> List[str]:
-        return [f"{agent.name}: {agent.description}" for agent in self.owls.values()]
+        return [
+            f"{agent.name}: {agent.description}"
+            for agent in self.owls.values()
+            if agent
+        ]
 
     def get_agents_default_queries(self) -> List[str]:
         return [
             f"{agent.name}: {', '.join(agent.default_queries) if agent.default_queries else 'No default queries'}"
             for agent in self.owls.values()
+            if agent
         ]
 
     def invoke_agent(self, agent_name: str, message: str):
         if agent_name not in self.names:
             logger.warning(f"Agent {agent_name} not found")
             return
-        self.focus_agent = self.owls[agent_name]
-        return self.focus_agent.message_invoke(message)
+        self._focus_agent = self.owls[agent_name]
+        return self._focus_agent.message_invoke(message)
 
     def set_focus_agent(self, agent_name: str):
         if agent_name not in self.names:
             logger.warning(f"Agent {agent_name} not found")
             return
-        self.focus_agent = self.owls[agent_name]
+        self.focus_agent_name = agent_name
+
+    def cleanup_inactive_agents(self):
+        """Clean up inactive agents to free memory if enabled."""
+        if not self.enable_cleanup:
+            return
+
+        focus_name = self.focus_agent_name
+        for name in self.names:
+            if name != focus_name and name in self.owls:
+                self.owls[name] = None
+                logger.debug(f"Cleaned up inactive agent: {name}")

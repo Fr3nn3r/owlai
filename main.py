@@ -269,7 +269,7 @@ async def stream_query(payload: QueryRequest):
             latency.mark("generate_start")
             logger.info(f"Streaming query for agent {payload.agent_id}")
             # Get the agent instance
-            agent = agent_manager.get_agent(payload.session_id, "fr-law-qna")
+            agent = agent_manager.get_agent("fr-law-qna")
             latency.mark("agent_initialized")
 
             logger.info(f"Agent {payload.agent_id} found")
