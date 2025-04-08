@@ -12,9 +12,9 @@ import time
 from datetime import datetime, timedelta
 
 from owlai.core import OwlAgent
-from owlai.tools import ToolBox
+from owlai.services.tools.tools import ToolBox
 from owlai.db.memory import SQLAlchemyMemory
-from owlai.owlsys import Session
+from owlai.services.system import Session
 
 logger: Logger = logging.getLogger(__name__)
 

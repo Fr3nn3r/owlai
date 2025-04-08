@@ -4,8 +4,8 @@ globs:
 alwaysApply: false
 ---
 ---
-description:
-globs:
+description: Rules for code changes
+globs: [*.py]
 alwaysApply: true
 ---
 

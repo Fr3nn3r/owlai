@@ -1,4 +1,9 @@
 ---
+description: 
+globs: 
+alwaysApply: false
+---
+---
 description: Rules for PowerShell command formatting
 globs: ["**"]
 alwaysApply: true

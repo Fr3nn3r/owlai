@@ -1,4 +1,4 @@
-from owlai.owlsys import device
+from owlai.services.system import device
 
 enable_multi_process = device == "cuda"
 

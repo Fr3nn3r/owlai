@@ -16,7 +16,7 @@ from prompt_toolkit import prompt
 from prompt_toolkit.history import InMemoryHistory
 
 from owlai.nest import AgentManager
-from owlai.owlsys import setup_logging
+from owlai.services.system import setup_logging
 from owlai.config.agents import OWL_AGENTS_CONFIG
 
 logger: Logger = logging.getLogger(__name__)

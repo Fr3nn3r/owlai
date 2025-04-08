@@ -20,8 +20,8 @@ from typing import Optional
 
 from owlai.nest import AgentManager
 from owlai.config import OWL_AGENTS_CONFIG, OWL_AGENTS_OPTIONAL_RAG_TOOLS
-from owlai.owlsys import is_dev
-from owlai.telemetry import RequestLatencyTracker
+from owlai.services.system import is_dev
+from owlai.services.telemetry import RequestLatencyTracker
 
 logger = logging.getLogger(__name__)
 

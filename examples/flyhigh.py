@@ -10,7 +10,7 @@ from rich.table import Table
 from rich import box
 from owlai.nest import AgentManager
 from owlai.config import OWL_AGENTS_CONFIG
-from owlai.owlsys import setup_logging, sprint
+from owlai.services.system import setup_logging, sprint
 from prompt_toolkit.history import InMemoryHistory
 import os
 import sys

@@ -19,7 +19,7 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
 )
 
-from owlai.rag import RAGTool
+from owlai.services.rag import RAGTool
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)

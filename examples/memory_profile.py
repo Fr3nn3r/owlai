@@ -4,7 +4,7 @@ import psutil
 import torch
 from memory_profiler import profile
 from owlai.nest import AgentManager
-from owlai.rag import RAGTool
+from owlai.services.rag import RAGTool
 from owlai.core import OwlAgent
 from owlai.config import OWL_AGENTS_CONFIG
 import logging

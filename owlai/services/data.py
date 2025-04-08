@@ -20,8 +20,8 @@ from pydantic import BaseModel
 from tqdm import tqdm
 import traceback
 
-from owlai.owlsys import track_time, Session
-from owlai.parser import DefaultParser, create_instance
+from owlai.services.system import track_time, Session
+from owlai.services.parser import DefaultParser, create_instance
 
 # Get logger using the module name
 

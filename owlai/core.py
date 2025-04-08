@@ -40,9 +40,9 @@ from langchain_core.callbacks import (
 )
 
 import traceback
-from owlai.owlsys import sprint
+from owlai.services.system import sprint
 from langchain_core.tools import BaseTool, ArgsSchema
-from owlai.telemetry import RequestLatencyTracker
+from owlai.services.telemetry import RequestLatencyTracker
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)

@@ -22,11 +22,11 @@ from langchain_core.callbacks import (
 )
 import warnings
 import traceback
-from owlai.data import RAGDataStore
+from owlai.services.data import RAGDataStore
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
-from owlai.embeddings import EmbeddingManager
-from owlai.reranker import RerankerManager
+from owlai.services.embeddings import EmbeddingManager
+from owlai.services.reranker import RerankerManager
 
 
 logger = logging.getLogger(__name__)

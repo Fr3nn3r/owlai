@@ -1,13 +1,14 @@
 """
-OwlAI - A framework for building sentient AI agents
+OwlAI - A Python library for managing AI agents
 """
 
-from owlai.core import OwlAgent
-from owlai.tools import ToolBox
+from owlai.core import LLMConfig, OwlAgent
 from owlai.nest import AgentManager
 
-__version__ = "0.3.0"
+__version__ = "0.1.0"
 
 __all__ = [
-    # "AgentManager",
+    "LLMConfig",
+    "OwlAgent",
+    "AgentManager",
 ]

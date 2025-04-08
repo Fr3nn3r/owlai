@@ -4,7 +4,7 @@
 #  VV-VV
 # OK This is the config file, this should be a regular JSON file but until I see tha value of swtiching I will keep it like this
 
-from owlai.owlsys import device, env, is_prod, is_dev, is_test
+from owlai.services.system import device, env, is_prod, is_dev, is_test
 
 print("Loading config module")
 

@@ -8,7 +8,7 @@ This package contains various configuration components:
 - tools: Tool configurations
 """
 
-from owlai.owlsys import device, env, is_prod, is_dev, is_test
+from owlai.services.system import device, env, is_prod, is_dev, is_test
 
 # Import and expose configuration components
 from owlai.config.prompts import PROMPT_CONFIG

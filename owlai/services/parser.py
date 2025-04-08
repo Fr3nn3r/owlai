@@ -18,7 +18,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from transformers import AutoTokenizer
 
-from owlai.owlsys import track_time, setup_logging, sprint
 import warnings
 from tqdm import tqdm
 
@@ -27,7 +26,7 @@ import re
 from langchain.docstore.document import Document as LangchainDocument
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
-from owlai.owlsys import track_time
+
 
 from tqdm import tqdm
 
