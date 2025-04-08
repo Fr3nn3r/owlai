@@ -56,7 +56,27 @@ loggers:
   main:
     level: DEBUG
     handlers: [console, file, error_file]
-    propagate: true
+    propagate: false
+
+  owlai.telemetry:
+    level: ERROR
+    handlers: []
+    propagate: false
+
+  sentence_transformers:
+    level: WARNING
+    handlers: []
+    propagate: false
+
+  httpx:
+    level: WARNING
+    handlers: []
+    propagate: false
+
+  faiss:
+    level: WARNING
+    handlers: []
+    propagate: false
 
   access:
     level: INFO

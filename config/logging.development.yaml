@@ -83,6 +83,11 @@ loggers:
     handlers: []
     propagate: false
 
+  owlai.telemetry:
+    level: ERROR
+    handlers: []
+    propagate: false
+
 root:
     level: INFO
     handlers: [console, file, error_file] 

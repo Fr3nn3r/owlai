@@ -23,11 +23,31 @@ def get_process_memory():
     return process.memory_info().rss / 1024**2  # Convert to MB
 
 
-def get_model_size(model):
+def get_model_size(model_container):
     """Calculate model size in MB if possible"""
-    if isinstance(model, PreTrainedModel):
-        return sum(p.numel() * p.element_size() for p in model.parameters()) / 1024**2
-    return 0
+    total_size = 0
+
+    # Try different model attributes that might contain the actual model
+    if hasattr(model_container, "_model"):
+        model = model_container._model
+    elif hasattr(model_container, "model"):
+        model = model_container.model
+    elif isinstance(model_container, PreTrainedModel):
+        model = model_container
+    else:
+        logger.warning(f"Unknown model type: {type(model_container)}")
+        return 0
+
+    # Calculate size for PyTorch models
+    if isinstance(model, torch.nn.Module):
+        total_size = (
+            sum(p.numel() * p.element_size() for p in model.parameters()) / 1024**2
+        )
+        logger.info(f"Model size: {total_size:.2f} MB")
+    else:
+        logger.warning(f"Cannot calculate size for model type: {type(model)}")
+
+    return total_size
 
 
 @profile
@@ -45,10 +65,20 @@ def analyze_memory():
     print("\nAnalyzing focus agent components...")
     focus_agent = manager.get_focus_owl()
 
-    # Analyze model size if possible
-    if hasattr(focus_agent.chat_model, "model"):
-        model_size = get_model_size(focus_agent.chat_model.model)
-        print(f"Model parameters size: {model_size:.2f} MB")
+    # Analyze chat model size
+    if hasattr(focus_agent, "chat_model"):
+        model_size = get_model_size(focus_agent.chat_model)
+        print(f"Chat model size: {model_size:.2f} MB")
+
+    # Analyze embeddings model size if available
+    if hasattr(focus_agent, "_embeddings"):
+        embeddings_size = get_model_size(focus_agent._embeddings)
+        print(f"Embeddings model size: {embeddings_size:.2f} MB")
+
+    # Analyze reranker model size if available
+    if hasattr(focus_agent, "_reranker"):
+        reranker_size = get_model_size(focus_agent._reranker)
+        print(f"Reranker model size: {reranker_size:.2f} MB")
 
     # Check CUDA memory if available
     cuda_mem = get_torch_memory()
@@ -58,6 +88,7 @@ def analyze_memory():
     # Get total process memory at end
     final_mem = get_process_memory()
     print(f"\nTotal process memory: {final_mem:.2f} MB")
+    print(f"Memory increase during profiling: {final_mem - initial_mem:.2f} MB")
 
     return manager  # Return manager to prevent garbage collection
 

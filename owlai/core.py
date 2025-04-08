@@ -481,7 +481,7 @@ class OwlAgent(BaseTool, BaseModel):
             logger.info(f"Streaming message for agent {self.name} completed")
             # Log final latency breakdown
             latencies = latency.get_latency_breakdown()
-            logger.debug(f"Agent processing latencies: {latencies}")
+            # logger.debug(f"Agent processing latencies: {latencies}")
 
         except Exception as e:
             logger.error(
