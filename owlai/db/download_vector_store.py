@@ -5,8 +5,8 @@ import logging
 import time
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-from owlai.dbmodels import VectorStore
-from owlai.vector_store_manager import (
+from owlai.db.dbmodels import VectorStore
+from owlai.db.vector_store_manager import (
     decode_vector_store_files,
     get_fresh_connection,
     retry_on_connection_error,

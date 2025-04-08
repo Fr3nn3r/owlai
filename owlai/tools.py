@@ -11,7 +11,8 @@ import logging
 from typing import Callable, Type, Optional, Tuple, Union, List, Dict, Any
 from langchain_community.tools.tavily_search import TavilySearchResults
 from pydantic import BaseModel, Field
-from owlai.config import TOOLS_CONFIG, get_user_by_password
+from owlai.config.tools import TOOLS_CONFIG
+from owlai.config.users import get_user_by_password
 from langchain_core.tools import BaseTool, ArgsSchema
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,

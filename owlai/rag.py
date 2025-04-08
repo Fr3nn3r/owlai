@@ -14,28 +14,20 @@ import logging
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
 import warnings
-from tqdm import tqdm
-import fitz
-import re
 import traceback
-from owlai.owlsys import encode_text, track_time, setup_logging, sprint
-from owlai.core import OwlAgent
-from owlai.parser import DefaultParser, create_instance
 from owlai.data import RAGDataStore
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
 from owlai.embeddings import EmbeddingManager
 from owlai.reranker import RerankerManager
-from owlai.models import RAGPretrainedModel
+
 
 logger = logging.getLogger(__name__)
 

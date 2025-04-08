@@ -17,7 +17,7 @@ from prompt_toolkit.history import InMemoryHistory
 
 from owlai.nest import AgentManager
 from owlai.owlsys import setup_logging
-from owlai.config import OWL_AGENTS_CONFIG
+from owlai.config.agents import OWL_AGENTS_CONFIG
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ if __name__ == "__main__":
                 continue
 
             if user_message.lower() == "test":
-                focus_agent.invoke("test")
+                focus_agent.message_invoke("test")
                 continue
 
             if user_message.lower() == "metadata":

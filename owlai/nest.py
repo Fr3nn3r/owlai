@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from owlai.core import OwlAgent
 from owlai.tools import ToolBox
-from owlai.memory import SQLAlchemyMemory
+from owlai.db.memory import SQLAlchemyMemory
 from owlai.owlsys import Session
 
 logger: Logger = logging.getLogger(__name__)
@@ -199,7 +199,7 @@ class AgentManager:
             logger.info(f"Running default queries for {self._focus_agent.name}")
             for test in default_queries:
                 logger.info(f"USER: {test}")
-                self._focus_agent.invoke(test)
+                self._focus_agent.message_invoke(test)
         else:
             logger.warning(f"No default queries defined for {self._focus_agent.name}")
 

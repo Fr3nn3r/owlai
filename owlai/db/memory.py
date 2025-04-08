@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List, TypedDict, cast
 from uuid import UUID
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
-from owlai.dbmodels import Agent, Conversation, Message, Feedback, Context
+from owlai.db.dbmodels import Agent, Conversation, Message, Feedback, Context
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID as SQLUUID
 from sqlalchemy.orm import relationship

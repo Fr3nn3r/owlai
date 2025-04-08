@@ -32,7 +32,7 @@ from uuid import UUID, uuid4
 from datetime import datetime, timezone
 
 from langchain.chat_models import init_chat_model
-from owlai.memory import Memory
+from owlai.db.memory import Memory
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
@@ -46,16 +46,6 @@ from owlai.telemetry import RequestLatencyTracker
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)
-
-
-class DefaultAgentInput(BaseModel):
-    """Input schema for DefaultOwlAgent.
-
-    Attributes:
-        query (str): Natural language input to the agent
-    """
-
-    query: str = Field(description="some natural language input to the agent")
 
 
 class LLMConfig(BaseModel):
@@ -80,7 +70,7 @@ class LLMConfig(BaseModel):
     tool_choice: Optional[str] = None  # Tool choice mode for the model
 
 
-class OwlAgent(BaseTool, BaseModel):
+class OwlAgent(BaseModel):
     """Base agent class that implements core functionality for interacting with LLMs.
 
     This class combines LangChain's BaseTool and Pydantic's BaseModel to provide
@@ -91,7 +81,7 @@ class OwlAgent(BaseTool, BaseModel):
     name: str = "sad_unamed_owl_agent"
     version: str
     description: str
-    args_schema: Optional[ArgsSchema] = DefaultAgentInput
+    # args_schema: Optional[ArgsSchema] = DefaultAgentInput
     llm_config: LLMConfig
     system_prompt: str
     default_queries: Optional[List[str]] = None
@@ -336,38 +326,6 @@ class OwlAgent(BaseTool, BaseModel):
                 )
                 self.append_message(tool_msg)
                 continue
-
-    def _run(
-        self,
-        query: str,
-        run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool. This is called by BaseTool.invoke()
-
-        Args:
-            query (str): The input query
-            run_manager (Optional[CallbackManagerForToolRun]): Optional callback manager
-
-        Returns:
-            str: The response from message_invoke
-        """
-        return self.message_invoke(query)
-
-    async def _arun(
-        self,
-        query: str,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool asynchronously.
-
-        Args:
-            query (str): The input query
-            run_manager (Optional[AsyncCallbackManagerForToolRun]): Optional callback manager
-
-        Returns:
-            str: The response from message_invoke
-        """
-        return self.message_invoke(query)
 
     def message_invoke(self, message: str) -> str:
         """Process a message and return the model's response.

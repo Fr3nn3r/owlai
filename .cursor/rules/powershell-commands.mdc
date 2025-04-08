@@ -1,0 +1,46 @@
+---
+description: Rules for PowerShell command formatting
+globs: ["**"]
+alwaysApply: true
+---
+
+# PowerShell Command Formatting Rules
+
+## Path Formatting
+- Use backslashes (`\`) for paths
+- Always wrap paths with spaces in double quotes
+- Use full paths when necessary for clarity
+
+## Basic Commands
+- Use Windows PowerShell commands:
+  - `dir` or `Get-ChildItem` (not `ls`)
+  - `cd` for directory navigation
+  - `mkdir` or `New-Item -ItemType Directory`
+  - `copy` (not `cp`)
+  - `move` (not `mv`)
+  - `del` or `Remove-Item` (not `rm`)
+
+## Python Commands
+- Use `python` as the default Python command
+- Always use double quotes for paths with spaces
+- Example: `python "C:\Path With Spaces\script.py"`
+
+## Process Management
+- Use `Start-Process` for launching applications
+- Use `&` for background tasks
+- Use proper process termination: `Stop-Process` or `taskkill`
+
+## Environment Variables
+- Use `$env:VARIABLE_NAME` syntax
+- Example: `$env:PATH`, `$env:USERPROFILE`
+
+## String Formatting
+- Use double quotes for strings with variables: `"$variable"`
+- Use single quotes for literal strings: 'literal'
+- Escape special characters with backtick: `` ` ``
+
+## Error Handling
+- Use proper PowerShell error handling:
+  - `$ErrorActionPreference`
+  - `try/catch` blocks when necessary
+  - Check `$LASTEXITCODE` for command success 
