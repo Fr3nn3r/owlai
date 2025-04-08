@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from owlai.memory import SQLAlchemyMemory
-from owlai.dbmodels import Base, Agent, Conversation, Message, Feedback, Context
+from owlai.db.memory import SQLAlchemyMemory
+from owlai.db.dbmodels import Base, Agent, Conversation, Message, Feedback, Context
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ import numpy as np
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
-from owlai.dbmodels import VectorStore
+from owlai.db.dbmodels import VectorStore
 from tqdm import tqdm
 import hashlib
 import time

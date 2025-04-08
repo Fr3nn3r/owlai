@@ -15,7 +15,6 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
 from owlai.core import (
-    DefaultAgentInput,
     LLMConfig,
     OwlAgent,
 )
@@ -37,6 +36,41 @@ def mock_chat_model():
     )
     mock.bind_tools = Mock(return_value=mock)
     return mock
+
+
+@pytest.fixture
+def mock_streaming_chat_model():
+    """Create a mock chat model specifically for streaming tests."""
+
+    class MockStreamingChatModel:
+        def __init__(self):
+            self.invoke_called = False
+            self.astream_called = False
+
+        def invoke(self, messages):
+            self.invoke_called = True
+            # Return a response with tool calls to trigger astream
+            return AIMessage(
+                content="Test response",
+                response_metadata={"token_usage": {"total_tokens": 100}},
+                tool_calls=[
+                    {
+                        "name": "test_tool",
+                        "args": {"param": "value"},
+                        "id": "test_id",
+                        "type": "function",
+                    }
+                ],
+            )
+
+        async def astream(self, messages):
+            self.astream_called = True
+            yield AIMessage(content="Test response")
+
+        def bind_tools(self, tools):
+            return self
+
+    return MockStreamingChatModel()
 
 
 @pytest.fixture
@@ -68,17 +102,6 @@ def owl_agent():
         version="1.0",
     )
     return agent
-
-
-def test_default_agent_input():
-    """Test DefaultAgentInput model validation."""
-    # Valid input
-    input_data = DefaultAgentInput(query="test query")
-    assert input_data.query == "test query"
-
-    # Invalid input
-    with pytest.raises(ValidationError):
-        DefaultAgentInput()
 
 
 def test_llm_config():
@@ -246,12 +269,34 @@ def test_message_invoke(owl_agent, mock_chat_model):
 
 
 @pytest.mark.asyncio
-async def test_async_message_invoke(owl_agent, mock_chat_model):
+async def test_async_message_invoke(owl_agent, mock_streaming_chat_model, mock_tool):
     """Test async message invocation."""
     with patch("owlai.core.init_chat_model") as mock_init:
-        mock_init.return_value = mock_chat_model
-        response = await owl_agent._arun("test message")
-        assert response == "Test response"
+        mock_init.return_value = mock_streaming_chat_model
+
+        # Add the mock tool to the agent's tool dictionary
+        owl_agent._tool_dict = {"test_tool": mock_tool}
+        owl_agent.llm_config.tools_names = ["test_tool"]
+
+        try:
+            # Collect all chunks from the async generator
+            chunks = []
+            async for chunk in owl_agent.stream_message("test message"):
+                chunks.append(chunk)
+
+            # Assert that astream was called
+            assert (
+                mock_streaming_chat_model.astream_called
+            ), "astream method was not called"
+
+            # Concatenate all chunks to get the full response
+            response = "".join(chunks)
+            assert (
+                response == "Test response"
+            ), f"Expected 'Test response', got '{response}'"
+
+        except Exception as e:
+            pytest.fail(f"Test failed with exception: {str(e)}")
 
 
 def test_error_handling(owl_agent, mock_chat_model):

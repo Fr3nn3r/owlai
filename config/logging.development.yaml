@@ -17,22 +17,21 @@ formatters:
       WARNING: "yellow"
       ERROR: "red"
       CRITICAL: "bold_red"
+  simple:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 handlers:
   console:
     class: logging.StreamHandler
     level: DEBUG
-    formatter: stdout
+    formatter: simple
     stream: ext://sys.stdout
 
   file:
-    class: logging.handlers.RotatingFileHandler
-    level: INFO
-    formatter: json
+    class: logging.FileHandler
+    level: DEBUG
+    formatter: simple
     filename: logs/owlai.log
-    maxBytes: 10485760  # 10MB
-    backupCount: 5
-    encoding: utf8
 
   error_file:
     class: logging.handlers.RotatingFileHandler
@@ -65,7 +64,7 @@ loggers:
 
   owlai:
     level: DEBUG
-    handlers: [console, file, error_file]
+    handlers: [console, file]
     propagate: false
 
   sentence_transformers:
@@ -90,4 +89,5 @@ loggers:
 
 root:
     level: INFO
-    handlers: [console, file, error_file] 
+    handlers: [console]
+    propagate: false 
