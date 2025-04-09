@@ -123,8 +123,46 @@ def decode_vector_store_files(encoded_data: str, output_dir: str, session: Any) 
                 if isinstance(data, int):
                     logger.debug(f"Detected integer OID format for {file_name}")
                     lobj = connection.lobject(data, "rb")
+
+                    # Get file size for progress reporting
+                    file_size = lobj.seek(0, 2)  # Seek to end to get size
+                    lobj.seek(0)  # Reset to beginning
+                    logger.info(
+                        f"Large object size for {file_name}: {file_size/1024/1024:.1f} MB"
+                    )
+
                     with open(file_path, "wb") as f:
-                        f.write(lobj.read())
+                        bytes_read = 0
+                        chunks_processed = 0
+                        start_time = time.time()
+
+                        while chunk := lobj.read(CHUNK_SIZE):
+                            f.write(chunk)
+                            bytes_read += len(chunk)
+                            chunks_processed += 1
+
+                            # Log progress periodically or for each MB
+                            if (
+                                bytes_read % (10 * CHUNK_SIZE) == 0
+                                or len(chunk) < CHUNK_SIZE
+                            ):
+                                elapsed = time.time() - start_time
+                                transfer_rate = (
+                                    bytes_read / 1024 / 1024 / elapsed
+                                    if elapsed > 0
+                                    else 0
+                                )
+                                logger.info(
+                                    f"{file_name}: Read {bytes_read/1024/1024:.1f} MB of {file_size/1024/1024:.1f} MB "
+                                    f"({bytes_read/file_size*100:.1f}%) - "
+                                    f"{chunks_processed} chunks in {elapsed:.1f}s ({transfer_rate:.1f} MB/s)"
+                                )
+
+                        total_elapsed = time.time() - start_time
+                        logger.info(
+                            f"Completed reading {file_name}: {bytes_read/1024/1024:.1f} MB in {total_elapsed:.1f}s "
+                            f"({bytes_read/1024/1024/total_elapsed:.1f} MB/s)"
+                        )
                     continue
 
                 # Second try: string OID
@@ -132,8 +170,46 @@ def decode_vector_store_files(encoded_data: str, output_dir: str, session: Any) 
                     oid = int(data)
                     logger.debug(f"Detected string OID format for {file_name}")
                     lobj = connection.lobject(oid, "rb")
+
+                    # Get file size for progress reporting
+                    file_size = lobj.seek(0, 2)  # Seek to end to get size
+                    lobj.seek(0)  # Reset to beginning
+                    logger.info(
+                        f"Large object size for {file_name}: {file_size/1024/1024:.1f} MB"
+                    )
+
                     with open(file_path, "wb") as f:
-                        f.write(lobj.read())
+                        bytes_read = 0
+                        chunks_processed = 0
+                        start_time = time.time()
+
+                        while chunk := lobj.read(CHUNK_SIZE):
+                            f.write(chunk)
+                            bytes_read += len(chunk)
+                            chunks_processed += 1
+
+                            # Log progress periodically or for each MB
+                            if (
+                                bytes_read % (10 * CHUNK_SIZE) == 0
+                                or len(chunk) < CHUNK_SIZE
+                            ):
+                                elapsed = time.time() - start_time
+                                transfer_rate = (
+                                    bytes_read / 1024 / 1024 / elapsed
+                                    if elapsed > 0
+                                    else 0
+                                )
+                                logger.info(
+                                    f"{file_name}: Read {bytes_read/1024/1024:.1f} MB of {file_size/1024/1024:.1f} MB "
+                                    f"({bytes_read/file_size*100:.1f}%) - "
+                                    f"{chunks_processed} chunks in {elapsed:.1f}s ({transfer_rate:.1f} MB/s)"
+                                )
+
+                        total_elapsed = time.time() - start_time
+                        logger.info(
+                            f"Completed reading {file_name}: {bytes_read/1024/1024:.1f} MB in {total_elapsed:.1f}s "
+                            f"({bytes_read/1024/1024/total_elapsed:.1f} MB/s)"
+                        )
                     continue
                 except ValueError:
                     pass  # Not an integer string, try next format
@@ -141,9 +217,20 @@ def decode_vector_store_files(encoded_data: str, output_dir: str, session: Any) 
                 # Third try: base64 encoded data
                 try:
                     logger.debug(f"Attempting base64 decode for {file_name}")
+                    start_time = time.time()
                     decoded_data = base64.b64decode(data)
+                    decode_time = time.time() - start_time
+                    logger.info(
+                        f"Base64 decoded {file_name}: {len(decoded_data)/1024/1024:.1f} MB in {decode_time:.1f}s"
+                    )
+
+                    write_start = time.time()
                     with open(file_path, "wb") as f:
                         f.write(decoded_data)
+                    write_time = time.time() - write_start
+                    logger.info(
+                        f"Wrote {file_name} to disk in {write_time:.1f}s ({len(decoded_data)/1024/1024/write_time:.1f} MB/s)"
+                    )
                     continue
                 except Exception as e:
                     logger.debug(f"Base64 decode failed for {file_name}: {str(e)}")
@@ -157,6 +244,7 @@ def decode_vector_store_files(encoded_data: str, output_dir: str, session: Any) 
 
             except Exception as e:
                 logger.error(f"Failed to process {file_name}: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 raise
 
         logger.debug("Successfully decoded vector store files")
