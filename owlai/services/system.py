@@ -91,6 +91,7 @@ def setup_logging():
 
 def set_env():
     # Check if OWLAI_ENV environment variable is set
+    load_dotenv()  # Load environment variables from a .env file
     owlai_env = os.getenv("OWLAI_ENV")
     if owlai_env:
         logging.debug(f"OWLAI_ENV environment variable is set to: {owlai_env}")

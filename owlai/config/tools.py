@@ -104,7 +104,7 @@ TOOLS_CONFIG = {
                 "name": "rag-fr-admin-law",
                 "version": "0.3.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag/admin",  # Larger dataset
+                "input_data_folder": "data/cache/rag-fr-admin-law",  # Larger dataset
                 "parser": FR_LAW_PARSER_CONFIG,
             },
         },
@@ -203,7 +203,7 @@ TOOLS_CONFIG = {
                 "name": "rag-fr-law-complete",
                 "version": "0.0.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-rag/legal-fr-complete",
+                "input_data_folder": "data/cache/rag-fr-law-complete",
                 "parser": DEFAULT_PARSER_CONFIG,
             },
         },

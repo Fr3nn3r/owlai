@@ -58,6 +58,11 @@ loggers:
     handlers: [console, file, error_file]
     propagate: false
 
+  owlai:
+    level: DEBUG
+    handlers: [console, file, error_file]
+    propagate: false
+
   owlai.telemetry:
     level: ERROR
     handlers: []
