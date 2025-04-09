@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 
 from owlai.nest import AgentManager
-from owlai.config import OWL_AGENTS_CONFIG, OWL_AGENTS_OPTIONAL_RAG_TOOLS
+from owlai.config.agents import OWL_AGENTS_CONFIG, OWL_AGENTS_OPTIONAL_RAG_TOOLS
 from owlai.services.system import is_dev
 from owlai.services.telemetry import RequestLatencyTracker
 
@@ -120,10 +120,10 @@ app.add_middleware(
 )
 
 FRONTEND_AGENT_DATA = {
-    "fr-law-qna": {
+    "fr-law-qna-complete": {
         "name": "Marianne",
         "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
-        "default_queries": OWL_AGENTS_CONFIG["fr-law-qna"]["default_queries"],
+        "default_queries": OWL_AGENTS_CONFIG["fr-law-qna-complete"]["default_queries"],
         "image_url": "Marianne.jpg",
         "color_theme": {
             "primary": "#0055A4",  # French blue
@@ -269,7 +269,7 @@ async def stream_query(payload: QueryRequest):
             latency.mark("generate_start")
             logger.info(f"Streaming query for agent {payload.agent_id}")
             # Get the agent instance
-            agent = agent_manager.get_agent("fr-law-qna")
+            agent = agent_manager.get_agent("fr-law-qna-complete")
             latency.mark("agent_initialized")
 
             logger.info(f"Agent {payload.agent_id} found")

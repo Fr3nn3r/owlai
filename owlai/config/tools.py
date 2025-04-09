@@ -200,10 +200,10 @@ TOOLS_CONFIG = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "name": "fr-law-complete",
+                "name": "rag-fr-law-complete",
                 "version": "0.0.1",
                 "cache_data_folder": "data/cache",
-                "input_data_folder": "data/legal-fr-complete",
+                "input_data_folder": "data/legal-rag/legal-fr-complete",
                 "parser": DEFAULT_PARSER_CONFIG,
             },
         },

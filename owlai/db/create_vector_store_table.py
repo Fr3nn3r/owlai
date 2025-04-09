@@ -1,16 +1,14 @@
 import logging
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.exc import SQLAlchemyError
-from owlai.dbmodels import Base, VectorStore
+from owlai.db.dbmodels import Base, VectorStore
+from owlai.services.system import DATABASE_URL
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-# Database connection string
-DATABASE_URL = "postgresql://owluser:NyCINUy7Un3JjE28Md3mRjpg5Dd4aKEy@dpg-cvn7c2ngi27c73bi26hg-a.frankfurt-postgres.render.com/owlai_db"
 
 
 def create_vector_store_table():

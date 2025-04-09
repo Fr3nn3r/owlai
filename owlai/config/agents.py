@@ -82,9 +82,89 @@ OWL_AGENTS_BASE_CONFIG = {
     },
 }
 
+
+OWL_AGENTS_OPTIONAL_RAG_TOOLS = {
+    "rag-naruto": {
+        "name": "rag-naruto",
+        "version": "1.0",
+        "description": "Agent that knows everything about the anime series Naruto",
+        "system_prompt": PROMPT_CONFIG["rag-en-naruto-v2"],
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["rag-naruto-v1"],
+        },
+        "default_queries": [
+            "Who is Tsunade?",
+            "Tell me about Orochimaru's powers.",
+            "Who is the Hokage of Konoha?",
+            "Tell me about sasuke's personality",
+            "Who is the first sensei of naruto?",
+            "what happens to the Uchiha clan?",
+            "What is a sharingan?",
+            "What is the akatsuki?",
+            "Who is the first Hokage?",
+        ],
+    },
+    "rag-droit-fiscal": {
+        "name": "rag-droit-fiscal",
+        "version": "1.0",
+        "description": "Agent specialized in french tax law. It governs the creation, collection, and control of taxes and other compulsory levies imposed by public authorities.",
+        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["rag-fr-tax-law-v1"],
+        },
+        "default_queries": FRENCH_LAW_QUESTIONS["tax"],
+    },
+    "rag-droit-admin": {
+        "name": "rag-droit-admin",
+        "version": "1.0",
+        "description": "Agent specialized in french administrative law. It governs the organization, functioning, and accountability of public administration. It deals with the legal relationships between public authorities (e.g. the State, local governments, public institutions) and private individuals or other entities. Its core purpose is to ensure that public power is exercised lawfully and in the public interest",
+        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["rag-fr-admin-law-v1"],
+        },
+        "default_queries": FRENCH_LAW_QUESTIONS["admin"],
+    },
+}
+
+OWL_AGENTS_PROD = {
+    "fr-law-qna-complete": {
+        "name": "fr-law-qna-complete",
+        "version": "1.0",
+        "description": "Agent responsible for answering questions about french law",
+        "system_prompt": PROMPT_CONFIG["marianne-v1"],
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o",
+            "max_tokens": 2048,
+            "temperature": 0.1,
+            "context_size": 10000,
+            "tools_names": ["fr-law-complete"],
+        },
+        "default_queries": FRENCH_LAW_QUESTIONS["general"]
+        + FRENCH_LAW_QUESTIONS["tax"]
+        + FRENCH_LAW_QUESTIONS["admin"],
+    },
+}
+
+
 OWL_AGENTS_CONFIG_ENV = {
     "development": OWL_AGENTS_BASE_CONFIG,
-    "production": OWL_AGENTS_BASE_CONFIG,
+    "production": OWL_AGENTS_PROD,
 }
 
 # this is the hooks imported by consumers

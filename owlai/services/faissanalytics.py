@@ -4,6 +4,25 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from langchain.docstore.document import Document
+import pandas as pd
+from datetime import datetime
+from transformers import AutoTokenizer
+
+
+def ensure_dir_exists(dir_path):
+    """Ensure that a directory exists, creating it if necessary."""
+    os.makedirs(dir_path, exist_ok=True)
+    return dir_path
+
+
+def save_plot(plt, filename, title=None):
+    """Save plot to the specified location with given filename."""
+    if title:
+        plt.title(title)
+    plt.tight_layout()
+    plt.savefig(filename)
+    print(f"Saved plot to {filename}")
+    plt.close()
 
 
 def load_faiss_index(index_path):
@@ -231,44 +250,192 @@ def load_documents(pickle_path):
         return [Document(page_content="Dummy document due to load error")]
 
 
-def analyze_documents(documents):
+def analyze_documents_by_chars(documents, dataset_name):
+    """Analyze document chunks by character length and save visualization."""
     try:
-        print("Analyzing document chunks...")
+        print("Analyzing document chunks by character count...")
         lengths = [len(doc.page_content) for doc in documents]
 
+        # Print statistics
         print(f"Total documents: {len(lengths)}")
         print(f"Avg chunk length: {np.mean(lengths):.2f} chars")
         print(f"Max chunk length: {np.max(lengths)}")
         print(f"Min chunk length: {np.min(lengths)}")
 
+        # Create timestamp for unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Plot histogram
+        plt.figure(figsize=(10, 6))
         plt.hist(lengths, bins=30)
-        plt.title("Chunk Size Distribution (by characters)")
+        plt.title(f"Chunk Size Distribution (by characters) - {dataset_name}")
         plt.xlabel("Chunk Size (characters)")
         plt.ylabel("Frequency")
         plt.grid(True)
-        plt.show()
+
+        # Save the plot
+        analysis_dir = ensure_dir_exists("data/analysis")
+        filename = os.path.join(
+            analysis_dir, f"{dataset_name}_char_distribution_{timestamp}.png"
+        )
+        save_plot(plt, filename)
+
+        return filename
     except Exception as e:
-        print(f"Error analyzing documents: {e}")
+        print(f"Error analyzing documents by character count: {e}")
+        return None
 
 
-def analyze_faiss_index(index):
-    print("Analyzing FAISS index...")
-    num_vectors = index.ntotal
-    dim = index.d
-    print(f"Total vectors in index: {num_vectors}")
-    print(f"Vector dimension: {dim}")
+def analyze_documents_by_tokens(
+    documents, dataset_name, model_name="thenlper/gte-small"
+):
+    """Analyze document chunks by token length and save visualization."""
+    try:
+        print(f"Analyzing document chunks by token count using model {model_name}...")
+
+        # Load tokenizer for the specified model
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        # Get max sequence length from tokenizer with fallback to reasonable default
+        max_seq_len = tokenizer.model_max_length
+        if max_seq_len > 100000:  # If unreasonably large
+            # Use common model size limits as fallback
+            if "gpt-3.5" in model_name.lower() or "gpt-4" in model_name.lower():
+                max_seq_len = 8192  # Common limit for GPT models
+            elif "llama" in model_name.lower():
+                max_seq_len = 4096  # Common limit for LLaMA models
+            elif "t5" in model_name.lower():
+                max_seq_len = 512
+            else:
+                max_seq_len = 512  # Conservative default
+            print(f"Adjusted to realistic token limit: {max_seq_len}")
+        print(f"Model's max sequence size: {max_seq_len} tokens")
+
+        # Analyze token lengths
+        token_lengths = [len(tokenizer.encode(doc.page_content)) for doc in documents]
+        total_tokens = sum(token_lengths)
+
+        # Print statistics
+        print(f"Total tokens across all documents: {total_tokens}")
+        print(f"Avg tokens per chunk: {np.mean(token_lengths):.2f}")
+        print(f"Max tokens per chunk: {np.max(token_lengths)}")
+        print(f"Min tokens per chunk: {np.min(token_lengths)}")
+
+        # Count chunks that exceed max length
+        oversize_chunks = [l for l in token_lengths if l > max_seq_len]
+        if oversize_chunks:
+            print(
+                f"WARNING: {len(oversize_chunks)} chunks ({len(oversize_chunks)/len(token_lengths):.1%}) exceed model's maximum size"
+            )
+
+        # Create timestamp for unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Plot histogram
+        plt.figure(figsize=(10, 6))
+        # Use pandas for better histogram
+        pd.Series(token_lengths).hist(bins=30)
+        plt.axvline(
+            x=max_seq_len,
+            color="r",
+            linestyle="--",
+            label=f"Max tokens ({max_seq_len})",
+        )
+        plt.legend()
+        plt.title(f"Chunk Size Distribution (by tokens) - {dataset_name}")
+        plt.xlabel("Tokens per Chunk")
+        plt.ylabel("Frequency")
+        plt.grid(True)
+
+        # Save the plot
+        analysis_dir = ensure_dir_exists("data/analysis")
+        filename = os.path.join(
+            analysis_dir, f"{dataset_name}_token_distribution_{timestamp}.png"
+        )
+        save_plot(plt, filename)
+
+        return filename
+    except Exception as e:
+        print(f"Error analyzing documents by token count: {e}")
+        return None
+
+
+def analyze_faiss_index(index, dataset_name):
+    try:
+        print("Analyzing FAISS index...")
+        num_vectors = index.ntotal
+        dim = index.d
+        print(f"Total vectors in index: {num_vectors}")
+        print(f"Vector dimension: {dim}")
+
+        # Create timestamp for unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Save index metadata to a text file
+        analysis_dir = ensure_dir_exists("data/analysis")
+        metadata_file = os.path.join(
+            analysis_dir, f"{dataset_name}_index_metadata_{timestamp}.txt"
+        )
+
+        with open(metadata_file, "w") as f:
+            f.write(f"FAISS Index Analysis for {dataset_name}\n")
+            f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total vectors in index: {num_vectors}\n")
+            f.write(f"Vector dimension: {dim}\n")
+            f.write(f"Index type: {type(index).__name__}\n")
+
+        print(f"Saved index metadata to {metadata_file}")
+
+        return {
+            "num_vectors": num_vectors,
+            "dimension": dim,
+            "metadata_file": metadata_file,
+        }
+    except Exception as e:
+        print(f"Error analyzing FAISS index: {e}")
+        return None
 
 
 def main(index_path, pickle_path):
+    # Extract dataset name from path
+    dataset_name = os.path.basename(os.path.dirname(index_path))
+    print(f"Analyzing dataset: {dataset_name}")
+
+    # Load index and documents
     index = load_faiss_index(index_path)
     docs = load_documents(pickle_path)
 
-    analyze_faiss_index(index)
-    analyze_documents(docs)
+    # Analyze index
+    index_metadata = analyze_faiss_index(index, dataset_name)
+
+    # Analyze documents by character count
+    char_analysis_file = analyze_documents_by_chars(docs, dataset_name)
+
+    # Analyze documents by token count
+    token_analysis_file = analyze_documents_by_tokens(docs, dataset_name)
+
+    # Return analysis results
+    return {
+        "dataset": dataset_name,
+        "index_metadata": index_metadata,
+        "char_analysis_file": char_analysis_file,
+        "token_analysis_file": token_analysis_file,
+        "document_count": len(docs),
+    }
 
 
 if __name__ == "__main__":
-    main(
-        "C:/Users/fbrun/Documents/GitHub/owlai/data/cache/naruto-complete/vector_db/index.faiss",
-        "C:/Users/fbrun/Documents/GitHub/owlai/data/cache/naruto-complete/vector_db/index.pkl",
+    analysis_results = main(
+        "C:/Users/fbrun/Documents/GitHub/owlai/data/cache/fr-law-complete/vector_db/index.faiss",
+        "C:/Users/fbrun/Documents/GitHub/owlai/data/cache/fr-law-complete/vector_db/index.pkl",
     )
+
+    print("\nAnalysis Summary:")
+    print(f"Dataset: {analysis_results['dataset']}")
+    print(f"Document count: {analysis_results['document_count']}")
+    print(f"Character distribution chart: {analysis_results['char_analysis_file']}")
+    print(f"Token distribution chart: {analysis_results['token_analysis_file']}")
+    if analysis_results["index_metadata"]:
+        print(f"Index metadata: {analysis_results['index_metadata']['metadata_file']}")
+        print(f"Vector count: {analysis_results['index_metadata']['num_vectors']}")
+        print(f"Vector dimension: {analysis_results['index_metadata']['dimension']}")

@@ -94,6 +94,7 @@ def set_env():
     owlai_env = os.getenv("OWLAI_ENV")
     if owlai_env:
         logging.debug(f"OWLAI_ENV environment variable is set to: {owlai_env}")
+        print(f"OWLAI_ENV environment variable is set to: {owlai_env}")
     else:
         raise ValueError("OWLAI_ENV environment variable is not set")
 
@@ -199,7 +200,10 @@ logger.debug(f"System initialized for '{env}' environment, CUDA device: '{device
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
 )
-
+DATABASE_URL_RENDER = os.getenv(
+    "DATABASE_URL_RENDER",
+    "",
+)
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

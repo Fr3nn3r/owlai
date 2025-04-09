@@ -685,21 +685,14 @@ def process_vector_store(database_url, store_name, store_path, version, model_na
 
 
 if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
 
-    # Database connection string with SSL and timeout settings
-
-    from owlai.services.system import DATABASE_URL
+    from owlai.services.system import DATABASE_URL, DATABASE_URL_RENDER
 
     # Store names in dict keys match the names used in the database
     stores = {
-        "rag-fr-general-law": "data/legal-rag-tmp/general",
-        "rag-fr-tax-law": "data/legal-rag/fiscal",
-        "rag-fr-admin-law": "data/legal-rag/admin",
+        "rag-fr-law-complete": "data/cache/rag-fr-law-complete",
+        # "rag-fr-tax-law": "data/legal-rag/fiscal",
+        # "rag-fr-admin-law": "data/legal-rag/admin",
     }
 
     try:
@@ -729,10 +722,10 @@ if __name__ == "__main__":
         # If validation passes, process each store with a separate connection
         for store_name, store_path in stores.items():
             success = process_vector_store(
-                database_url=DATABASE_URL,
+                database_url=DATABASE_URL_RENDER,
                 store_name=store_name,
                 store_path=os.path.join(store_path, "vector_db"),
-                version="0.3.1",
+                version="0.0.1",
                 model_name="thenlper/gte-small",
             )
 
