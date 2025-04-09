@@ -11,7 +11,7 @@ import logging
 from typing import Callable, Type, Optional, Tuple, Union, List, Dict, Any
 from langchain_community.tools.tavily_search import TavilySearchResults
 from pydantic import BaseModel, Field
-from owlai.config.tools import TOOLS_CONFIG
+from owlai.config.tools import TOOLS_CONFIG, OPTIONAL_TOOLS
 from owlai.config.users import get_user_by_password
 from langchain_core.tools import BaseTool, ArgsSchema
 from langchain_core.callbacks import (
@@ -80,29 +80,14 @@ class SecurityTool(BaseTool):  # type: ignore[override, override]
         return self.identify_user_with_password(query)
 
 
-class ToolBox:
-    """Toolbox for tools."""
-
-    def __init__(self):
-        # Eventually the class tool should be in config to have true plugins
-        # _tavily_tool = TavilySearchResults(**TOOLS_CONFIG["tavily_search_results_json"])
-        # _security_tool = SecurityTool(**TOOLS_CONFIG["security_tool"])
-        # _naruto_search = RAGTool(**TOOLS_CONFIG["rag-naruto-v1"])
-        _fr_general_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"])
-        _fr_tax_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"])
-        _fr_admin_law_search = RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"])
-
-        self.mapping = {
-            # "security_tool": _security_tool,
-            # "tavily_search_results_json": _tavily_tool,
-            # "rag-naruto-v1": _naruto_search,
-            "rag-fr-general-law-v1": _fr_general_law_search,
-            "rag-fr-tax-law-v1": _fr_tax_law_search,
-            "rag-fr-admin-law-v1": _fr_admin_law_search,
-        }
-
-    def get_tools(self, keys: list[str]) -> list[Callable]:
-        return [self.mapping[key] for key in keys if key in self.mapping]
-
-    def get_tool(self, key: str) -> Callable:
-        return self.mapping[key]
+TOOLBOX = {
+    "security_tool": SecurityTool(**OPTIONAL_TOOLS["security_tool"]),
+    "tavily_search_results_json": TavilySearchResults(
+        **OPTIONAL_TOOLS["tavily_search_results_json"]
+    ),
+    "rag-naruto-v1": RAGTool(**OPTIONAL_TOOLS["rag-naruto-v1"]),
+    "rag-fr-general-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"]),
+    "rag-fr-tax-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"]),
+    "rag-fr-admin-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"]),
+    "fr-law-complete": RAGTool(**TOOLS_CONFIG["fr-law-complete"]),
+}

@@ -27,22 +27,16 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 import logging.config
 import logging
-from pydantic import BaseModel, Field
-from uuid import UUID, uuid4
-from datetime import datetime, timezone
+from pydantic import BaseModel
+from uuid import UUID
 
 from langchain.chat_models import init_chat_model
 from owlai.db.memory import Memory
 
-from langchain_core.callbacks import (
-    AsyncCallbackManagerForToolRun,
-    CallbackManagerForToolRun,
-)
-
 import traceback
-from owlai.services.system import sprint
-from langchain_core.tools import BaseTool, ArgsSchema
+from langchain_core.tools import BaseTool
 from owlai.services.telemetry import RequestLatencyTracker
+from owlai.services.system import sprint
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)

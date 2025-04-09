@@ -503,8 +503,8 @@ class FrenchLawParser(DefaultParser):
         # All that stuff could be in the parser parameters
         embeddings_chunk_size = 512
         chunk_size = 512
-        chunk_overlap = int(embeddings_chunk_size / 5)
-        chunk_size = embeddings_chunk_size * 0.9
+        chunk_overlap = 100
+        chunk_size = embeddings_chunk_size + chunk_overlap
         tokenizer = AutoTokenizer.from_pretrained("thenlper/gte-small")
         tokenizer.add_special_tokens({"pad_token": "[PAD]"})
         separators = [

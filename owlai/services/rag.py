@@ -182,7 +182,7 @@ class RAGTool(BaseTool):
                 self.retriever.datastore._db_session = self._db_session
 
             # Load vector store
-            logger.debug("Loading vector store")
+            logger.debug(f"Loading vector store {self.retriever.datastore.name}")
             self._vector_store = self.retriever.load_dataset(self._embeddings)
             if self._vector_store is None:
                 logger.warning(

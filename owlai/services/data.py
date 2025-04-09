@@ -10,18 +10,30 @@ print("Loading data module")
 
 from typing import Optional, List, Tuple, Any, Callable, Dict, Literal
 import os
+import sys
 import logging
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores.utils import DistanceStrategy
+from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
+import warnings
+import traceback
+from owlai.services.parser import DefaultParser, create_instance
+
+from sqlalchemy import select
+from owlai.db.dbmodels import VectorStore
+from owlai.db.vector_store_manager import decode_vector_store_files
 
 from tqdm import tqdm
-import traceback
 
 from owlai.services.system import track_time, Session
-from owlai.services.parser import DefaultParser, create_instance
 
 # Get logger using the module name
 
@@ -122,10 +134,6 @@ class RAGDataStore(BaseModel):
         if self._db_session is not None:
             logger.debug(f"Attempting to load vector store '{self.name}' from database")
             try:
-                from sqlalchemy import select
-                from owlai.dbmodels import VectorStore
-                from owlai.vector_store_manager import decode_vector_store_files
-
                 query = select(VectorStore).where(VectorStore.name == self.name)
                 if self.version:
                     query = query.where(VectorStore.version == self.version)
@@ -135,6 +143,7 @@ class RAGDataStore(BaseModel):
                 vector_store_record = self._db_session.execute(
                     query
                 ).scalar_one_or_none()
+
                 if vector_store_record:
                     logger.info(f"Found vector store '{self.name}' in database")
 
@@ -199,6 +208,18 @@ class RAGDataStore(BaseModel):
             except Exception as e:
                 logger.error(f"Failed to load from input folder: {str(e)}")
 
+        # 4. Try building the vector store from input folder
+        if not self.input_data_folder:
+            logger.warning("No input data folder defined, skipping input folder load")
+            return None
+
+        input_path = self._normalize_path(
+            self.input_data_folder, self._vector_store_folder
+        )
+        vector_store = self.load_dataset(embedding_model)
+        if vector_store is not None:
+            return vector_store
+
         logger.warning("Vector database not found in cache, database or input folder")
         return None
 
@@ -227,7 +248,8 @@ class RAGDataStore(BaseModel):
             return None
 
         # First try loading existing vector store (will check cache first)
-        vector_store = self.load_vector_store(embedding_model)
+        # vector_store = self.load_vector_store(embedding_model)
+        vector_store = None
 
         # Get list of PDF and text files
         try:
@@ -318,3 +340,78 @@ class RAGDataStore(BaseModel):
                 logger.info(f"Vector database saved to cache: {cache_vector_path}")
 
         return vector_store
+
+
+def main():
+    """Command line interface to load datasets directly from a folder."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Load documents from a folder into a dataset."
+    )
+    parser.add_argument("input_folder", help="Path to the folder containing documents")
+    parser.add_argument(
+        "--store-name",
+        default="default",
+        help="Name of the vector store (default: default)",
+    )
+    parser.add_argument(
+        "--chunk-size", type=int, default=500, help="Size of text chunks (default: 500)"
+    )
+    parser.add_argument(
+        "--chunk-overlap",
+        type=int,
+        default=50,
+        help="Overlap between chunks (default: 50)",
+    )
+    parser.add_argument(
+        "--recursive", action="store_true", help="Recursively process subfolders"
+    )
+    parser.add_argument(
+        "--model-name",
+        default="thenlper/gte-small",
+        help="HuggingFace embeddings model name (default: thenlper/gte-small)",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        logger.info(f"Loading dataset from {args.input_folder}")
+
+        # Initialize embeddings model
+        embeddings = HuggingFaceEmbeddings(
+            model_name=args.model_name,
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+
+        store = RAGDataStore(
+            name=args.store_name,
+            version="1.0",
+            input_data_folder=args.input_folder,
+            parser=DefaultParser(
+                chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap
+            ),
+        )
+        vector_store = store.load_dataset(embeddings)
+        if vector_store is not None:
+            logger.info("Successfully loaded vector store")
+            # Get index size if available
+            try:
+                index_size = vector_store.index.ntotal
+                logger.info(f"Vector store contains {index_size} vectors")
+            except:
+                logger.info("Vector store loaded but size unknown")
+        else:
+            logger.warning("No vector store was created or loaded")
+
+        vector_store = store.load_dataset(embeddings)
+
+        return vector_store
+    except Exception as e:
+        logger.error(f"Error loading dataset: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

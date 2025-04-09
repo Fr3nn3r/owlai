@@ -692,11 +692,8 @@ if __name__ == "__main__":
     )
 
     # Database connection string with SSL and timeout settings
-    DATABASE_URL = (
-        "postgresql://owluser:NyCINUy7Un3JjE28Md3mRjpg5Dd4aKEy@"
-        "dpg-cvn7c2ngi27c73bi26hg-a.frankfurt-postgres.render.com/owlai_db"
-        "?sslmode=require&connect_timeout=30"
-    )
+
+    from owlai.services.system import DATABASE_URL
 
     # Store names in dict keys match the names used in the database
     stores = {

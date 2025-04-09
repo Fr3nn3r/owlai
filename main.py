@@ -480,7 +480,7 @@ async def get_query_chunks(query_id: str):
                 float(match.group(2)) if match.group(2) else -10
             )  # Default to -10 if no score
             content = match.group(3).strip()
-            logger.debug(f"Source: {source}, Score: '{score}'")
+            # logger.debug(f"Source: {source}, Score: '{score}'")
             chunks.append(
                 DocumentChunk(
                     id=source,  # The name from [Source : XYZ]

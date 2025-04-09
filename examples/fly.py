@@ -18,6 +18,7 @@ from prompt_toolkit.history import InMemoryHistory
 from owlai.nest import AgentManager
 from owlai.services.system import setup_logging
 from owlai.config.agents import OWL_AGENTS_CONFIG
+from owlai.services.system import sprint
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -98,7 +99,6 @@ if __name__ == "__main__":
                 continue
 
             if user_message.lower() == "model":
-                from owlai.owlsys import sprint
 
                 sprint(focus_agent.chat_model)
                 continue

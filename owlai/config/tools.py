@@ -53,7 +53,7 @@ FRENCH_LAW_QUESTIONS = {
 
 FR_LAW_PARSER_CONFIG = {
     "implementation": "FrenchLawParser",
-    "output_data_folder": "data/legal-rag/admin",
+    "output_data_folder": "data/legal-fr-complete/images",
     "chunk_size": 512,
     "chunk_overlap": 50,
     "add_start_index": True,
@@ -164,6 +164,39 @@ TOOLS_CONFIG = {
             },
         },
     },
+    "fr-law-complete": {
+        "name": "fr-law-complete",
+        "description": "Returns data chunks from french law documents: civil, work, commercial, criminal, residency, social, public health",
+        "args_schema": {
+            "title": "ToolInput",
+            "type": "object",
+            "properties": {
+                "query": {
+                    "title": "Query",
+                    "type": "string",
+                    "description": "A request for semantic search on french law expressed in french",
+                }
+            },
+            "required": ["query"],
+        },
+        "default_queries": FRENCH_LAW_QUESTIONS["general"],
+        "retriever": {
+            "num_retrieved_docs": 30,
+            "num_docs_final": 5,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            "model_kwargs": {"device": device},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": enable_multi_process,
+            "datastore": {
+                "name": "fr-law-complete",
+                "version": "0.0.1",
+                "cache_data_folder": "data/cache",
+                "input_data_folder": "data/legal-fr-complete",
+                "parser": FR_LAW_PARSER_CONFIG,
+            },
+        },
+    },
 }
 
 
@@ -203,13 +236,12 @@ OPTIONAL_TOOLS = {
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": enable_multi_process,
             "datastore": {
-                "input_data_folder": "data/dataset-0001",  # Larger dataset
+                "input_data_folder": "data/naruto-complete",  # Larger dataset
                 "cache_data_folder": "data/cache",
-                "version": "0.3.1",
-                "name": "naruto",
+                "version": "0.0.1",
+                "name": "naruto-complete",
                 "parser": {
-                    "implementation": "FrenchLawParser",
-                    "output_data_folder": "data/dataset-0001",
+                    "output_data_folder": "data/naruto-complete",
                 },
             },
         },

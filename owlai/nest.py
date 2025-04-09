@@ -9,10 +9,9 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 import asyncio
 import time
-from datetime import datetime, timedelta
 
 from owlai.core import OwlAgent
-from owlai.services.tools.tools import ToolBox
+from owlai.services.tools.box import TOOLBOX
 from owlai.db.memory import SQLAlchemyMemory
 from owlai.services.system import Session
 
@@ -40,7 +39,6 @@ class AgentManager:
         self.last_used: Dict[str, float] = {}
         self.owls: Dict[str, Optional[OwlAgent]] = {}
         self.names: List[str] = []
-        self.toolbox = ToolBox()
         self.db_session = Session()
         self.memory = SQLAlchemyMemory(self.db_session)
         self._initialized = False
@@ -73,7 +71,7 @@ class AgentManager:
         try:
             agent: OwlAgent = OwlAgent(**self.agents_config[agent_key])
             agent.init_callable_tools(
-                self.toolbox.get_tools(agent.llm_config.tools_names)
+                [TOOLBOX[key] for key in agent.llm_config.tools_names if key in TOOLBOX]
             )
             agent.init_memory(self.memory)
             logger.info(f"Initialized Owl agent: {agent.name}")
@@ -103,8 +101,7 @@ class AgentManager:
 
     def get_focus_owl(self) -> Optional[OwlAgent]:
         """Get the current focus agent, initializing it if necessary."""
-        if self._focus_agent is None:
-            self._focus_agent = self.get_agent(self.focus_agent_name)
+        self._focus_agent = self.get_agent(self.focus_agent_name)
 
         logger.debug(f"Focus agent: {self.focus_agent_name}")
         return self._focus_agent

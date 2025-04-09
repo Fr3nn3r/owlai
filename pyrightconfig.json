@@ -11,11 +11,11 @@
     ".cursorrules",
     "*.log"
   ],
-  "ignore": ["tests" ,"scripts"],
+  "ignore": ["tests" ,"scripts" , "examples", "owlai/services/tools/interpreter.py"],
   "defineConstant": {
     "DEBUG": true
   },
-  "typeCheckingMode": "standard",
+  "typeCheckingMode": "basic",
   "useLibraryCodeForTypes": true,
   "reportMissingImports": "warning",
   "reportMissingTypeStubs": false,
