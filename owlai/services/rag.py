@@ -22,7 +22,7 @@ from langchain_core.callbacks import (
 )
 import warnings
 import traceback
-from owlai.services.data import RAGDataStore
+from owlai.services.datastore import RAGDataStore
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
 from owlai.services.embeddings import EmbeddingManager

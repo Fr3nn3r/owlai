@@ -199,12 +199,9 @@ class RAGDataStore(BaseModel):
                     allow_dangerous_deserialization=True,
                 )
 
-                # Save to cache for next time
-                logger.info(f"Saving vector database to cache: {cache_path}")
-                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-                vector_store.save_local(cache_path)
+                self._vector_store = vector_store
 
-                return vector_store
+                # return vector_store #Here we so't return to give a chance to load new files in input folder
             except Exception as e:
                 logger.error(f"Failed to load from input folder: {str(e)}")
 
@@ -216,14 +213,15 @@ class RAGDataStore(BaseModel):
         input_path = self._normalize_path(
             self.input_data_folder, self._vector_store_folder
         )
-        vector_store = self.load_dataset(embedding_model)
+        vector_store = self.load_dataset_from_input_folder(embedding_model)
         if vector_store is not None:
+            self._vector_store = vector_store
             return vector_store
 
         logger.warning("Vector database not found in cache, database or input folder")
         return None
 
-    def load_dataset(
+    def load_dataset_from_input_folder(
         self,
         embedding_model: HuggingFaceEmbeddings,
         metadata_extractor: Optional[Callable] = None,
@@ -249,7 +247,7 @@ class RAGDataStore(BaseModel):
 
         # First try loading existing vector store (will check cache first)
         # vector_store = self.load_vector_store(embedding_model)
-        vector_store = None
+        vector_store = self._vector_store
 
         # Get list of PDF and text files
         try:
@@ -393,7 +391,7 @@ def main():
                 chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap
             ),
         )
-        vector_store = store.load_dataset(embeddings)
+        vector_store = store.load_dataset_from_input_folder(embeddings)
         if vector_store is not None:
             logger.info("Successfully loaded vector store")
             # Get index size if available
@@ -405,7 +403,7 @@ def main():
         else:
             logger.warning("No vector store was created or loaded")
 
-        vector_store = store.load_dataset(embeddings)
+        vector_store = store.load_dataset_from_input_folder(embeddings)
 
         return vector_store
     except Exception as e:

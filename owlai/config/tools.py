@@ -63,6 +63,17 @@ FR_LAW_PARSER_CONFIG = {
     "extraction_mode": "plain",
 }
 
+DEFAULT_PARSER_CONFIG = {
+    "output_data_folder": "data/legal-fr-complete",
+    "chunk_size": 512,
+    "chunk_overlap": 100,
+    "add_start_index": True,
+    "strip_whitespace": True,
+    "separators": ["\n\n", "\n", ".", " ", ""],
+    "extract_images": False,
+    "extraction_mode": "plain",
+}
+
 
 TOOLS_CONFIG = {
     "rag-fr-admin-law-v1": {
@@ -193,7 +204,7 @@ TOOLS_CONFIG = {
                 "version": "0.0.1",
                 "cache_data_folder": "data/cache",
                 "input_data_folder": "data/legal-fr-complete",
-                "parser": FR_LAW_PARSER_CONFIG,
+                "parser": DEFAULT_PARSER_CONFIG,
             },
         },
     },
