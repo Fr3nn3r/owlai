@@ -27,6 +27,7 @@ from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
 from owlai.services.embeddings import EmbeddingManager
 from owlai.services.reranker import RerankerManager
+from owlai.services.system import sprint
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,6 @@ class RAGRetriever(BaseModel):
         self,
         query: str,
         knowledge_base: Optional[FAISS],
-        reranker: Optional[Any] = None,
     ) -> List[LangchainDocument]:
         """
         Retrieve the k most relevant document chunks for a given query.
@@ -78,7 +78,6 @@ class RAGRetriever(BaseModel):
         Args:
             query: The user query to find relevant documents for
             knowledge_base: The vector database containing indexed documents
-            reranker: Optional reranker model to rerank results
 
         Returns:
             Tuple containing a list of retrieved and reranked LangchainDocument objects with scores and metadata
@@ -86,25 +85,11 @@ class RAGRetriever(BaseModel):
         if knowledge_base is None:
             raise Exception("Invalid FAISS vector store")
 
-        metadata = {
-            "query": query,
-            "k": self.num_retrieved_docs,
-            "num_docs_final": self.num_docs_final,
-            "reranking_enabled": reranker is not None,
-        }
-
         logger.debug(f"Documents search")
         retrieved_docs = knowledge_base.similarity_search(
             query=query, k=self.num_retrieved_docs
         )
-        metadata["num_docs_retrieved"] = len(retrieved_docs)
-        metadata["retrieved_docs"] = {
-            i: {
-                "title": doc.metadata.get("title", "No title"),
-                "source": doc.metadata.get("source", "Unknown source"),
-            }
-            for i, doc in enumerate(retrieved_docs)
-        }
+
         logger.debug(f"{len(retrieved_docs)} documents retrieved")
 
         return retrieved_docs
@@ -255,12 +240,33 @@ class RAGTool(BaseTool):
 
         answer: Dict[str, Any] = {"question": question}
 
+        metadata = {
+            "query": question,
+            "k": self.retriever.num_retrieved_docs,
+            "num_docs_final": self.retriever.num_docs_final,
+            "reranking_enabled": self._reranker is not None,
+        }
+
         # Get initial documents
         retrieved_docs = self.retriever.retrieve_relevant_chunks(
             query=question,
             knowledge_base=self._vector_store,
-            reranker=None,  # We'll do reranking separately
         )
+
+        # Jeep is there it is useful
+        # from owlai.services.system import sprint
+        # sprint(retrieved_docs[0].metadata)
+
+        metadata["num_docs_retrieved"] = len(retrieved_docs)
+        metadata["retrieved_docs"] = [
+            {
+                "id": doc.id,
+                "title": doc.metadata.get("title", "Unknown Title"),
+                "score": doc.metadata.get("", "Unknown"),
+                "source": doc.metadata.get("source", "Unknown Source"),
+            }
+            for doc in retrieved_docs
+        ]
 
         # Rerank documents if reranker is available
         reranked_docs = self.rerank_documents(
@@ -279,15 +285,9 @@ class RAGTool(BaseTool):
             ]
         )
 
-        metadata = {
-            "query": question,
-            "k": self.retriever.num_retrieved_docs,
-            "num_docs_final": self.retriever.num_docs_final,
-            "reranking_enabled": self._reranker is not None,
-        }
-
         metadata["reranked_docs"] = [
             {
+                "id": doc.id,
                 "title": doc.metadata.get("title", "Unknown Title"),
                 "score": doc.metadata.get("rerank_score", "Unknown"),
                 "source": doc.metadata.get("source", "Unknown Source"),

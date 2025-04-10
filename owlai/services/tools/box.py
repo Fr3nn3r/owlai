@@ -85,9 +85,9 @@ TOOLBOX = {
     # "tavily_search_results_json": TavilySearchResults(
     #    **OPTIONAL_TOOLS["tavily_search_results_json"]
     # ),
-    # "rag-naruto-v1": RAGTool(**OPTIONAL_TOOLS["rag-naruto-v1"]),
-    # "rag-fr-general-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"]),
-    # "rag-fr-tax-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"]),
-    # "rag-fr-admin-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"]),
+    "rag-naruto-v1": RAGTool(**OPTIONAL_TOOLS["rag-naruto-v1"]),
+    "rag-fr-general-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"]),
+    "rag-fr-tax-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"]),
+    "rag-fr-admin-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"]),
     "fr-law-complete": RAGTool(**TOOLS_CONFIG["fr-law-complete"]),
 }

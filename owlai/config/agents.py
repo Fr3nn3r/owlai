@@ -9,46 +9,72 @@ from owlai.services.system import device, env, is_prod, is_dev, is_test
 print("Loading config module")
 
 from owlai.config.prompts import PROMPT_CONFIG
-from owlai.config.tools import TOOLS_CONFIG, FRENCH_LAW_QUESTIONS
+from owlai.config.tools import TOOLS_CONFIG
 
 enable_multi_process = device == "cuda"
 
-OWL_AGENTS_BASE_CONFIG = {
-    "fr-law-qna": {
-        "name": "fr-law-qna",
-        "version": "1.0",
-        "description": "Agent responsible for answering questions about french law",
-        "system_prompt": PROMPT_CONFIG["marianne-v1"],
-        "llm_config": {
-            "model_provider": "openai",
-            "model_name": "gpt-4o",
-            "max_tokens": 2048,
-            "temperature": 0.1,
-            "context_size": 10000,
-            "tools_names": [
-                "rag-fr-general-law-v1",
-                "rag-fr-tax-law-v1",
-                # "rag-fr-admin-law-v1",
-            ],
-            "tools": {
-                "rag-fr-general-law-v1": TOOLS_CONFIG["rag-fr-general-law-v1"],
-                "rag-fr-tax-law-v1": TOOLS_CONFIG["rag-fr-tax-law-v1"],
-            },
-        },
-        "default_queries": FRENCH_LAW_QUESTIONS["general"]
-        + FRENCH_LAW_QUESTIONS["tax"],
-    },
+
+FRENCH_LAW_QUESTIONS = {
+    "general": [
+        "Quels sont les délais d'obtention d'un permis de séjour en France ?",
+        "Quelles sont les démarches à entreprendre pour obtenir un titre de séjour pour soins ?",
+        "Quelles sont les conditions à remplir pour obtenir un titre de séjour pour soins ?",
+        "Quelle pension alimentaire dois-je verser à ma fille de 21 ans qui est étudiante et a un revenu de 1000 euros par mois ?",
+        "Je suis en litige avec mon employeur et la sécurité sociale sur une contestation de mon accident du travail, que dois-je faire ?",
+        "Puis-je obtenir un titre de séjour pour soins pour de l'urticaire ?",
+        "Quelles pathologies concernent un titre de séjour pour soins ?",
+        "Expliquez la gestion en France de la confusion des peines.",
+        "Dans quelles conditions un propriétaire est-il responsable des dommages causés par son animal domestique ?",
+        "Quels sont les critères pour invoquer la nullité d'un contrat pour vice du consentement ?",
+        "Quelle est la différence entre un vol simple et un vol aggravé en droit pénal français ?",
+        "Quelle est la peine maximale encourue pour abus de confiance selon le code pénal ?",
+        "Combien de temps peut durer une garde à vue en droit français, et sous quelles conditions peut-elle être prolongée ?",
+        "À quel moment un avocat peut-il accéder au dossier pénal d'un suspect durant une enquête ?",
+        "Quelles sont les principales différences entre une SARL et une SAS en droit commercial français ?",
+        "Dans quelles conditions peut-on engager une procédure de redressement judiciaire pour une entreprise en difficulté ?",
+        "Quelles sont les conditions de validité d'un licenciement pour faute grave ?",
+        "Quelle est la durée légale du congé maternité en France, selon le code du travail ?",
+        "Citez l'article 1243 du code civil.",
+    ],
+    "tax": [
+        "Quels revenus sont exonérés d'impôt sur le revenu selon le Code général des impôts ?",
+        "Quelle est la procédure à suivre en cas de désaccord avec un redressement fiscal notifié par l'administration fiscale ?",
+        "Quels taux de TVA s'appliquent à la restauration en France ?",
+        "Dans quelles conditions peut-on bénéficier d'un crédit d'impôt pour travaux de rénovation énergétique ?",
+        "Quelle est la différence entre l'évasion fiscale et la fraude fiscale en droit français ?",
+        "Quelles sont les principales obligations fiscales d'une entreprise française qui exporte hors de l'Union européenne ?",
+        "Quel est le délai de prescription en matière de contrôle fiscal des particuliers ?",
+        "Comment se calcule la Contribution Sociale Généralisée (CSG) sur les revenus du patrimoine ?",
+        "Quelles collectivités locales sont habilitées à prélever une taxe foncière, selon le Code général des collectivités territoriales ?",
+        "Quelles taxes spécifiques s'appliquent sur les carburants selon le Code des impositions sur les biens et services ?",
+    ],
+    "admin": [
+        "Quelle juridiction administrative est compétente en première instance pour contester un permis de construire ?",
+        "Quelles sont les principales étapes d'une procédure devant le tribunal administratif ?",
+        "Sous quelles conditions une collectivité territoriale peut-elle conclure un marché public sans mise en concurrence préalable ?",
+        "Quelle procédure doit suivre une commune pour vendre un bien immobilier lui appartenant ?",
+        "Quels documents sont nécessaires pour obtenir un permis d'aménager selon le Code de l'urbanisme ?",
+        "Dans quels cas une étude d'impact environnementale est-elle obligatoire pour un projet d'infrastructure publique ?",
+        "Quelles sont les conditions légales pour qu'une expropriation pour cause d'utilité publique soit valide ?",
+        "Quels délais doit respecter une collectivité pour répondre à une demande d'accès à un document administratif ?",
+        "Dans quel cas une décision administrative peut-elle faire l'objet d'un référé-suspension devant le juge administratif ?",
+        "Quelles sanctions administratives une entreprise encourt-elle en cas de manquement grave à un marché public ?",
+    ],
+}
+
+
+OWL_AGENTS_DEV = {
     "fr-law-qna-complete": {
         "name": "fr-law-qna-complete",
         "version": "1.0",
         "description": "Agent responsible for answering questions about french law",
-        "system_prompt": PROMPT_CONFIG["marianne-v1"],
+        "system_prompt": PROMPT_CONFIG["marianne-v2"],
         "llm_config": {
             "model_provider": "openai",
-            "model_name": "gpt-4o",
-            "max_tokens": 2048,
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4000,
             "temperature": 0.1,
-            "context_size": 10000,
+            "context_size": 4000,
             "tools_names": ["fr-law-complete"],
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"]
@@ -65,7 +91,7 @@ OWL_AGENTS_BASE_CONFIG = {
             "model_name": "gpt-4o",
             "max_tokens": 2000,
             "temperature": 0.3,
-            "context_size": 10000,
+            "context_size": 8000,
             "tools_names": ["rag-naruto-v1"],
         },
         "default_queries": [
@@ -80,40 +106,11 @@ OWL_AGENTS_BASE_CONFIG = {
             "List all the Hokage.",
         ],
     },
-}
-
-
-OWL_AGENTS_OPTIONAL_RAG_TOOLS = {
-    "rag-naruto": {
-        "name": "rag-naruto",
-        "version": "1.0",
-        "description": "Agent that knows everything about the anime series Naruto",
-        "system_prompt": PROMPT_CONFIG["rag-en-naruto-v2"],
-        "llm_config": {
-            "model_provider": "openai",
-            "model_name": "gpt-4o-mini",
-            "max_tokens": 4096,
-            "temperature": 0.1,
-            "context_size": 4096,
-            "tools_names": ["rag-naruto-v1"],
-        },
-        "default_queries": [
-            "Who is Tsunade?",
-            "Tell me about Orochimaru's powers.",
-            "Who is the Hokage of Konoha?",
-            "Tell me about sasuke's personality",
-            "Who is the first sensei of naruto?",
-            "what happens to the Uchiha clan?",
-            "What is a sharingan?",
-            "What is the akatsuki?",
-            "Who is the first Hokage?",
-        ],
-    },
     "rag-droit-fiscal": {
         "name": "rag-droit-fiscal",
         "version": "1.0",
         "description": "Agent specialized in french tax law. It governs the creation, collection, and control of taxes and other compulsory levies imposed by public authorities.",
-        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "system_prompt": PROMPT_CONFIG["marianne-v2"],
         "llm_config": {
             "model_provider": "openai",
             "model_name": "gpt-4o-mini",
@@ -127,8 +124,8 @@ OWL_AGENTS_OPTIONAL_RAG_TOOLS = {
     "rag-droit-admin": {
         "name": "rag-droit-admin",
         "version": "1.0",
-        "description": "Agent specialized in french administrative law. It governs the organization, functioning, and accountability of public administration. It deals with the legal relationships between public authorities (e.g. the State, local governments, public institutions) and private individuals or other entities. Its core purpose is to ensure that public power is exercised lawfully and in the public interest",
-        "system_prompt": PROMPT_CONFIG["rag-fr-v2"],
+        "description": "Agent specialized in french administrative law.",
+        "system_prompt": PROMPT_CONFIG["marianne-v2"],
         "llm_config": {
             "model_provider": "openai",
             "model_name": "gpt-4o-mini",
@@ -139,7 +136,25 @@ OWL_AGENTS_OPTIONAL_RAG_TOOLS = {
         },
         "default_queries": FRENCH_LAW_QUESTIONS["admin"],
     },
+    "rag-droit-general": {
+        "name": "rag-droit-general",
+        "version": "1.0",
+        "description": "Agent specialized in generic french law.",
+        "system_prompt": PROMPT_CONFIG["marianne-v2"],
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["rag-fr-general-law-v1"],
+        },
+        "default_queries": FRENCH_LAW_QUESTIONS["general"],
+    },
 }
+
+
+OWL_AGENTS_OPTIONAL_RAG_TOOLS = {}
 
 OWL_AGENTS_PROD = {
     "fr-law-qna-complete": {
@@ -152,7 +167,7 @@ OWL_AGENTS_PROD = {
             "model_name": "gpt-4o",
             "max_tokens": 2048,
             "temperature": 0.1,
-            "context_size": 10000,
+            "context_size": 4096,
             "tools_names": ["fr-law-complete"],
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"]
@@ -163,7 +178,7 @@ OWL_AGENTS_PROD = {
 
 
 OWL_AGENTS_CONFIG_ENV = {
-    "development": OWL_AGENTS_BASE_CONFIG,
+    "development": OWL_AGENTS_DEV,
     "production": OWL_AGENTS_PROD,
 }
 

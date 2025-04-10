@@ -91,7 +91,6 @@ TOOLS_CONFIG = {
             },
             "required": ["query"],
         },
-        "default_queries": FRENCH_LAW_QUESTIONS["admin"],
         "retriever": {
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
@@ -124,7 +123,6 @@ TOOLS_CONFIG = {
             },
             "required": ["query"],
         },
-        "default_queries": FRENCH_LAW_QUESTIONS["tax"],
         "retriever": {
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
@@ -157,7 +155,6 @@ TOOLS_CONFIG = {
             },
             "required": ["query"],
         },
-        "default_queries": FRENCH_LAW_QUESTIONS["general"],
         "retriever": {
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
@@ -190,7 +187,6 @@ TOOLS_CONFIG = {
             },
             "required": ["query"],
         },
-        "default_queries": FRENCH_LAW_QUESTIONS["general"],
         "retriever": {
             "num_retrieved_docs": 30,
             "num_docs_final": 5,

@@ -350,7 +350,11 @@ class OwlAgent(BaseModel):
             self.append_message(response)
 
             # Process tool calls if needed
-            if isinstance(response, AIMessage):
+            while (
+                isinstance(response, AIMessage)
+                and hasattr(response, "tool_calls")
+                and response.tool_calls
+            ):
                 self._process_tool_calls(response)
 
                 if hasattr(response, "tool_calls") and response.tool_calls:
