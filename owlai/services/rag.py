@@ -39,12 +39,14 @@ from langchain.callbacks.manager import (
 from langchain.docstore.document import Document
 from langchain_core.documents import Document as LCDocument
 from pydantic import BaseModel, Field, root_validator
+from pinecone import Pinecone, FetchResponse, Index
 
 
 logger = logging.getLogger(__name__)
 
 warnings.simplefilter("ignore", category=FutureWarning)
 
+from pinecone import Pinecone, FetchResponse
 
 from owlai.services.data_provider import DataProvider
 
@@ -315,6 +317,12 @@ class FAISS_RAG_Tool(DataProvider):
 
         return answer
 
+    def get_document_content_by_id(self, id: str) -> str:
+        """
+        Get the content of a document by its ID.
+        """
+        return self._vector_store.get_by_ids([id])[0].page_content
+
 
 class Pinecone_RAG_Tool(DataProvider):
     """
@@ -342,6 +350,8 @@ class Pinecone_RAG_Tool(DataProvider):
     )
     embeddings_model_name: str = "text-embedding-3-large"
     embedding: Optional[OpenAIEmbeddings] = None
+
+    pc: Optional[Pinecone] = Pinecone(api_key=os.getenv("PINECONE_API_KEY", ""))
 
     def __init__(self, *args, **kwargs):
         """Initialize PineconeRAGTool with Pinecone connection settings."""
@@ -534,6 +544,20 @@ class Pinecone_RAG_Tool(DataProvider):
         except Exception as e:
             logger.error(f"Error getting index stats: {str(e)}")
             return {"error": str(e)}
+
+    def get_document_content_by_id(self, id: str) -> str:
+        """
+        Get the content of a document by its ID.
+        """
+
+        index = self.pc.Index(host=os.getenv("PINECONE_HOST", ""))
+        response: FetchResponse = index.fetch(ids=[id])
+
+        # View result
+        item = response.vectors.get(id)
+
+        # Ensure the 'text' field is treated as a string
+        return str(item.metadata.get("text", ""))
 
 
 def main():

@@ -47,3 +47,8 @@ class DataProvider(BaseTool):
     def get_rag_resources(self, query: str) -> Dict[str, Any]:
         """Abstract method to get RAG resources. Must be implemented by subclasses."""
         raise NotImplementedError("Subclasses must implement this method.")
+
+    @abstractmethod
+    def get_document_content_by_id(self, id: str) -> str:
+        """Abstract method to get document content by ID. Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement this method.")
