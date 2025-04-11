@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 warnings.simplefilter("ignore", category=FutureWarning)
 
 
+from owlai.services.data_provider import DataProvider
+
+
 class DefaultToolInput(BaseModel):
     """Input for tool."""
 
@@ -106,7 +109,7 @@ class FAISS_RAG_Retriever(BaseModel):
         return retrieved_docs
 
 
-class FAISS_RAG_Tool(BaseTool):
+class FAISS_RAG_Tool(DataProvider):
     """
     RAG Tool implementation with local inference.
     """
@@ -239,7 +242,7 @@ class FAISS_RAG_Tool(BaseTool):
             logger.warning("Falling back to original document order")
             return documents[:k]
 
-    def get_rag_sources(self, question: str) -> Dict[str, Any]:
+    def get_rag_resources(self, question: str) -> Dict[str, Any]:
         """
         Runs the RAG query against the vector store and returns an answer to the question.
         Args:
@@ -312,42 +315,8 @@ class FAISS_RAG_Tool(BaseTool):
 
         return answer
 
-    def _run(
-        self,
-        query: str,
-        run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
-        """Override BaseTool._run to ensure we use our implementation"""
-        logger.debug(f"[RqAGTool._run] Called with query: {query}")
-        return self.message_invoke(query)
 
-    async def _arun(
-        self,
-        query: str,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> str:
-        """Override BaseTool._arun to ensure we use our implementation"""
-        return self.message_invoke(query)
-
-    def message_invoke(self, message: str) -> str:
-        """Override OwlAgent.message_invoke with RAG specific implementation"""
-        answer = self.get_rag_sources(message)
-        metadata = answer["metadata"]
-        # logger.debug(f"Metadata: {metadata}")
-        mean_rerank_score = sum(
-            float(doc.get("score", 0)) for doc in metadata["reranked_docs"]
-        ) / len(metadata["reranked_docs"])
-
-        logger.info(
-            f"Selected {len(metadata['reranked_docs'])} documents - mean rerank score: {mean_rerank_score}"
-        )
-
-        if "answer" not in answer or answer["answer"] == "":
-            raise Exception("No answer found")
-        return answer.get("answer", "?????")
-
-
-class Pinecone_RAG_Tool(FAISS_RAG_Tool):
+class Pinecone_RAG_Tool(DataProvider):
     """
     RAG Tool implementation using Pinecone API for retrieval instead of local FAISS.
     This allows for more scalable and distributed vector search without running inference locally.
@@ -356,6 +325,9 @@ class Pinecone_RAG_Tool(FAISS_RAG_Tool):
     name: str = "pinecone_rag"
     description: str = "Searches through documents using Pinecone vector database"
     args_schema: Optional[ArgsSchema] = DefaultToolInput
+
+    num_retrieved_docs: int = 30  # Commonly called k
+    num_docs_final: int = 5
 
     pinecone_api_key: str = Field(
         default_factory=lambda: os.getenv("PINECONE_API_KEY", "")
@@ -388,7 +360,7 @@ class Pinecone_RAG_Tool(FAISS_RAG_Tool):
 
         logger.debug(f"Initialized PineconeRAGTool with host: {self.pinecone_host}")
 
-    def get_rag_sources(self, question: str) -> Dict[str, Any]:
+    def get_rag_resources(self, question: str) -> Dict[str, Any]:
         """
         Runs the RAG query against Pinecone vector store and returns an answer to the question.
 
@@ -398,15 +370,14 @@ class Pinecone_RAG_Tool(FAISS_RAG_Tool):
         Returns:
             A dictionary containing the question, answer, and metadata.
         """
-        logger.info(f"Tool: '{self.name}' - Semantics query: '{question}'")
 
         answer: Dict[str, Any] = {"question": question}
 
         metadata = {
             "query": question,
-            "k": self.retriever.num_retrieved_docs,
-            "num_docs_final": self.retriever.num_docs_final,
-            "reranking_enabled": self._reranker is not None,
+            "k": self.num_retrieved_docs,
+            "num_docs_final": self.num_docs_final,
+            "reranking_enabled": False,
             "vector_store": "pinecone",
             "host": self.pinecone_host,
             "namespace": self.pinecone_namespace or "default",
@@ -448,7 +419,7 @@ class Pinecone_RAG_Tool(FAISS_RAG_Tool):
 
             request_data = {
                 "vector": query_embedding,
-                "topK": self.retriever.num_retrieved_docs,
+                "topK": self.num_docs_final,
                 "includeMetadata": True,
                 "includeValues": False,  # We don't need the vector values
             }
@@ -521,41 +492,14 @@ class Pinecone_RAG_Tool(FAISS_RAG_Tool):
                 for doc in retrieved_docs
             ]
 
-            # Rerank the documents using RAGTool's rerank_documents method
-            reranked_docs = super().rerank_documents(
-                question, retrieved_docs, k=self.retriever.num_docs_final
-            )
-
-            # Explicit type annotation to fix linter errors
-            typed_reranked_docs: List[LangchainDocument] = reranked_docs
-
-            for doc in typed_reranked_docs:
-                logger.debug(
-                    f"Document '{doc.metadata.get('title', 'Unknown Title')}' - "
-                    f"Rerank Score: {doc.metadata.get('rerank_score', 'Unknown')}"
-                )
-
             docs_content = f"Query: '{question}'\nDocuments:\n\n" + "\n\n".join(
                 [
                     f"{idx+1}. [Source: {doc.metadata.get('title', 'Unknown Title')} - "
-                    f"Score: {doc.metadata.get('rerank_score', doc.metadata.get('score', 'Unknown'))}] "
+                    f"Score: {doc.metadata.get('pc_score', doc.metadata.get('score', 'Unknown'))}] "
                     f'"{doc.page_content}"'
-                    for idx, doc in enumerate(typed_reranked_docs)
+                    for idx, doc in enumerate(retrieved_docs)
                 ]
             )
-
-            metadata["reranked_docs"] = [
-                {
-                    "id": doc.metadata.get("id", ""),
-                    "title": doc.metadata.get("title", "Unknown Title"),
-                    "rerank_score": doc.metadata.get(
-                        "rerank_score", doc.metadata.get("score", "Unknown")
-                    ),
-                    "pc_score": doc.metadata.get("pc_score", 0),
-                    "source": doc.metadata.get("source", "Unknown Source"),
-                }
-                for doc in typed_reranked_docs
-            ]
 
             answer["answer"] = docs_content
             answer["metadata"] = metadata
@@ -567,32 +511,6 @@ class Pinecone_RAG_Tool(FAISS_RAG_Tool):
             answer["metadata"] = metadata
 
         return answer
-
-    async def _arun(
-        self,
-        query: str,
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
-    ) -> str:
-        """Use the tool asynchronously."""
-        return self.message_invoke(query)
-
-    def rerank_documents(
-        self, query: str, documents: List[LangchainDocument], k: int = 5
-    ) -> List[LangchainDocument]:
-        """
-        Rerank documents using sentence-transformers cross-encoder.
-
-        This implementation uses the parent class method.
-
-        Args:
-            query: The search query
-            documents: List of documents to rerank
-            k: Number of documents to return
-
-        Returns:
-            Reranked list of documents
-        """
-        return super().rerank_documents(query, documents, k)
 
     def describe_index_stats(self) -> Dict[str, Any]:
         """

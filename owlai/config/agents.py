@@ -151,6 +151,21 @@ OWL_AGENTS_DEV = {
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"],
     },
+    "rag-droit-general-pinecone": {
+        "name": "rag-droit-general-pinecone",
+        "version": "1.0",
+        "description": "Agent specialized in generic french law.",
+        "system_prompt": PROMPT_CONFIG["marianne-v2"],
+        "llm_config": {
+            "model_provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
+            "temperature": 0.1,
+            "context_size": 4096,
+            "tools_names": ["pinecone_french_law_lookup"],
+        },
+        "default_queries": FRENCH_LAW_QUESTIONS["general"],
+    },
 }
 
 
