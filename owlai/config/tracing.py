@@ -25,7 +25,7 @@ def get_callback_manager():
 
 
 # Use this in places where you need to explicitly disable tracing
-def configure_langchain():
+def disable_langsmith_tracing():
     """
     Configure LangChain to disable LangSmith tracing.
     Call this function early in your application startup.

@@ -11,7 +11,7 @@ import asyncio
 import time
 
 from owlai.core import OwlAgent
-from owlai.services.tools.box import TOOLBOX
+from owlai.services.toolbox import ToolFactory
 from owlai.db.memory import SQLAlchemyMemory
 from owlai.services.system import Session
 
@@ -71,7 +71,11 @@ class AgentManager:
         try:
             agent: OwlAgent = OwlAgent(**self.agents_config[agent_key])
             agent.init_callable_tools(
-                [TOOLBOX[key] for key in agent.llm_config.tools_names if key in TOOLBOX]
+                [
+                    ToolFactory.get_tool(key)
+                    for key in agent.llm_config.tools_names
+                    if key in ToolFactory.list_available_tools()
+                ]
             )
             agent.init_memory(self.memory)
             logger.info(f"Initialized Owl agent: {agent.name}")

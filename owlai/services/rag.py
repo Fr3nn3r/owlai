@@ -8,26 +8,37 @@ The deprecation warnings are suppressed in pytest configuration.
 
 print("Loading rag module")
 
-from typing import Optional, List, Tuple, Any, Callable, Dict, Literal
+from typing import Optional, List, Tuple, Any, Callable, Dict, Literal, Union, Type
 import os
 import logging
 from langchain.docstore.document import Document as LangchainDocument
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
 import warnings
 import traceback
-from owlai.services.datastore import RAGDataStore
+from owlai.services.datastore import FAISS_DataStore
 from langchain_core.tools import BaseTool, ArgsSchema
-from pydantic import BaseModel, Field
 from owlai.services.embeddings import EmbeddingManager
 from owlai.services.reranker import RerankerManager
 from owlai.services.system import sprint
+import requests
+import json
+from urllib.parse import urlparse
+from loguru import logger
+from langchain.callbacks.manager import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
+from langchain.docstore.document import Document
+from langchain_core.documents import Document as LCDocument
+from pydantic import BaseModel, Field, root_validator
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +52,7 @@ class DefaultToolInput(BaseModel):
     query: str = Field(description="A query to the tool")
 
 
-class RAGRetriever(BaseModel):
+class FAISS_RAG_Retriever(BaseModel):
     """Class responsible for retrieving relevant chunks from the knowledge base"""
 
     num_retrieved_docs: int = 30  # Commonly called k
@@ -51,7 +62,7 @@ class RAGRetriever(BaseModel):
     model_kwargs: Dict[str, Any] = {}
     encode_kwargs: Dict[str, Any] = {}
     multi_process: bool = True
-    datastore: RAGDataStore
+    datastore: Optional[FAISS_DataStore] = None
 
     def load_dataset(self, embeddings: HuggingFaceEmbeddings) -> Optional[FAISS]:
         """
@@ -95,16 +106,16 @@ class RAGRetriever(BaseModel):
         return retrieved_docs
 
 
-class RAGTool(BaseTool):
+class FAISS_RAG_Tool(BaseTool):
     """
-    RAG Agent implementation that extends OwlAgent with RAG capabilities
+    RAG Tool implementation with local inference.
     """
 
     name: str = "sad_unamed_rag_tool"
     description: str
     args_schema: Optional[ArgsSchema] = DefaultToolInput
 
-    retriever: RAGRetriever
+    retriever: FAISS_RAG_Retriever
     _vector_store: Optional[FAISS] = None
     _embeddings: Optional[HuggingFaceEmbeddings] = None
     _reranker: Optional[Any] = None
@@ -163,18 +174,19 @@ class RAGTool(BaseTool):
                 self._reranker = None
 
             # Pass db_session to datastore
-            if self._db_session:
+            if self._db_session and self.retriever.datastore:
                 self.retriever.datastore._db_session = self._db_session
 
-            # Load vector store
-            logger.debug(f"Loading vector store {self.retriever.datastore.name}")
-            self._vector_store = self.retriever.load_dataset(self._embeddings)
-            if self._vector_store is None:
-                logger.warning(
-                    "No vector stores found: you must set the vector store manually."
-                )
-            else:
-                logger.debug(f"Data store loaded: {self.retriever.datastore.name}")
+            if self.retriever.datastore:
+                # Load vector store
+                logger.debug(f"Loading vector store {self.retriever.datastore.name}")
+                self._vector_store = self.retriever.load_dataset(self._embeddings)
+                if self._vector_store is None:
+                    logger.warning(
+                        "No vector stores found: you must set the vector store manually."
+                    )
+                else:
+                    logger.debug(f"Data store loaded: {self.retriever.datastore.name}")
 
             logger.debug(f"RAGTool initialization completed successfully {self.name}")
 
@@ -333,6 +345,277 @@ class RAGTool(BaseTool):
         if "answer" not in answer or answer["answer"] == "":
             raise Exception("No answer found")
         return answer.get("answer", "?????")
+
+
+class Pinecone_RAG_Tool(FAISS_RAG_Tool):
+    """
+    RAG Tool implementation using Pinecone API for retrieval instead of local FAISS.
+    This allows for more scalable and distributed vector search without running inference locally.
+    """
+
+    name: str = "pinecone_rag"
+    description: str = "Searches through documents using Pinecone vector database"
+    args_schema: Optional[ArgsSchema] = DefaultToolInput
+
+    pinecone_api_key: str = Field(
+        default_factory=lambda: os.getenv("PINECONE_API_KEY", "")
+    )
+    pinecone_host: str = Field(
+        default_factory=lambda: os.getenv(
+            "PINECONE_HOST", "https://owlai-law-sq85boh.svc.apu-57e2-42f6.pinecone.io"
+        )
+    )
+    pinecone_namespace: str = Field(
+        default_factory=lambda: os.getenv("PINECONE_NAMESPACE", "")
+    )
+    embeddings_model_name: str = "text-embedding-3-large"
+    embedding: Optional[OpenAIEmbeddings] = None
+
+    def __init__(self, *args, **kwargs):
+        """Initialize PineconeRAGTool with Pinecone connection settings."""
+        super().__init__(*args, **kwargs)
+
+        # Ensure Pinecone host has https:// prefix
+        if self.pinecone_host and not self.pinecone_host.startswith(
+            ("http://", "https://")
+        ):
+            self.pinecone_host = f"https://{self.pinecone_host}"
+
+        if not self.pinecone_api_key:
+            logger.warning("No Pinecone API key provided. RAG queries will fail.")
+
+        self.embedding = OpenAIEmbeddings(model="text-embedding-3-large")
+
+        logger.debug(f"Initialized PineconeRAGTool with host: {self.pinecone_host}")
+
+    def get_rag_sources(self, question: str) -> Dict[str, Any]:
+        """
+        Runs the RAG query against Pinecone vector store and returns an answer to the question.
+
+        Args:
+            question: a string containing the question to answer.
+
+        Returns:
+            A dictionary containing the question, answer, and metadata.
+        """
+        logger.info(f"Tool: '{self.name}' - Semantics query: '{question}'")
+
+        answer: Dict[str, Any] = {"question": question}
+
+        metadata = {
+            "query": question,
+            "k": self.retriever.num_retrieved_docs,
+            "num_docs_final": self.retriever.num_docs_final,
+            "reranking_enabled": self._reranker is not None,
+            "vector_store": "pinecone",
+            "host": self.pinecone_host,
+            "namespace": self.pinecone_namespace or "default",
+        }
+
+        try:
+            # Generate embeddings for the query using the embedding model
+            retry_attempts = 3
+            query_embedding = None
+
+            for attempt in range(retry_attempts):
+                try:
+                    logger.debug(
+                        f"Generating embedding for query (attempt {attempt+1})"
+                    )
+                    query_embedding = self.embedding.embed_query(question)
+                    break
+                except Exception as e:
+                    logger.warning(f"Embedding attempt {attempt+1} failed: {str(e)}")
+                    if attempt < retry_attempts - 1:
+                        import time
+
+                        time.sleep(2**attempt)  # Exponential backoff
+                    else:
+                        logger.error(
+                            f"Failed to embed query after {retry_attempts} attempts"
+                        )
+                        raise
+
+            if query_embedding is None:
+                raise ValueError("Failed to generate embedding for query")
+
+            # Structure the API request to Pinecone
+            headers = {
+                "Api-Key": self.pinecone_api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+
+            request_data = {
+                "vector": query_embedding,
+                "topK": self.retriever.num_retrieved_docs,
+                "includeMetadata": True,
+                "includeValues": False,  # We don't need the vector values
+            }
+
+            # Add namespace if specified
+            if self.pinecone_namespace:
+                request_data["namespace"] = self.pinecone_namespace
+
+            # Make the query request to Pinecone
+            query_url = f"{self.pinecone_host}/query"
+
+            response = None
+            for attempt in range(retry_attempts):
+                try:
+                    logger.debug(f"Querying Pinecone (attempt {attempt+1})")
+                    response = requests.post(
+                        query_url, headers=headers, json=request_data
+                    )
+                    response.raise_for_status()
+                    break
+                except Exception as e:
+                    logger.warning(
+                        f"Pinecone query attempt {attempt+1} failed: {str(e)}"
+                    )
+                    if attempt < retry_attempts - 1:
+                        import time
+
+                        time.sleep(2**attempt)  # Exponential backoff
+                    else:
+                        logger.error(
+                            f"Failed to query Pinecone after {retry_attempts} attempts"
+                        )
+                        raise
+
+            if response is None:
+                raise ValueError("Failed to get response from Pinecone")
+
+            # Process the response from Pinecone
+            results = response.json()
+
+            logger.debug(f"Pinecone returned {len(results.get('matches', []))} matches")
+
+            # Convert Pinecone matches to LangchainDocument format
+            retrieved_docs: List[LangchainDocument] = []
+            for match in results.get("matches", []):
+                doc_metadata = match.get("metadata", {})
+                # Create a LangchainDocument with the content and metadata
+                doc = LangchainDocument(
+                    page_content=doc_metadata.get("text", ""),
+                    metadata={
+                        "id": match.get("id", ""),
+                        "title": doc_metadata.get("title", "Unknown Title"),
+                        "source": doc_metadata.get("source", "Unknown Source"),
+                        "pc_score": match.get("score", 0),
+                        **{k: v for k, v in doc_metadata.items() if k != "text"},
+                    },
+                )
+                retrieved_docs.append(doc)
+
+            logger.info(f"Retrieved {len(retrieved_docs)} documents from Pinecone")
+
+            metadata["num_docs_retrieved"] = len(retrieved_docs)
+            metadata["retrieved_docs"] = [
+                {
+                    "id": doc.metadata.get("id", ""),
+                    "title": doc.metadata.get("title", "Unknown Title"),
+                    "pc_score": doc.metadata.get("pc_score", 0),
+                    "source": doc.metadata.get("source", "Unknown Source"),
+                }
+                for doc in retrieved_docs
+            ]
+
+            # Rerank the documents using RAGTool's rerank_documents method
+            reranked_docs = super().rerank_documents(
+                question, retrieved_docs, k=self.retriever.num_docs_final
+            )
+
+            # Explicit type annotation to fix linter errors
+            typed_reranked_docs: List[LangchainDocument] = reranked_docs
+
+            for doc in typed_reranked_docs:
+                logger.debug(
+                    f"Document '{doc.metadata.get('title', 'Unknown Title')}' - "
+                    f"Rerank Score: {doc.metadata.get('rerank_score', 'Unknown')}"
+                )
+
+            docs_content = f"Query: '{question}'\nDocuments:\n\n" + "\n\n".join(
+                [
+                    f"{idx+1}. [Source: {doc.metadata.get('title', 'Unknown Title')} - "
+                    f"Score: {doc.metadata.get('rerank_score', doc.metadata.get('score', 'Unknown'))}] "
+                    f'"{doc.page_content}"'
+                    for idx, doc in enumerate(typed_reranked_docs)
+                ]
+            )
+
+            metadata["reranked_docs"] = [
+                {
+                    "id": doc.metadata.get("id", ""),
+                    "title": doc.metadata.get("title", "Unknown Title"),
+                    "rerank_score": doc.metadata.get(
+                        "rerank_score", doc.metadata.get("score", "Unknown")
+                    ),
+                    "pc_score": doc.metadata.get("pc_score", 0),
+                    "source": doc.metadata.get("source", "Unknown Source"),
+                }
+                for doc in typed_reranked_docs
+            ]
+
+            answer["answer"] = docs_content
+            answer["metadata"] = metadata
+
+        except Exception as e:
+            logger.error(f"Error querying Pinecone: {str(e)}")
+            logger.error(traceback.format_exc())
+            answer["answer"] = f"Error retrieving information: {str(e)}"
+            answer["metadata"] = metadata
+
+        return answer
+
+    async def _arun(
+        self,
+        query: str,
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool asynchronously."""
+        return self.message_invoke(query)
+
+    def rerank_documents(
+        self, query: str, documents: List[LangchainDocument], k: int = 5
+    ) -> List[LangchainDocument]:
+        """
+        Rerank documents using sentence-transformers cross-encoder.
+
+        This implementation uses the parent class method.
+
+        Args:
+            query: The search query
+            documents: List of documents to rerank
+            k: Number of documents to return
+
+        Returns:
+            Reranked list of documents
+        """
+        return super().rerank_documents(query, documents, k)
+
+    def describe_index_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the Pinecone index.
+        Matches the interface used in the pinecone_migration.py DirectPineconeIndex class.
+
+        Returns:
+            Dictionary with index statistics
+        """
+        url = f"{self.pinecone_host}/describe_index_stats"
+        headers = {
+            "Api-Key": self.pinecone_api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error getting index stats: {str(e)}")
+            return {"error": str(e)}
 
 
 def main():

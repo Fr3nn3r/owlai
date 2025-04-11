@@ -19,7 +19,7 @@ from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
 )
 
-from owlai.services.rag import RAGTool
+from owlai.services.rag import FAISS_RAG_Tool, Pinecone_RAG_Tool
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)
@@ -80,14 +80,58 @@ class SecurityTool(BaseTool):  # type: ignore[override, override]
         return self.identify_user_with_password(query)
 
 
-TOOLBOX = {
-    # "security_tool": SecurityTool(**OPTIONAL_TOOLS["security_tool"]),
-    # "tavily_search_results_json": TavilySearchResults(
-    #    **OPTIONAL_TOOLS["tavily_search_results_json"]
-    # ),
-    "rag-naruto-v1": RAGTool(**OPTIONAL_TOOLS["rag-naruto-v1"]),
-    "rag-fr-general-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-general-law-v1"]),
-    "rag-fr-tax-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-tax-law-v1"]),
-    "rag-fr-admin-law-v1": RAGTool(**TOOLS_CONFIG["rag-fr-admin-law-v1"]),
-    "fr-law-complete": RAGTool(**TOOLS_CONFIG["fr-law-complete"]),
-}
+class ToolFactory:
+    """Factory class for lazy initialization of tools based on tool ID."""
+
+    _tool_cache = {}  # Cache for initialized tools
+
+    @classmethod
+    def get_tool(cls, tool_id: str) -> BaseTool:
+        """Get a tool instance by its ID, initializing it if needed."""
+        # Return cached tool if already initialized
+        if tool_id in cls._tool_cache:
+            return cls._tool_cache[tool_id]
+
+        # Initialize the tool based on its ID
+        if tool_id == "security_tool":
+            tool = SecurityTool(**OPTIONAL_TOOLS[tool_id])
+        elif tool_id == "tavily_search_results_json":
+            tool = TavilySearchResults(**OPTIONAL_TOOLS[tool_id])
+        elif tool_id == "pinecone_french_law_lookup":
+            tool = Pinecone_RAG_Tool(**TOOLS_CONFIG[tool_id])
+        elif tool_id in TOOLS_CONFIG:
+            tool = FAISS_RAG_Tool(**TOOLS_CONFIG[tool_id])
+        elif tool_id in OPTIONAL_TOOLS:
+            tool = FAISS_RAG_Tool(**OPTIONAL_TOOLS[tool_id])
+        else:
+            raise ValueError(f"Tool ID not found: {tool_id}")
+
+        # Cache the tool
+        cls._tool_cache[tool_id] = tool
+        logger.debug(f"Initialized and cached tool: {tool_id}")
+        return tool
+
+    @classmethod
+    def list_available_tools(cls) -> Dict[str, str]:
+        """Get a dictionary of all available tools with their descriptions.
+
+        Returns:
+            Dictionary mapping tool_id to tool description
+        """
+        tools = {}
+
+        # Add tools from TOOLS_CONFIG
+        for tool_id, config in TOOLS_CONFIG.items():
+            tools[tool_id] = config.get("description", "No description available")
+
+        # Add tools from OPTIONAL_TOOLS
+        for tool_id, config in OPTIONAL_TOOLS.items():
+            tools[tool_id] = config.get("description", "No description available")
+
+        return tools
+
+    @classmethod
+    def clear_cache(cls):
+        """Clear the tool cache to free up resources."""
+        cls._tool_cache = {}
+        logger.debug("Tool cache cleared")

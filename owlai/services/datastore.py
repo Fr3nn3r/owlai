@@ -40,9 +40,9 @@ from owlai.services.system import track_time, Session
 logger = logging.getLogger(__name__)
 
 
-class RAGDataStore(BaseModel):
+class FAISS_DataStore(BaseModel):
     """
-    RAGDataStore is a class that manages the data store for the RAG system.
+    FAISSDataStore is a class that manages the data store for the FAISS system.
     It is responsible for loading and saving the vector store, as well as for parsing the documents.
     """
 
@@ -60,9 +60,9 @@ class RAGDataStore(BaseModel):
 
     def __init__(self, **kwargs):
         """
-        Initialize the RAGDataStore with the provided configuration.
+        Initialize the FAISSDataStore with the provided configuration.
 
-        This constructor handles the initialization of the RAGDataStore object,
+        This constructor handles the initialization of the FAISSDataStore object,
         setting up all necessary parameters for document processing and vector storage.
         """
         super().__init__(**kwargs)
@@ -383,7 +383,7 @@ def main():
             encode_kwargs={"normalize_embeddings": True},
         )
 
-        store = RAGDataStore(
+        store = FAISS_DataStore(
             name=args.store_name,
             version="1.0",
             input_data_folder=args.input_folder,
@@ -402,8 +402,6 @@ def main():
                 logger.info("Vector store loaded but size unknown")
         else:
             logger.warning("No vector store was created or loaded")
-
-        vector_store = store.load_dataset_from_input_folder(embeddings)
 
         return vector_store
     except Exception as e:

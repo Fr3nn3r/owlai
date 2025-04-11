@@ -204,6 +204,31 @@ TOOLS_CONFIG = {
             },
         },
     },
+    "pinecone_french_law_lookup": {
+        "name": "pinecone_french_law_lookup",
+        "description": "Returns data chunks from french law documents.",
+        "args_schema": {
+            "title": "ToolInput",
+            "type": "object",
+            "properties": {
+                "query": {
+                    "title": "Query",
+                    "type": "string",
+                    "description": "A request for semantic search on french law expressed in french",
+                }
+            },
+            "required": ["query"],
+        },
+        "retriever": {
+            "num_retrieved_docs": 30,
+            "num_docs_final": 5,
+            "embeddings_model_name": "thenlper/gte-small",
+            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            "model_kwargs": {"device": device},
+            "encode_kwargs": {"normalize_embeddings": True},
+            "multi_process": enable_multi_process,
+        },
+    },
 }
 
 

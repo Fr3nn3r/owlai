@@ -19,6 +19,7 @@ print(f"HuggingFace token available: {bool(HUGGINGFACE_TOKEN)}")
 
 from owlai.services.rag import RAGTool, PineconeRAGTool
 from owlai.core import OwlAgent
+from pinecone import Pinecone, FetchResponse
 import time
 import tenacity
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -101,7 +102,6 @@ TOOLS_TO_TEST = {
             "num_retrieved_docs": 30,
             "num_docs_final": 5,
             "embeddings_model_name": "thenlper/gte-small",
-            "reranker_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             "model_kwargs": {"device": "cpu"},
             "encode_kwargs": {"normalize_embeddings": True},
             "multi_process": False,
@@ -281,13 +281,26 @@ def main():
     import csv
 
     # Create directories for reports and visualizations
-    REPORTS_DIR = "data/evaluation/reports-camembert-rag-fr-general-law-v1"
+    REPORTS_DIR = "data/evaluation/pinecone-v0.2"
     os.makedirs(REPORTS_DIR, exist_ok=True)
+
+    # Create a timestamp for the cumulative CSV
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    cumulative_csv = f"{REPORTS_DIR}/all_evaluations_{timestamp}.csv"
+
+    # Create empty DataFrame for cumulative results
+    all_evaluations = pd.DataFrame()
 
     # Create tools to evaluate
     # tools = [RAGTool(**itool) for itool in TOOLS_TO_TEST.values()]
     tools = [PineconeRAGTool(**itool) for itool in TOOLS_TO_TEST.values()]
     judge = OwlAgent(**LLM_JUDGE)
+
+    # Get the environment from Pinecone dashboard
+    PC_ENVIRONMENT = "gcp-starter"  # or whatever your environment is
+
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY", ""))
+    index = pc.Index(host=os.getenv("PINECONE_HOST", ""))
 
     for question_idx, question in enumerate(QUESTIONS_TO_TEST):
         print(
@@ -301,13 +314,15 @@ def main():
             print(f"  Using tool: {tool_to_test.name}")
             try:
                 full_rag_answer = tool_to_test.get_rag_sources(question)
+                # sprint(full_rag_answer)
+
                 reranked_docs_metadata = full_rag_answer["metadata"]["reranked_docs"]
                 retrieved_docs_metadata = full_rag_answer["metadata"]["retrieved_docs"]
 
                 reranked_docs_ids = [doc["id"] for doc in reranked_docs_metadata]
                 retrieved_docs_ids = [doc["id"] for doc in retrieved_docs_metadata]
 
-                store = tool_to_test._vector_store
+                # store = tool_to_test._vector_store
 
                 # Judge reranked documents
                 from tqdm import tqdm
@@ -315,10 +330,18 @@ def main():
                 for idoc_meta in tqdm(
                     reranked_docs_metadata, desc="Evaluating reranked documents"
                 ):
-                    store_doc = store.get_by_ids([idoc_meta["id"]])
+                    # store_doc = store.get_by_ids([idoc_meta["id"]])
+                    # Fetch by ID
+                    response: FetchResponse = index.fetch(ids=[idoc_meta["id"]])
+
+                    # sprint(response.vectors.get(idoc_meta["id"]).metadata)
+
+                    # View result
+                    item = response.vectors.get(idoc_meta["id"]).metadata
+
                     llm_judge_query = {
                         "query": question,
-                        "chunk": store_doc[0].page_content,
+                        "chunk": item.get("text", ""),
                     }
                     json_query = json.dumps(llm_judge_query)
 
@@ -336,11 +359,13 @@ def main():
                                 "docID": idoc_meta["id"],
                                 "judge_score": float(result_dict["score"]),
                                 "reranker_score": (
-                                    float(idoc_meta["score"])
-                                    if idoc_meta["score"] != "Unknown"
+                                    float(idoc_meta["rerank_score"])
+                                    if idoc_meta["rerank_score"] != "Unknown"
                                     else None
                                 ),
                                 "is_reranked": True,
+                                "token_count": item.get("token_count", -1),
+                                "pc_score": idoc_meta.get("pc_score", -1),
                             }
                         )
                     except Exception as e:
@@ -358,10 +383,14 @@ def main():
                         continue
 
                     try:
-                        store_doc = store.get_by_ids([idoc_meta["id"]])[0]
+                        response: FetchResponse = index.fetch(ids=[idoc_meta["id"]])
+
+                        # View result
+                        item = response.vectors.get(idoc_meta["id"]).metadata
+
                         llm_judge_query = {
                             "query": question,
-                            "chunk": store_doc.page_content,
+                            "chunk": item.get("text", ""),
                         }
                         json_query = json.dumps(llm_judge_query)
 
@@ -379,42 +408,48 @@ def main():
                                 "judge_score": float(result_dict["score"]),
                                 "reranker_score": None,  # Not reranked
                                 "is_reranked": False,
+                                "token_count": item.get("token_count", -1),
+                                "pc_score": idoc_meta.get("pc_score", -1),
                             }
                         )
                     except Exception as e:
+                        import traceback
+
                         print(
-                            f"Failed to evaluate document {idoc_meta['id']}: {str(e)}"
+                            f"Failed to evaluate document {idoc_meta['id']}: {str(e)}\n{traceback.format_exc()}"
                         )
-                        continue
+                        raise e
 
             except Exception as e:
-                print(f"Error processing tool {tool_to_test.name}: {str(e)}")
-                continue
+                import traceback
+
+                print(
+                    f"Error processing tool {tool_to_test.name}: {str(e)}\n{traceback.format_exc()}"
+                )
+                raise e
 
         # Save results if we have any
         if all_docs:
             # Generate a clean name for the question
             question_hash = hashlib.md5(question.encode()).hexdigest()[:8]
-            current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            # Save to CSV
+            # Create DataFrame for this question
             df = pd.DataFrame(all_docs)
+
+            # Save individual question CSV (optional)
             csv_filename = (
                 f"{REPORTS_DIR}/question_{question_idx+1}_{question_hash}.csv"
             )
             df.to_csv(csv_filename, index=False)
             print(f"Saved report to {csv_filename}")
 
-            # Generate visualization directly
-            try:
-                from tests.visualize_results import visualize_question_results
+            # Append to cumulative DataFrame
+            all_evaluations = pd.concat([all_evaluations, df], ignore_index=True)
 
-                visualize_question_results(
-                    df, question, csv_filename, REPORTS_DIR.replace("reports", "charts")
-                )
-                print(f"Visualization created for question {question_idx+1}")
-            except Exception as e:
-                print(f"Failed to create visualization: {str(e)}")
+            # Save cumulative CSV after each question
+            all_evaluations.to_csv(cumulative_csv, index=False)
+            print(f"Updated cumulative results file: {cumulative_csv}")
+
         else:
             print(f"No results to save for question {question_idx+1}")
 
