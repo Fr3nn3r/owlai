@@ -164,7 +164,9 @@ OWL_AGENTS_DEV = {
             "context_size": 4096,
             "tools_names": ["pinecone_french_law_lookup"],
         },
-        "default_queries": FRENCH_LAW_QUESTIONS["general"],
+        "default_queries": FRENCH_LAW_QUESTIONS["general"]
+        + FRENCH_LAW_QUESTIONS["tax"]
+        + FRENCH_LAW_QUESTIONS["admin"],
     },
 }
 

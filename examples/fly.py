@@ -20,6 +20,8 @@ from owlai.services.system import setup_logging
 from owlai.config.agents import OWL_AGENTS_CONFIG
 from owlai.services.system import sprint
 
+# from owlai.services.tools.ttsengine import hoot
+
 logger: Logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
@@ -130,7 +132,9 @@ if __name__ == "__main__":
                 edwige.set_focus_agent(user_message)
                 continue
 
-            print(focus_agent.message_invoke(user_message))
+            ai_message = focus_agent.message_invoke(user_message)
+
+            print(ai_message)
 
         except KeyboardInterrupt as kbi:
             logger.info(f"Execution interrupted by Ctrl-C - Goodbye!")

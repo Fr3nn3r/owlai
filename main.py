@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 
 from owlai.nest import AgentManager
-from owlai.config.agents import OWL_AGENTS_CONFIG, OWL_AGENTS_OPTIONAL_RAG_TOOLS
+from owlai.config.agents import OWL_AGENTS_CONFIG
 from owlai.services.system import is_dev
 from owlai.services.telemetry import RequestLatencyTracker
 
@@ -120,6 +120,19 @@ app.add_middleware(
 )
 
 FRONTEND_AGENT_DATA = {
+    "rag-droit-general-pinecone": {
+        "name": "Marianne",
+        "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
+        "default_queries": OWL_AGENTS_CONFIG["rag-droit-general-pinecone"][
+            "default_queries"
+        ],
+        "image_url": "Marianne.jpg",
+        "color_theme": {
+            "primary": "#0055A4",  # French blue
+            "secondary": "#FFFFFF",  # White
+        },
+        "welcome_title": "Voici Marianne, une intelligence artificielle sur le droit français",
+    },
     "fr-law-qna-complete": {
         "name": "Marianne",
         "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
@@ -137,9 +150,7 @@ OPTIONAL_AGENTS = {
     "rag-naruto": {
         "name": "Kiyomi Uchiha",
         "description": "Ask me about Naruto (spoiler alert!)",
-        "default_queries": OWL_AGENTS_OPTIONAL_RAG_TOOLS["rag-naruto"][
-            "default_queries"
-        ],
+        "default_queries": OWL_AGENTS_CONFIG["rag-naruto"]["default_queries"],
         "image_url": "Kiyomi.jpg",
         "color_theme": {
             "primary": "#000000",
@@ -150,9 +161,7 @@ OPTIONAL_AGENTS = {
     "rag-droit-fiscal": {
         "name": "Marine",
         "description": "Posez vos questions sur le droit fiscal",
-        "default_queries": OWL_AGENTS_OPTIONAL_RAG_TOOLS["rag-droit-fiscal"][
-            "default_queries"
-        ],
+        "default_queries": OWL_AGENTS_CONFIG["rag-droit-fiscal"]["default_queries"],
         "image_url": "Nathalie.jpg",
         "color_theme": {
             "primary": "#000000",
@@ -163,9 +172,7 @@ OPTIONAL_AGENTS = {
     "rag-droit-admin": {
         "name": "Nathalie",
         "description": "Posez vos questions sur le droit administratif",
-        "default_queries": OWL_AGENTS_OPTIONAL_RAG_TOOLS["rag-droit-admin"][
-            "default_queries"
-        ],
+        "default_queries": OWL_AGENTS_CONFIG["rag-droit-admin"]["default_queries"],
         "image_url": "Nathalie.jpg",
         "color_theme": {
             "primary": "#000000",
@@ -269,7 +276,7 @@ async def stream_query(payload: QueryRequest):
             latency.mark("generate_start")
             logger.info(f"Streaming query for agent {payload.agent_id}")
             # Get the agent instance
-            agent = agent_manager.get_agent("fr-law-qna-complete")
+            agent = agent_manager.get_agent("rag-droit-general-pinecone")
             latency.mark("agent_initialized")
 
             logger.info(f"Agent {payload.agent_id} found")
