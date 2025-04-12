@@ -281,43 +281,50 @@ def main():
             question_results
         )  # Append the results for this question to the list
 
-        # Save the results to a CSV file after each question
+        # Update the single CSV file after each question
         results_df = pd.DataFrame(results_list)
         results_df.to_csv(
-            os.path.join(REPORTS_DIR, f"evaluation_results_{question_idx+1}.csv"),
-            index=False,
+            os.path.join(REPORTS_DIR, "evaluation_results.csv"), index=False
         )
 
-    # Log the results list to verify DataFrame construction
-    logger.debug(f"Results list: {results_list}")
+    # Generate final plot with grouped bars
+    plt.figure(figsize=(15, 8))
 
-    # Plotting the results
-    plt.figure(figsize=(12, 8))
-    questions = results_df["question"]
+    # Set the positions of the bars on the x-axis
+    questions = range(len(results_df))
+    width = 0.2  # Width of each bar
+
+    # Plot each metric as a separate group of bars
     metrics = [
         "accuracy_score",
         "completeness_score",
         "relevance_score",
         "traceability_score",
     ]
+    for idx, metric in enumerate(metrics):
+        # Offset each group of bars
+        pos = [x + width * idx for x in questions]
+        plt.bar(pos, results_df[metric], width, label=metric)
 
-    # Create a stacked bar chart
-    bottom = None
-    for metric in metrics:
-        plt.bar(questions, results_df[metric], bottom=bottom, label=metric)
-        if bottom is None:
-            bottom = results_df[metric].copy()
-        else:
-            bottom += results_df[metric]
-
+    # Customize the plot
     plt.xlabel("Questions")
     plt.ylabel("Scores")
-    plt.title("Evaluation Metrics for Each Question")
-    plt.xticks(rotation=90)
+    plt.title("Evaluation Metrics by Question")
+    plt.xticks(
+        [x + width * 1.5 for x in questions],
+        [f"Q{i+1}" for i in questions],
+        rotation=45,
+    )
     plt.legend()
+    plt.grid(True, axis="y", linestyle="--", alpha=0.7)
     plt.tight_layout()
+
+    # Save the final plot
     plt.savefig(os.path.join(REPORTS_DIR, "evaluation_metrics.png"))
-    plt.show()
+    plt.close()
+
+    logger.info("Evaluation completed successfully!")
+    logger.info(f"Results saved in {REPORTS_DIR}")
 
 
 if __name__ == "__main__":

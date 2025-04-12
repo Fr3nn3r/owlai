@@ -64,23 +64,37 @@ FRENCH_LAW_QUESTIONS = {
 
 
 OWL_AGENTS_DEV = {
-    "fr-law-qna-complete": {
-        "name": "fr-law-qna-complete",
+    "rag-droit-general-pinecone": {
+        "name": "rag-droit-general-pinecone",
         "version": "1.0",
-        "description": "Agent responsible for answering questions about french law",
+        "description": "Agent specialized in generic french law.",
         "system_prompt": PROMPT_CONFIG["marianne-v2"],
         "llm_config": {
             "model_provider": "openai",
             "model_name": "gpt-4o-mini",
-            "max_tokens": 4000,
+            "max_tokens": 4096,
             "temperature": 0.1,
-            "context_size": 4000,
-            "tools_names": ["fr-law-complete"],
+            "context_size": 4096,
+            "tools_names": ["pinecone_french_law_lookup"],
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"]
         + FRENCH_LAW_QUESTIONS["tax"]
         + FRENCH_LAW_QUESTIONS["admin"],
+        "frontend_info": {
+            "name": "Marianne",
+            "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
+            "image_url": "Marianne.jpg",
+            "color_theme": {
+                "primary": "#0055A4",  # French blue
+                "secondary": "#FFFFFF",  # White
+            },
+            "welcome_title": "Voici Marianne, une intelligence artificielle sur le droit français",
+        },
     },
+}
+
+
+OWL_AGENTS_OPTIONAL_RAG_TOOLS = {
     "rag-naruto": {
         "name": "rag-naruto",
         "version": "1.0",
@@ -105,6 +119,16 @@ OWL_AGENTS_DEV = {
             "What is the akatsuki?",
             "List all the Hokage.",
         ],
+        "frontend_info": {
+            "name": "Kiyomi Uchiha",
+            "description": "Ask me about Naruto (spoiler alert!)",
+            "image_url": "Kiyomi.jpg",
+            "color_theme": {
+                "primary": "#000000",
+                "secondary": "#FF0000",
+            },
+            "welcome_title": "Fan of the anime series Naruto.",
+        },
     },
     "rag-droit-fiscal": {
         "name": "rag-droit-fiscal",
@@ -151,27 +175,7 @@ OWL_AGENTS_DEV = {
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"],
     },
-    "rag-droit-general-pinecone": {
-        "name": "rag-droit-general-pinecone",
-        "version": "1.0",
-        "description": "Agent specialized in generic french law.",
-        "system_prompt": PROMPT_CONFIG["marianne-v2"],
-        "llm_config": {
-            "model_provider": "openai",
-            "model_name": "gpt-4o-mini",
-            "max_tokens": 4096,
-            "temperature": 0.1,
-            "context_size": 4096,
-            "tools_names": ["pinecone_french_law_lookup"],
-        },
-        "default_queries": FRENCH_LAW_QUESTIONS["general"]
-        + FRENCH_LAW_QUESTIONS["tax"]
-        + FRENCH_LAW_QUESTIONS["admin"],
-    },
 }
-
-
-OWL_AGENTS_OPTIONAL_RAG_TOOLS = {}
 
 OWL_AGENTS_PROD = {
     "rag-droit-general-pinecone": {

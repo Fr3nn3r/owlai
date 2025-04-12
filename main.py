@@ -119,13 +119,10 @@ app.add_middleware(
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
-FRONTEND_AGENT_DATA = {
+_FRONTEND_AGENT_DATA = {
     "rag-droit-general-pinecone": {
         "name": "Marianne",
         "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
-        "default_queries": OWL_AGENTS_CONFIG["rag-droit-general-pinecone"][
-            "default_queries"
-        ],
         "image_url": "Marianne.jpg",
         "color_theme": {
             "primary": "#0055A4",  # French blue
@@ -135,7 +132,7 @@ FRONTEND_AGENT_DATA = {
     },
 }
 
-OPTIONAL_AGENTS = {
+_OPTIONAL_AGENTS = {
     "rag-naruto": {
         "name": "Kiyomi Uchiha",
         "description": "Ask me about Naruto (spoiler alert!)",
@@ -186,14 +183,13 @@ OPTIONAL_AGENTS = {
 @app.get("/agents/info", response_model=List[AgentInfo])
 async def get_agents_info():
     """Get detailed information about all agents"""
-    agent_keys = agent_manager.get_agents_keys()
+    agents_config = agent_manager.get_agents_config()
     return [
         AgentInfo(
-            name=FRONTEND_AGENT_DATA[agent_key]["name"],
-            description=FRONTEND_AGENT_DATA[agent_key]["description"],
+            name=agents_config[agent_key]["frontend_info"]["name"],
+            description=agents_config[agent_key]["frontend_info"]["description"],
         )
-        for agent_key in agent_keys
-        if agent_key in FRONTEND_AGENT_DATA
+        for agent_key in agents_config
     ]
 
 
@@ -203,8 +199,8 @@ async def query_agent(payload: QueryRequest):
     logger.info(
         f"Received query request from agent {payload.agent_id}: {payload.question}"
     )
-
-    if payload.agent_id not in FRONTEND_AGENT_DATA:
+    agents_config = agent_manager.get_agents_config()
+    if payload.agent_id not in agents_config:
         logger.error(f"Agent {payload.agent_id} not found")
         raise HTTPException(
             status_code=404, detail=f"Agent {payload.agent_id} not found"
@@ -226,10 +222,11 @@ async def query_agent(payload: QueryRequest):
 @app.get("/agents/{agent_id}/details", response_model=AgentDetails)
 async def get_agent_details(agent_id: str):
     """Get detailed information about a specific agent"""
-    if agent_id not in FRONTEND_AGENT_DATA:
+    agents_config = agent_manager.get_agents_config()
+    if agent_id not in agents_config:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    agent_data = FRONTEND_AGENT_DATA[agent_id]
+    agent_data = agents_config[agent_id]["frontend_info"]
     return AgentDetails(
         id=agent_id,
         name=agent_data["name"],
@@ -244,10 +241,11 @@ async def get_agent_details(agent_id: str):
 @app.get("/agents/{agent_id}/default-queries", response_model=List[str])
 async def get_default_queries(agent_id: str) -> List[str]:
     """Get default queries for a specific agent"""
-    if agent_id not in FRONTEND_AGENT_DATA:
+    agents_config = agent_manager.get_agents_config()
+    if agent_id not in agents_config:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    return FRONTEND_AGENT_DATA[agent_id]["default_queries"]
+    return agents_config[agent_id]["default_queries"]
 
 
 queryid_to_messageid_map = {}
@@ -264,7 +262,8 @@ async def stream_query(payload: QueryRequest):
     )
 
     # Verify agent exists
-    if payload.agent_id not in FRONTEND_AGENT_DATA:
+    agents_config = agent_manager.get_agents_config()
+    if payload.agent_id not in agents_config:
         logger.error(f"Agent {payload.agent_id} not found")
         raise HTTPException(
             status_code=404, detail=f"Agent {payload.agent_id} not found"
@@ -359,7 +358,8 @@ class DocumentChunk(BaseModel):
 
 def map_agent_data(agent_name):
     """Helper function to map agent data to AgentDetails model."""
-    agent_data = FRONTEND_AGENT_DATA[agent_name]
+    agents_config = agent_manager.get_agents_config()
+    agent_data = agents_config[agent_name]["frontend_info"]
     return AgentDetails(
         id=agent_name,
         name=agent_data["name"],
@@ -367,7 +367,7 @@ def map_agent_data(agent_name):
         welcome_title=agent_data["welcome_title"],
         owl_image_url=f"/public/{agent_data['image_url']}",
         color_theme=ColorTheme(**agent_data["color_theme"]),
-        default_queries=agent_data["default_queries"],
+        default_queries=agents_config[agent_name]["default_queries"],
     )
 
 
@@ -378,10 +378,11 @@ async def list_agents():
     agent_names = [
         name for name in agent_manager.get_agents_keys() if name.startswith("rag-")
     ]
+    agents_config = agent_manager.get_agents_config()
     agents = [
         map_agent_data(agent_name)
         for agent_name in agent_names
-        if agent_name in FRONTEND_AGENT_DATA
+        if agent_name in agents_config
     ]
     return agents
 

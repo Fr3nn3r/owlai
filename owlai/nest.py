@@ -140,6 +140,9 @@ class AgentManager:
             del self.last_used[session_id]
             logger.info(f"Cleaned up inactive agent: {session_id}")
 
+    def get_agents_config(self) -> Dict[str, Any]:
+        return self.agents_config
+
     def get_agent(self, agent_name: str) -> Optional[OwlAgent]:
         """Get an agent by name, initializing it if necessary.
 
@@ -209,13 +212,6 @@ class AgentManager:
 
     def get_agents_keys(self) -> List[str]:
         return [key for key in self.agents_config.keys()]
-
-    def get_agents_info(self) -> List[str]:
-        return [
-            f"{agent.name}: {agent.description}"
-            for agent in self.owls.values()
-            if agent
-        ]
 
     def get_agents_default_queries(self) -> List[str]:
         return [
