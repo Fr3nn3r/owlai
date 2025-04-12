@@ -133,17 +133,6 @@ FRONTEND_AGENT_DATA = {
         },
         "welcome_title": "Voici Marianne, une intelligence artificielle sur le droit français",
     },
-    "fr-law-qna-complete": {
-        "name": "Marianne",
-        "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
-        "default_queries": OWL_AGENTS_CONFIG["fr-law-qna-complete"]["default_queries"],
-        "image_url": "Marianne.jpg",
-        "color_theme": {
-            "primary": "#0055A4",  # French blue
-            "secondary": "#FFFFFF",  # White
-        },
-        "welcome_title": "Voici Marianne, une intelligence artificielle sur le droit français",
-    },
 }
 
 OPTIONAL_AGENTS = {
@@ -179,6 +168,17 @@ OPTIONAL_AGENTS = {
             "secondary": "#FF0000",
         },
         "welcome_title": "Expert en droit administratif",
+    },
+    "fr-law-qna-complete": {
+        "name": "Marianne",
+        "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
+        "default_queries": OWL_AGENTS_CONFIG["fr-law-qna-complete"]["default_queries"],
+        "image_url": "Marianne.jpg",
+        "color_theme": {
+            "primary": "#0055A4",  # French blue
+            "secondary": "#FFFFFF",  # White
+        },
+        "welcome_title": "Voici Marianne, une intelligence artificielle sur le droit français",
     },
 }
 
