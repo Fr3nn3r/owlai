@@ -174,18 +174,18 @@ OWL_AGENTS_DEV = {
 OWL_AGENTS_OPTIONAL_RAG_TOOLS = {}
 
 OWL_AGENTS_PROD = {
-    "fr-law-qna-complete": {
-        "name": "fr-law-qna-complete",
+    "rag-droit-general-pinecone": {
+        "name": "rag-droit-general-pinecone",
         "version": "1.0",
-        "description": "Agent responsible for answering questions about french law",
-        "system_prompt": PROMPT_CONFIG["marianne-v1"],
+        "description": "Agent specialized in generic french law.",
+        "system_prompt": PROMPT_CONFIG["marianne-v2"],
         "llm_config": {
             "model_provider": "openai",
-            "model_name": "gpt-4o",
-            "max_tokens": 2048,
+            "model_name": "gpt-4o-mini",
+            "max_tokens": 4096,
             "temperature": 0.1,
             "context_size": 4096,
-            "tools_names": ["fr-law-complete"],
+            "tools_names": ["pinecone_french_law_lookup"],
         },
         "default_queries": FRENCH_LAW_QUESTIONS["general"]
         + FRENCH_LAW_QUESTIONS["tax"]
