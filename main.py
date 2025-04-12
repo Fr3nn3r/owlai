@@ -139,7 +139,7 @@ OPTIONAL_AGENTS = {
     "rag-naruto": {
         "name": "Kiyomi Uchiha",
         "description": "Ask me about Naruto (spoiler alert!)",
-        "default_queries": OWL_AGENTS_CONFIG["rag-naruto"]["default_queries"],
+        "default_queries": [],
         "image_url": "Kiyomi.jpg",
         "color_theme": {
             "primary": "#000000",
@@ -150,7 +150,7 @@ OPTIONAL_AGENTS = {
     "rag-droit-fiscal": {
         "name": "Marine",
         "description": "Posez vos questions sur le droit fiscal",
-        "default_queries": OWL_AGENTS_CONFIG["rag-droit-fiscal"]["default_queries"],
+        "default_queries": [],
         "image_url": "Nathalie.jpg",
         "color_theme": {
             "primary": "#000000",
@@ -161,7 +161,7 @@ OPTIONAL_AGENTS = {
     "rag-droit-admin": {
         "name": "Nathalie",
         "description": "Posez vos questions sur le droit administratif",
-        "default_queries": OWL_AGENTS_CONFIG["rag-droit-admin"]["default_queries"],
+        "default_queries": [],
         "image_url": "Nathalie.jpg",
         "color_theme": {
             "primary": "#000000",
@@ -172,7 +172,7 @@ OPTIONAL_AGENTS = {
     "fr-law-qna-complete": {
         "name": "Marianne",
         "description": "Marianne est une petite chouette qui répond à vos questions et demandes sur le droit français. Attention de ne pas prendre trop au sérieux les petites chouettes d'OwlAI, leurs réponses sont fournies à titre expérimental. Marianne est open source et 100% gratuite mais pas encore tout à fait au point... Notre but est l'amélioration continue alors laissez-nous vos commentaires!",
-        "default_queries": OWL_AGENTS_CONFIG["fr-law-qna-complete"]["default_queries"],
+        "default_queries": [],
         "image_url": "Marianne.jpg",
         "color_theme": {
             "primary": "#0055A4",  # French blue
