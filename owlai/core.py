@@ -37,6 +37,7 @@ import traceback
 from langchain_core.tools import BaseTool
 from owlai.services.telemetry import RequestLatencyTracker
 from owlai.services.system import sprint
+from owlai.services.toolbox import ToolFactory
 
 # Get logger using the module name
 logger = logging.getLogger(__name__)
@@ -97,6 +98,44 @@ class OwlAgent(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
+    @classmethod
+    def model_validator(cls, data):
+        """Customize initialization before Pydantic validation.
+
+        This method is called before Pydantic creates the model instance,
+        allowing you to modify the input data while still leveraging
+        automatic field loading.
+        """
+        # Print loading message for debugging
+        logger.debug(f"Loading agent: {data.get('name', 'unnamed')}")
+
+        # You can modify data here before Pydantic validates and creates the model
+        # For example, adding default tools, modifying configurations, etc.
+
+        # Must return the data for Pydantic to continue processing
+        return data
+
+    def model_post_init(self, __context):
+        """Custom initialization after Pydantic creates the model.
+
+        This runs after all validation is complete and the model is created,
+        so you can access all attributes with their proper types.
+        """
+        # Additional setup code that requires validated fields
+        logger.debug(
+            f"Agent initialized: {self.name} with model {self.llm_config.model_name}"
+        )
+
+        # Initialize a system message with the system prompt
+        if len(self._message_history) == 0:
+            system_message = SystemMessage(content=self.system_prompt)
+            self._message_history.append(system_message)
+            logger.debug(f"System prompt set for agent {self.name}")
+
+        # Initialize callable tools with available tools and log warnings for unavailable ones
+        available_tools = ToolFactory.get_tools(self.llm_config.tools_names)
+        self.init_callable_tools(available_tools)
+
     @property
     def chat_model(self) -> BaseChatModel:
         """Lazy initialization of the chat model.
@@ -125,6 +164,8 @@ class OwlAgent(BaseModel):
         Returns:
             BaseChatModel: The chat model with bound tools
         """
+        if len(tools) == 0:
+            return
         self.callable_tools = tools
         self._chat_model_cache = self.chat_model.bind_tools(tools)
         for tool in tools:

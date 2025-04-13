@@ -137,3 +137,17 @@ class ToolFactory:
         """Clear the tool cache to free up resources."""
         cls._tool_cache = {}
         logger.debug("Tool cache cleared")
+
+    @classmethod
+    def get_tools(cls, tool_ids: List[str]) -> List[BaseTool]:
+        """Get a list of tools by their IDs, initializing them if needed."""
+        tools = []
+        for tool_id in tool_ids:
+            try:
+                tool = cls.get_tool(tool_id)
+                tools.append(tool)
+            except ValueError:
+                logger.warning(
+                    f"Attempted to access an undefined tool with ID '{tool_id}'. Please check the tool ID or define the tool."
+                )
+        return tools

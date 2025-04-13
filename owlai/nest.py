@@ -70,13 +70,6 @@ class AgentManager:
         """
         try:
             agent: OwlAgent = OwlAgent(**self.agents_config[agent_key])
-            agent.init_callable_tools(
-                [
-                    ToolFactory.get_tool(key)
-                    for key in agent.llm_config.tools_names
-                    if key in ToolFactory.list_available_tools()
-                ]
-            )
             agent.init_memory(self.memory)
             logger.info(f"Initialized Owl agent: {agent.name}")
             return agent

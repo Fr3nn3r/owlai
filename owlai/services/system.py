@@ -1,9 +1,10 @@
-print("loading owlsys module")
+"""
+System utilities and environment configuration for OwlAI
+"""
 
 import platform
 import psutil
 import json
-
 import time
 import logging
 import logging.config
@@ -14,12 +15,21 @@ import yaml
 import os
 import codecs
 import sys
-from pythonjsonlogger import jsonlogger  # Import JSON formatter
+from pythonjsonlogger import jsonlogger
 from dotenv import load_dotenv
 
-
-# Create a basic logger first
+# Create a basic logger
 logger = logging.getLogger(__name__)
+
+# Define module level variables with defaults
+env = None
+device = "cpu"
+is_prod = False
+is_dev = False
+is_test = False
+DATABASE_URL = ""
+engine = None
+Session = None
 
 
 def set_cuda_device():
@@ -60,13 +70,13 @@ class UnicodeStreamHandler(logging.StreamHandler):
             self.handleError(record)
 
 
-def setup_logging():
+def setup_logging(env_name):
     """Setup logging configuration based on environment"""
     # Create logs directory if it doesn't exist
     os.makedirs("logs", exist_ok=True)
 
     # Map environment to config file
-    config_file = f"config/logging.{env}.yaml"
+    config_file = f"config/logging.{env_name}.yaml"
 
     if not os.path.exists(config_file):
         raise FileNotFoundError(f"Logging config file {config_file} not found")
@@ -89,13 +99,15 @@ def setup_logging():
         ) from e
 
 
-def set_env():
+def get_env():
+    """Get environment from OWLAI_ENV variable"""
+    # Load environment variables from a .env file
+    load_dotenv()
+
     # Check if OWLAI_ENV environment variable is set
-    load_dotenv()  # Load environment variables from a .env file
     owlai_env = os.getenv("OWLAI_ENV")
     if owlai_env:
         logging.debug(f"OWLAI_ENV environment variable is set to: {owlai_env}")
-        print(f"OWLAI_ENV environment variable is set to: {owlai_env}")
     else:
         raise ValueError("OWLAI_ENV environment variable is not set")
 
@@ -155,8 +167,11 @@ def get_system_info():
         "GPU": [],
     }
 
+    # Check if CUDA device is available
+    current_device = get_device()
+
     try:
-        if device == "cuda":
+        if current_device == "cuda":
             import GPUtil
 
             gpus = GPUtil.getGPUs()
@@ -177,37 +192,71 @@ def get_system_info():
 
 
 def encode_text(text: str) -> str:
+    """Encode text to ASCII, replacing non-ASCII characters"""
     return text.encode("ascii", errors="replace").decode("utf-8")
 
 
+def init_database():
+    """Initialize database connection"""
+    global DATABASE_URL, engine, Session
+
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL", "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
+    )
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(DATABASE_URL)
+    Session = sessionmaker(bind=engine)
+
+    return engine, Session
+
+
+def initialize():
+    """Initialize the system environment and configuration"""
+    global env, device, is_prod, is_dev, is_test
+
+    # This initialization function should be called explicitly when needed
+    print("Initializing OwlAI system")
+
+    # Get environment
+    env = get_env()
+
+    # Setup logging based on environment
+    setup_logging(env)
+
+    # Set compute device
+    device = set_cuda_device()
+    device = "cpu"  # Overriding to disable GPU for now
+
+    # Set environment flags
+    is_prod = env == "production"
+    is_dev = env == "development"
+    is_test = env == "test"
+
+    # Initialize database
+    init_database()
+
+    logger.debug(f"System initialized for '{env}' environment, CUDA device: '{device}'")
+
+    return env
+
+
+def get_device():
+    """Get the current compute device"""
+    global device
+    return device
+
+
+def get_environment():
+    """Get the current environment"""
+    global env
+    if env is None:
+        env = get_env()
+    return env
+
+
+# Initialize environment variable from .env file but don't run full initialization
 load_dotenv()
-
-device = set_cuda_device()
-
-device = "cpu"  # disable GPU for now
-
-env = set_env()
-
-setup_logging()
-
-is_prod = env == "production"
-is_dev = env == "development"
-is_test = env == "test"
-
-logger.debug(f"System initialized for '{env}' environment, CUDA device: '{device}'")
-
-# Replace with your actual DB URI
-# DATABASE_URL = "postgresql://postgres:dev@localhost:5432/owlai_dev"
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db"
-)
-DATABASE_URL_RENDER = os.getenv(
-    "DATABASE_URL_RENDER",
-    "",
-)
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
+env = os.getenv("OWLAI_ENV")
