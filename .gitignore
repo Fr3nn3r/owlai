@@ -8,7 +8,6 @@ models/
 .pytest_cache/
 .idea/
 .vscode/
-scripts/
 data
 logs
 .env*
@@ -25,3 +24,4 @@ orch/
 owlai.egg-info/
 dist/
 build/
+pyproject.toml

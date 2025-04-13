@@ -25,6 +25,8 @@ class MockToolSchema(BaseModel):
 
     param: str
 
+    model_config = {"extra": "ignore"}
+
 
 @pytest.fixture
 def mock_chat_model():

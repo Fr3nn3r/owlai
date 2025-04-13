@@ -30,6 +30,8 @@ class DefaultToolInput(BaseModel):
 
     query: str = Field(description="A query to the tool")
 
+    model_config = {"extra": "ignore"}
+
 
 class SecurityTool(BaseTool):  # type: ignore[override, override]
 

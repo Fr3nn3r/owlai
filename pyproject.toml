@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owlai"
-version = "0.3.2"
+version = "0.3.3"
 description = "OwlAI: AI agent with RAG capabilities"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -17,14 +17,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "langchain-core",
-    "langchain-text-splitters",
-    "langchain-community",
-    "langchain-openai",
-    "langchain-anthropic",
-    "langgraph",
-    "langchain-huggingface",
-    "pydantic",
+    "langchain-core>=0.3,<0.4",
+    "langchain-text-splitters>=0.3,<0.4",
+    "langchain-community>=0.3,<0.4",
+    "langchain-openai>=0.0.5",
+    "langchain-anthropic>=0.1.1",
+    "langgraph>=0.0.22",
+    "langchain-huggingface>=0.0.2",
+    "pydantic>=2.5.2",
     "openai",
     "anthropic",
     "numpy",
@@ -85,7 +85,6 @@ disallow_incomplete_defs = true
 testpaths = ["tests"]
 python_files = "test_*.py"
 filterwarnings = [
-    "ignore::DeprecationWarning:pydantic.*:",
     "ignore::DeprecationWarning:pythonjsonlogger.*:",
     "ignore::DeprecationWarning:importlib._bootstrap:",
     "ignore::DeprecationWarning:numpy.core.*:",

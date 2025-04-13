@@ -31,16 +31,14 @@ class AgentInfo(BaseModel):
     name: str
     description: str
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ColorTheme(BaseModel):
     primary: str
     secondary: str
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class AgentDetails(BaseModel):
@@ -52,8 +50,7 @@ class AgentDetails(BaseModel):
     color_theme: ColorTheme
     default_queries: List[str]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class AgentResponse(BaseModel):
@@ -61,8 +58,7 @@ class AgentResponse(BaseModel):
     name: str
     description: str
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class QueryRequest(BaseModel):
@@ -71,8 +67,7 @@ class QueryRequest(BaseModel):
     query_id: str
     session_id: str
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class QueryResponse(BaseModel):
@@ -333,8 +328,7 @@ class FeedbackRequest(BaseModel):
     rating: int
     comment: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ContactFormRequest(BaseModel):
@@ -342,8 +336,7 @@ class ContactFormRequest(BaseModel):
     email: str
     message: str
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class DocumentChunk(BaseModel):
@@ -352,8 +345,7 @@ class DocumentChunk(BaseModel):
     source: str
     relevance_score: float
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 def map_agent_data(agent_name):
@@ -545,7 +537,7 @@ async def get_query_logs(query_id: str):
 @app.get("/version")
 async def get_version():
     """Get the current version of OwlAI."""
-    return {"version": "0.2.0"}
+    return {"version": "0.3.2"}
 
 
 @app.get("/feedback/all")

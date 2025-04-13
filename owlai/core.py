@@ -1,9 +1,8 @@
 """
 OwlAI Core Module
 
-Note: We are using Pydantic v1 because it's required by langchain-core and other LangChain components.
-This is a temporary solution until LangChain fully supports Pydantic v2.
-The deprecation warnings are suppressed in pytest configuration.
+This module uses Pydantic v2 with the latest LangChain version.
+Some compatibility features with Pydantic v1 are used where needed through the PYDANTIC_V1 environment variable.
 """
 
 #  ,_,
@@ -14,6 +13,7 @@ print("Loading core module")
 
 # Guard against duplicate module loading
 import sys
+import os
 
 from typing import List, Dict, Any, Optional, Union, cast
 from langchain_core.messages import (
@@ -27,7 +27,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 import logging.config
 import logging
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from uuid import UUID
 
 from langchain.chat_models import init_chat_model
@@ -63,6 +63,8 @@ class LLMConfig(BaseModel):
     tools_names: List[str] = []  # list of tools this agent can use
     tool_choice: Optional[str] = None  # Tool choice mode for the model
 
+    model_config = {"extra": "ignore"}
+
 
 class OwlAgent(BaseModel):
     """Base agent class that implements core functionality for interacting with LLMs.
@@ -92,6 +94,8 @@ class OwlAgent(BaseModel):
     _memory: Optional[Memory] = None
     _agent_id: Optional[UUID] = None
     _conversation_id: Optional[UUID] = None
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @property
     def chat_model(self) -> BaseChatModel:

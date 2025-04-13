@@ -1,9 +1,8 @@
 """
 OwlAI RAG Module
 
-Note: We are using Pydantic v1 because it's required by langchain-core and other LangChain components.
-This is a temporary solution until LangChain fully supports Pydantic v2.
-The deprecation warnings are suppressed in pytest configuration.
+This module uses Pydantic v2 with the latest LangChain version.
+Some compatibility features with Pydantic v1 are used where needed through the PYDANTIC_V1 environment variable.
 """
 
 print("Loading rag module")
@@ -16,7 +15,11 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+import warnings
+import traceback
+from owlai.services.datastore import FAISS_DataStore
+from langchain_core.tools import BaseTool, ArgsSchema
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
@@ -38,8 +41,10 @@ from langchain.callbacks.manager import (
 )
 from langchain.docstore.document import Document
 from langchain_core.documents import Document as LCDocument
-from pydantic import BaseModel, Field, root_validator
 from pinecone import Pinecone, FetchResponse, Index
+
+# For backwards compatibility with code using root_validator
+from pydantic.v1 import root_validator
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +61,8 @@ class DefaultToolInput(BaseModel):
 
     query: str = Field(description="A query to the tool")
 
+    model_config = {"extra": "ignore"}
+
 
 class FAISS_RAG_Retriever(BaseModel):
     """Class responsible for retrieving relevant chunks from the knowledge base"""
@@ -68,6 +75,8 @@ class FAISS_RAG_Retriever(BaseModel):
     encode_kwargs: Dict[str, Any] = {}
     multi_process: bool = True
     datastore: Optional[FAISS_DataStore] = None
+
+    model_config = {"arbitrary_types_allowed": True}
 
     def load_dataset(self, embeddings: HuggingFaceEmbeddings) -> Optional[FAISS]:
         """
@@ -126,6 +135,8 @@ class FAISS_RAG_Tool(DataProvider):
     _reranker: Optional[Any] = None
     _prompt: Optional[PromptTemplate] = None
     _db_session = None
+
+    model_config = {"arbitrary_types_allowed": True}
 
     def __init__(self, *args, db_session: Optional[Any] = None, **kwargs):
         """Initialize RAGTool with optional database session for vector store caching.
@@ -352,6 +363,8 @@ class Pinecone_RAG_Tool(DataProvider):
     embedding: Optional[OpenAIEmbeddings] = None
 
     pc: Optional[Pinecone] = Pinecone(api_key=os.getenv("PINECONE_API_KEY", ""))
+
+    model_config = {"arbitrary_types_allowed": True}
 
     def __init__(self, *args, **kwargs):
         """Initialize PineconeRAGTool with Pinecone connection settings."""
