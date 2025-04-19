@@ -6,14 +6,14 @@ import logging
 from typing import List, Dict, Any, Optional
 from logging import Logger
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as SQLAlchemySession
 import asyncio
 import time
 
 from owlai.core import OwlAgent
 from owlai.services.toolbox import ToolFactory
 from owlai.db.memory import SQLAlchemyMemory
-from owlai.services.system import Session
+from owlai.services.system import Session as SystemSession
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -25,13 +25,17 @@ class AgentManager:
     CLEANUP_INTERVAL = 300  # 5 minutes in seconds
 
     def __init__(
-        self, agents_config: Dict[str, Dict[str, Any]], enable_cleanup: bool = True
+        self,
+        agents_config: Dict[str, Dict[str, Any]],
+        enable_cleanup: bool = True,
+        session_factory=None,
     ):
         """Initialize AgentManager.
 
         Args:
             agents_config: Dictionary of agent configurations
             enable_cleanup: Whether to enable cleanup of inactive agents
+            session_factory: Optional SQLAlchemy session factory to use instead of the global one
         """
         self.agents_config = agents_config
         self.active_agents: Dict[str, OwlAgent] = {}
@@ -39,8 +43,47 @@ class AgentManager:
         self.last_used: Dict[str, float] = {}
         self.owls: Dict[str, Optional[OwlAgent]] = {}
         self.names: List[str] = []
-        self.db_session = Session()
-        self.memory = SQLAlchemyMemory(self.db_session)
+
+        # Create database session using the provided factory or global one
+        db_session = None
+
+        if session_factory is not None:
+            # Use provided session factory
+            try:
+                logger.info("Using provided session factory")
+                db_session = session_factory()
+            except Exception as e:
+                logger.error(f"Failed to create session from provided factory: {e}")
+        else:
+            # Use global Session from system module
+            if SystemSession is None:
+                logger.error(
+                    "Database Session factory is None. Database may not be initialized properly."
+                )
+                logger.warning("Agent manager will function without database memory")
+            else:
+                try:
+                    logger.info("Using global session factory")
+                    db_session = SystemSession()
+                except Exception as e:
+                    logger.error(f"Failed to create database session: {e}")
+
+        # Initialize memory if we have a session
+        if db_session is not None:
+            self.db_session = db_session
+            try:
+                self.memory = SQLAlchemyMemory(self.db_session)
+                logger.info("Database session initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize SQLAlchemyMemory: {e}")
+                self.memory = None
+        else:
+            logger.warning(
+                "No database session available. Agent manager will function without database memory"
+            )
+            self.db_session = None
+            self.memory = None
+
         self._initialized = False
         self._focus_agent: Optional[OwlAgent] = None
         self.focus_agent_name = ""
@@ -70,7 +113,9 @@ class AgentManager:
         """
         try:
             agent: OwlAgent = OwlAgent(**self.agents_config[agent_key])
-            agent.init_memory(self.memory)
+            # Only initialize memory if it's available
+            if self.memory is not None:
+                agent.init_memory(self.memory)
             logger.info(f"Initialized Owl agent: {agent.name}")
             return agent
         except ValidationError as e:

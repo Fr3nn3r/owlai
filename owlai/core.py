@@ -179,6 +179,12 @@ class OwlAgent(BaseModel):
         Args:
             memory (Memory): Memory implementation to use
         """
+        if memory is None:
+            logger.warning(
+                f"Skipping memory initialization for agent {self.name} - memory is None"
+            )
+            return
+
         self._memory = memory
         # Register agent in memory system
         self._agent_id = memory.get_or_create_agent(self.name, self.version)

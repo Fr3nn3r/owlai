@@ -20,8 +20,11 @@ from typing import Optional
 
 from owlai.nest import AgentManager
 from owlai.config.agents import OWL_AGENTS_CONFIG
-from owlai.services.system import is_dev
+from owlai.services.system import is_dev, initialize
 from owlai.services.telemetry import RequestLatencyTracker
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +88,35 @@ async def lifespan(app: FastAPI):
     """Lifespan events for FastAPI application"""
     # Startup
     global agent_manager
-    if agent_manager is None:
-        agent_manager = AgentManager(
-            agents_config=OWL_AGENTS_CONFIG, enable_cleanup=True
+
+    try:
+        # Initialize the system environment
+        initialize()
+
+        # Create a database session factory directly
+        # Get the database URL from environment or use default
+        database_url = os.getenv(
+            "DATABASE_URL",
+            "postgresql+psycopg2://owluser:owlsrock@localhost:5432/owlai_db",
         )
-        logger.info("AgentManager initialized successfully")
+
+        # Create engine and session factory
+        logger.info(f"Creating database engine with URL: {database_url}")
+        engine = create_engine(database_url)
+        Session = sessionmaker(bind=engine)
+
+        if agent_manager is None:
+            # Pass the session factory to AgentManager's constructor
+            agent_manager = AgentManager(
+                agents_config=OWL_AGENTS_CONFIG,
+                enable_cleanup=True,
+                session_factory=Session,  # Pass Session factory directly
+            )
+            logger.info("AgentManager initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize application: {str(e)}")
+        raise
+
     yield
     # Shutdown
     agent_manager = None

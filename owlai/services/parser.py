@@ -612,3 +612,110 @@ def create_instance(class_name: str, **kwargs):
         raise Exception(f"Class {class_name} not found in globals")
     except Exception as e:
         raise Exception(f"Error creating instance of {class_name}: {str(e)}")
+
+
+import re
+from typing import List, Dict, Optional
+import tiktoken  # install with `pip install tiktoken`
+
+
+def get_token_count(text: str, tokenizer) -> int:
+    return len(tokenizer.encode(text))
+
+
+def split_with_token_balancing(
+    text: str,
+    level1_separators: List[str],
+    chunk_size: int = 512,
+    tokenizer_name: str = "cl100k_base",  # Default OpenAI tokenizer
+) -> List[Dict]:
+    # Load tokenizer
+    tokenizer = tiktoken.get_encoding(tokenizer_name)
+
+    # Combine regex patterns to match any heading
+    pattern = "(" + "|".join(level1_separators) + ")"
+    matches = list(re.finditer(pattern, text))
+
+    chunks = []
+    hierarchy = {}
+    blocks = []  # List of blocks: {"header": str, "text": str, "tokens": int}
+
+    # Step 1: Segment the document into logical blocks (with associated header info)
+    for i, match in enumerate(matches):
+        start = match.start()
+        level_text = match.group().strip()
+
+        # Determine level and update hierarchy
+        for level, sep in enumerate(level1_separators):
+            if re.match(sep, level_text):
+                hierarchy[level] = level_text
+                for deeper in range(level + 1, len(level1_separators)):
+                    hierarchy.pop(deeper, None)
+                break
+
+        # Get text between this heading and the next heading (or end of doc)
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        block_text = text[start:end].strip()
+
+        # Construct breadcrumb header
+        header = " > ".join(hierarchy.get(lvl, "") for lvl in sorted(hierarchy))
+        full_block_text = f"{header}\n\n{block_text}" if header else block_text
+        token_count = get_token_count(full_block_text, tokenizer)
+
+        blocks.append(
+            {
+                "text": full_block_text,
+                "tokens": token_count,
+                "header": header,
+                "start": start,
+                "end": end,
+                "level": level,
+            }
+        )
+
+    # Step 2: Build final chunks using token balancing
+    current_chunk = []
+    current_tokens = 0
+
+    for block in blocks:
+        next_token_total = current_tokens + block["tokens"]
+
+        # If adding this block gets us closer to `chunk_size`, include it
+        if current_tokens == 0 or abs(chunk_size - next_token_total) < abs(
+            chunk_size - current_tokens
+        ):
+            current_chunk.append(block)
+            current_tokens = next_token_total
+        else:
+            # Finalize current chunk
+            merged_text = "\n\n".join(b["text"] for b in current_chunk)
+            chunks.append(
+                {
+                    "text": merged_text,
+                    "tokens": current_tokens,
+                    "header": current_chunk[0]["header"],
+                    "start": current_chunk[0]["start"],
+                    "end": current_chunk[-1]["end"],
+                    "position": len(chunks),
+                }
+            )
+
+            # Start a new chunk with the current block
+            current_chunk = [block]
+            current_tokens = block["tokens"]
+
+    # Add final chunk if there's anything left
+    if current_chunk:
+        merged_text = "\n\n".join(b["text"] for b in current_chunk)
+        chunks.append(
+            {
+                "text": merged_text,
+                "tokens": current_tokens,
+                "header": current_chunk[0]["header"],
+                "start": current_chunk[0]["start"],
+                "end": current_chunk[-1]["end"],
+                "position": len(chunks),
+            }
+        )
+
+    return chunks

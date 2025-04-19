@@ -20,7 +20,7 @@ from owlai.services.system import setup_logging
 from owlai.config.agents import OWL_AGENTS_CONFIG
 from owlai.services.system import sprint
 
-# from owlai.services.tools.ttsengine import hoot
+from owlai.services.tools.ttsengine import hoot
 
 logger: Logger = logging.getLogger(__name__)
 

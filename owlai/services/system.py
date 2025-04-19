@@ -207,15 +207,27 @@ def init_database():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    engine = create_engine(DATABASE_URL)
-    Session = sessionmaker(bind=engine)
+    try:
+        logger.debug(f"Initializing database connection with URL: {DATABASE_URL}")
+        engine = create_engine(DATABASE_URL)
+        Session = sessionmaker(bind=engine)
 
-    return engine, Session
+        # Test that Session works by creating a test session
+        test_session = Session()
+        test_session.close()
+
+        logger.debug(f"Database connection successfully initialized and tested")
+        return engine, Session
+    except Exception as e:
+        logger.error(f"Failed to initialize database connection: {str(e)}")
+        # Set Session to None to avoid calling a non-callable
+        Session = None
+        raise
 
 
 def initialize():
     """Initialize the system environment and configuration"""
-    global env, device, is_prod, is_dev, is_test
+    global env, device, is_prod, is_dev, is_test, Session
 
     # This initialization function should be called explicitly when needed
     print("Initializing OwlAI system")
@@ -236,7 +248,23 @@ def initialize():
     is_test = env == "test"
 
     # Initialize database
-    init_database()
+    try:
+        init_database()
+        if Session is None:
+            logger.error("Database Session was not initialized properly")
+            raise RuntimeError("Database Session is None after initialization")
+        logger.debug("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}")
+        # Create a dummy sessionmaker to prevent NoneType errors when the application starts
+        # This will allow the app to start, but database operations will fail
+        logger.warning(
+            "Creating dummy sessionmaker as fallback - database operations will fail"
+        )
+        from sqlalchemy.orm import sessionmaker
+
+        Session = sessionmaker()
+        # Note: This creates a callable Session that will fail when trying to create connections
 
     logger.debug(f"System initialized for '{env}' environment, CUDA device: '{device}'")
 
@@ -257,6 +285,7 @@ def get_environment():
     return env
 
 
-# Initialize environment variable from .env file but don't run full initialization
+# Initialize environment variable from .env file and run initialize() - could be done the client side
 load_dotenv()
+initialize()
 env = os.getenv("OWLAI_ENV")
