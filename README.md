@@ -2,6 +2,8 @@
 
 An intelligent AI agent system with RAG (Retrieval Augmented Generation) capabilities, text-to-speech integration, and extensible tools framework.
 
+*Documentation last updated: May 13, 2024*
+
 ## 🦉 Overview
 
 OwlAI is a versatile agent-based AI platform built on LangChain that provides:
@@ -26,6 +28,119 @@ OwlAI is a versatile agent-based AI platform built on LangChain that provides:
 - **Advanced Embeddings**: Efficient vector search for knowledge retrieval
 - **Telemetry**: Built-in performance tracking
 - **Streaming Responses**: Real-time streaming of agent responses
+
+## 🛠️ Technical Summary for Developers
+
+### Architecture & Design Patterns
+
+1. **Agent-Based Architecture**: The system is built around the concept of "agents" (OwlAgent class) that encapsulate LLM interactions, tools, and memory.
+
+2. **Manager Pattern**: The AgentManager (nest.py) manages the lifecycle of multiple agents, handling agent creation, focus switching, and resource management.
+
+3. **Service-Oriented Design**: Core functionality is separated into services (embeddings, RAG, datastore, etc.).
+
+4. **Factory Pattern**: Tools and agent creation use factory patterns for flexible instantiation.
+
+5. **Repository Pattern**: Database interaction is abstracted through repositories (Memory, VectorStoreManager).
+
+6. **Dependency Injection**: Components accept services rather than creating them internally.
+
+7. **RESTful API**: FastAPI-based REST endpoints for agent interaction.
+
+8. **Streaming Response Pattern**: Supports real-time streaming of LLM responses.
+
+9. **FIFO Message Management**: Smart handling of conversation context with token-aware trimming.
+
+Key data flows:
+- User queries → API → Agent → LLM with RAG enhancement → Streaming response
+- Agent tool execution: Agent → Tool execution → Result incorporated into prompt
+
+### Tech Stack & Dependencies
+
+#### Core Technologies:
+- **Python 3.8+**: Primary development language
+- **LangChain**: LLM interaction framework and agent construction
+- **FastAPI**: Web API framework
+- **Pydantic**: Data validation and settings management
+- **SQLAlchemy**: ORM for database interactions
+- **PyTorch & Transformers**: Machine learning foundation
+- **FAISS/Pinecone**: Vector storage for embeddings
+
+#### LLM Providers:
+- OpenAI (GPT models)
+- Anthropic (Claude models)
+
+#### Database:
+- PostgreSQL with vector extensions
+
+#### Text-to-Speech:
+- Multiple TTS engines (Coqui-TTS, Edge TTS, ElevenLabs)
+
+### Directory Structure & Code Conventions
+
+The codebase is organized into these main components:
+```
+owlai/
+├── core.py             # Core agent implementation
+├── nest.py             # Agent manager
+├── db/                 # Database persistence
+│   ├── memory.py       # Conversation memory
+│   ├── vector_store_manager.py # Vector database management
+│   └── dbmodels.py     # Database models
+├── services/           # Core services
+│   ├── datastore.py    # Data storage and retrieval
+│   ├── embeddings.py   # Vector embeddings
+│   ├── rag.py          # Retrieval augmented generation
+│   ├── system.py       # System utilities
+│   ├── tools/          # Tool implementations
+│       ├── interpreter.py  # Code interpreter
+│       ├── spotify.py  # Spotify integration
+│       └── ttsengine.py # Text-to-speech engines
+├── config/             # Configuration
+│   ├── agents.py       # Agent definitions
+│   ├── prompts.py      # System prompts
+│   └── tools.py        # Tool definitions
+```
+
+Code Conventions:
+- **Pydantic Models**: Used extensively for validation and type safety
+- **Typing Annotations**: Strong typing throughout the codebase
+- **Logging**: Comprehensive logging with structured format
+- **Docstrings**: Most classes and functions include docstrings
+- **Async/Await**: Used for streaming responses and non-blocking operations
+- **Environment Configuration**: .env files for configuration management
+
+### Areas of Complexity or Technical Debt
+
+1. **Memory Management**: The token counting and message history management is complex and might need optimization.
+
+2. **Tool Integration**: The tool execution flow and error handling could be improved.
+
+3. **Database Integration**: The vector store management has some complex migration logic.
+
+4. **Configuration Sprawl**: Configuration is spread across different files and formats.
+
+5. **Error Handling**: Some error cases could be handled more gracefully.
+
+6. **Multiple TTS Engines**: Managing different TTS providers adds complexity.
+
+### Suggestions for First Contributions
+
+1. **Documentation Improvements**: Add more comprehensive documentation, especially around tool development.
+
+2. **Test Coverage**: Increase test coverage, particularly for edge cases.
+
+3. **Performance Optimization**: Profile and optimize the RAG pipeline and token management.
+
+4. **UI Development**: Build a more sophisticated frontend for the API.
+
+5. **New Tools**: Develop new specialized tools to extend agent capabilities.
+
+6. **Container Deployment**: Improve Docker setup for easier deployment.
+
+7. **Streaming Optimization**: Enhance the streaming response mechanism for better performance.
+
+8. **Telemetry Dashboard**: Create visualization for the existing telemetry data.
 
 ## 📦 Project Structure
 
